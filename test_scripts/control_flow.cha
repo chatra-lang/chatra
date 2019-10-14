@@ -1,0 +1,1238 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+class ClassReturnsTrueByTuple
+	def get()
+		return value: true
+
+def testDo()
+	log('[testDo]')
+
+	// scopes
+	a: 123
+	do
+		a: 234
+		do
+			_check('scope', a == 234)
+			a = 345
+			a: 456
+			_check('scope', a == 456)
+		_check('scope', a == 345)
+	_check('scope', a == 123)
+
+	// special cases
+	do
+	_check('isolated do (only warnings)', true)
+
+def testIf()
+	log('[testIf]')
+
+	// single if statement
+	_check('if true (pre)', true)
+	passed = false
+	if true
+		passed = true
+		_check('if true', true)
+	_check('if true (post)', passed)
+
+	_check('if false (pre)', true)
+	if false
+		_check('if false', false)
+	_check('if false (post)', true)
+
+	_check('if not bool (pre)', true)
+	passed = false
+	do
+		if 1
+			_check('if not bool', false)
+			catch TypeMismatchException
+				_check('if not bool', false)
+		_check('if not bool', false)
+		catch TypeMismatchException
+			passed = true
+			_check('if not bool', true)
+	_check('if not bool (post)', passed)
+
+	_check('else if not bool (pre)', true)
+	passed = false
+	do
+		if false
+			_check('else if not bool', false)
+		else if 1
+			_check('else if not bool', false)
+			catch TypeMismatchException
+				_check('else if not bool', false)
+		_check('else if not bool', false)
+		catch TypeMismatchException
+			passed = true
+			_check('else if not bool', true)
+	_check('else if not bool (post)', passed)
+
+	_check('if null (pre)', true)
+	passed = false
+	do
+		if null
+			_check('if null', false)
+		_check('if null', false)
+		catch TypeMismatchException
+			passed = true
+			_check('if null', true)
+	_check('if null (post)', passed)
+
+	// if ... else
+	_check('if true else (pre)', true)
+	passed = false
+	if true
+		passed = true
+		_check('if true else', true)
+	else
+		_check('if true else', false)
+	_check('if true else (post)', passed)
+
+	_check('if false else (pre)', true)
+	passed = false
+	if false
+		_check('if false else', false)
+	else
+		passed = true
+		_check('if false else', true)
+	_check('if false else (post)', passed)
+
+	// if ... else if ... else
+	_check('if true else_if (pre)', true)
+	passed = false
+	if true
+		passed = true
+		_check('if true else_if', true)
+	else if true
+		_check('if true else_if', false)
+	else
+		_check('if true else_if', false)
+	_check('if true else_if (post)', passed)
+
+	_check('if false else_if true (pre)', true)
+	passed = false
+	if false
+		_check('if false else_if true', false)
+	else if true
+		passed = true
+		_check('if false else_if true', true)
+	else
+		_check('if false else_if true', false)
+	_check('if false else_if true (post)', passed)
+
+	_check('if false else_if false (pre)', true)
+	passed = false
+	if false
+		_check('if false else_if false', false)
+	else if false
+		_check('if false else_if false', false)
+	else
+		passed = true
+		_check('if false else_if false', true)
+	_check('if false else_if false (post)', passed)
+
+	// if ... {else if}**2 ... else
+	_check('else_if chain #0 (pre)', true)
+	passed = false
+	if true
+		passed = true
+		_check('else_if chain', true)
+	else if true
+		_check('else_if chain', false)
+	else if true
+		_check('else_if chain', false)
+	else
+		_check('else_if chain', false)
+	_check('else_if chain(post)', passed)
+
+	_check('else_if chain #1 (pre)', true)
+	passed = false
+	if false
+		_check('else_if chain', false)
+	else if true
+		passed = true
+		_check('else_if chain', true)
+	else if true
+		_check('else_if chain', false)
+	else
+		_check('else_if chain', false)
+	_check('else_if chain(post)', passed)
+
+	_check('else_if chain #2 (pre)', true)
+	passed = false
+	if false
+		_check('else_if chain', false)
+	else if false
+		_check('else_if chain', false)
+	else if true
+		passed = true
+		_check('else_if chain', true)
+	else
+		_check('else_if chain', false)
+	_check('else_if chain(post)', passed)
+
+	_check('else_if chain #3 (pre)', true)
+	passed = false
+	if false
+		_check('else_if chain', false)
+	else if false
+		_check('else_if chain', false)
+	else if false
+		_check('else_if chain', false)
+	else
+		passed = true
+		_check('else_if chain', true)
+	_check('else_if chain(post)', passed)
+
+	// by tuple
+	if ClassReturnsTrueByTuple().get()
+		_check('single-value tuple to "if"', true)
+
+	if false
+		0
+	else if ClassReturnsTrueByTuple().get()
+		_check('single-value tuple to "else if"', true)
+
+	// scopes
+	a: 123
+	b: 1234
+	if (a: 234) != 0 and (b = 2345) != 0
+		_check('scope', a == 234)
+		_check('scope', b == 2345)
+		a: 345
+		_check('scope', a == 345)
+	_check('scope', a == 123)
+	_check('scope', b == 2345)
+
+	// special cases
+	if _checkCmd('testMode') != 'serialize'
+		passed = false
+		do
+			if true
+				0
+				else
+					1
+			_check('isolated else', false)
+			catch ParserErrorException
+				_check('isolated else', true)
+				passed = true
+		_check('isolated else', passed)
+
+	if _checkCmd('testMode') != 'serialize'
+		passed = false
+		do
+			if true
+				0
+				else if true
+					1
+			_check('isolated else if', false)
+			catch ParserErrorException
+				_check('isolated else if', true)
+				passed = true
+		_check('isolated else if', passed)
+
+	passed = false
+	if true
+		if false
+			_check('another level else', false)
+		_check('another level else', true)
+		passed = true
+	else
+		_check('another level else', false)
+	_check('another level else', passed)
+
+	passed = false
+	do
+		if true
+			throw 0
+		else
+			_check('if statement with exception', false)
+		catch Int
+			_check('if statement with exception', true)
+			passed = true
+	_check('if statement with exception', passed)
+
+
+class ClassImplementsHas0
+	def has(v)
+		return v == 7 or v == 8
+
+class ClassImplementsHas1
+	def has(v)
+		return v == 9 or v == 10
+
+class ClassImplementsHasAndEquals
+	def has(v)
+		return v == 11
+	def equals(v)
+		return v == 12
+
+class ClassImplementsEquals
+	def equals(v)
+		return v == 12 or v == 13
+
+class ClassImplementsIllegalHas
+	def has(v)
+		return 123
+
+class ClassImplementsIllegalEquals
+	def equals(v)
+		return 123
+
+class ClassImplementsNoMethods
+	def init()
+		return
+
+class ClassReturnsIntByTuple
+	var v
+	def init(_v)
+		v = _v
+	def get()
+		return value: v
+
+class ClassImplementsHasWithTuple
+	def has(v)
+		return value: true
+
+class ClassImplementsEqualsWithTuple
+	def equals(v)
+		return value: true
+
+def testSwitch()
+	log('[testSwitch]')
+
+	count = 0
+	processed = 0
+	after = 0
+	six = 6
+	sevenOrEight = ClassImplementsHas0()
+	labelA: while count++ < 20
+		switch count
+			case 0
+				_check('never be here', false)
+			case 1
+				_check('single case statement', count == 1)
+				processed++
+			case 2
+			case 3
+				_check('consecutive case statement', count == 2 or count == 3)
+				processed++
+			case count == 4 or count == 5
+				_check('case statement with condition expression', count == 4 or count == 5)
+				processed++
+			case six
+				_check('case statement with object (primitive)', count == 6)
+				processed++
+			case sevenOrEight
+				_check('case statement with object (has)', count == 7 or count == 8)
+				processed++
+			case ClassImplementsHas1()
+				_check('case statement with object (constructor - has)', count == 9 or count == 10)
+				processed++
+			case ClassImplementsHasAndEquals()
+				_check('case statement with object (constructor - has & equals)', count == 11)
+				processed++
+			case ClassImplementsEquals()
+				_check('case statement with object (constructor - equals)', count == 12 or count == 13)
+				processed++
+			case 15
+				_check('break from switch statement', count == 15)
+				processed++
+				if count == 15
+					break
+				_check('break from switch statement', false)
+			case 16
+				_check('continue to external loop', count == 16)
+				processed++
+				if count == 16
+					continue labelA
+				_check('continue to external loop', false)
+			case 17
+				_check('break from external loop', count == 17)
+				processed++
+				if count == 17
+					break labelA
+				_check('break from external loop', false)
+			default
+				_check('default case', count == 14)
+				processed++
+		after++
+		if count == 16 or count == 17
+			_check('never be here', false)
+	
+	_check('covered all cases', processed == 17)
+	_check('covered all cases', after == 15)
+
+	processed = 0
+	switch ClassReturnsIntByTuple(123).get()
+		case 123
+			processed++
+	_check('"switch" with a single-value Tuple', processed == 1)
+
+	processed = 0
+	switch 123
+		case ClassImplementsHasWithTuple()
+			processed++
+	_check('has() returns a single-value Tuple', processed == 1)
+
+	processed = 0
+	switch 123
+		case ClassImplementsEqualsWithTuple()
+			processed++
+	_check('equals() returns a single-value Tuple', processed == 1)
+
+	processed = 0
+	count = 0
+	while count++ < 4
+		a = count == 2 ? null : count
+		switch a
+			case 1
+				_check('case !null with null value', count == 1)
+				processed++
+			case 2
+				_check('never be here', false)
+			case null
+				_check('case null', count == 2)
+				processed++
+			case 3
+			default
+				_check('consecutive case - default statement', count == 3 || count == 4)
+				processed++
+
+	_check('covered all cases', processed == 4)
+
+	// break/continue with finally blocks
+	passed0 = false
+	passed1 = false
+	switch 123
+		case 123
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	switch 123
+		case 123
+			break
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with "break"', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	passed2 = false
+	i = 0
+	labelA: while i++ == 0
+		switch 123
+			case 123
+				break labelA
+				finally
+					passed0 = true
+			finally
+				passed1 = true
+		finally
+			passed2 = true
+	_check('finally block with labelled "break"', passed0 and passed1 and passed2)
+
+	passed0 = false
+	passed1 = false
+	passed2 = false
+	i = 0
+	labelA: while i++ == 0
+		switch 123
+			case 123
+				continue labelA
+				finally
+					passed0 = true
+			finally
+				passed1 = true
+		finally
+			passed2 = true
+	_check('finally block with labelled "continue"', passed0 and passed1 and passed2)
+
+	// scopes
+	a: 123
+	switch b: (a: 234) != 0 ? a : 0
+		case 0
+			_check('scope', false)
+		case 123
+			_check('scope', false)
+		case 234
+			_check('scope', a == 234 && b == 234)
+			a = 345
+			throw 1
+		default
+			_check('scope', false)
+		catch Int
+			_check('scope', a == 345)
+	_check('scope', a == 123)
+
+	a: 123
+	switch (a: 234) != 0 && (b: 1234) != 0 ? 1 : 0
+		case (b: a + 1) == 235
+			_check('scope', a == 234 && b == 235)
+			a = 345
+			throw 1
+		default
+			_check('scope', false)
+		catch Int
+			_check('scope', a == 345 && b == 1234)
+	_check('scope', a == 123)
+
+	// special cases
+	passed = false
+	do
+		switch true
+			case 0
+				break
+			catch UnsupportedOperationException
+				_check('bool expression with switch statement', false)
+		_check('bool expression with switch statement', false)
+		catch UnsupportedOperationException
+			_check('bool expression with switch statement', true)
+			passed = true
+	_check('bool expression with switch statement', passed)
+
+	switch 1
+		case true
+			_check('bool expression with case statement (only warnings)', true)
+
+	passed = false
+	do
+		switch 123
+			case 1.1
+				break
+				catch TypeMismatchException
+					_check('type mismatch', false)
+			catch TypeMismatchException
+				_check('type mismatch', true)
+				passed = true
+		_check('type mismatch', true)
+		catch TypeMismatchException
+			_check('type mismatch', false)
+	_check('type mismatch', passed)
+
+	passed = false
+	do
+		switch ClassImplementsHas0()
+			case 1.1
+				break
+				catch TypeMismatchException
+					_check('type mismatch', false)
+			catch TypeMismatchException
+				_check('type mismatch', true)
+				passed = true
+		_check('type mismatch', true)
+		catch TypeMismatchException
+			_check('type mismatch', false)
+	_check('type mismatch', passed)
+
+	passed = false
+	do
+		switch 123
+			case ClassImplementsNoMethods()
+				break
+				catch MemberNotFoundException
+					_check('required methods are not implemented', false)
+			catch MemberNotFoundException
+				_check('required methods are not implemented', true)
+				passed = true
+		_check('required methods are not implemented', true)
+		catch MemberNotFoundException
+			_check('required methods are not implemented', true)
+	_check('required methods are not implemented', passed)
+
+	if _checkCmd('testMode') != 'serialize'
+		passed = false
+		do
+			switch 1
+				_check('never be here', false)
+			catch ParserErrorException
+				_check('expression directly under switch statement', true)
+				passed = true
+		_check('expression directly under switch statement', passed)
+
+	if _checkCmd('testMode') != 'serialize'
+		passed = false
+		do
+			switch 1
+				case 0
+				default
+					_check('never be here', false)
+				case 1
+					_check('never be here', false)
+			_check('case after default', false)
+			catch ParserErrorException
+				_check('case after default', true)
+				passed = true
+		_check('case after default', passed)
+
+	if _checkCmd('testMode') != 'serialize'
+		passed = false
+		do
+			do
+				case 0
+			_check('isolated case', false)
+			catch ParserErrorException
+				_check('isolated case', true)
+				passed = true
+		_check('isolated case', passed)
+
+	switch 1
+	_check('isolated switch (only warnings)', true)
+
+	passed = false
+	switch 1
+		case ClassImplementsIllegalHas()
+			_check('has() return non-Bool value', false)
+		catch TypeMismatchException
+			_check('has() return non-Bool value', true)
+			passed = true
+	_check('has() return non-Bool value', passed)
+
+	passed = false
+	switch 1
+		case ClassImplementsIllegalEquals()
+			_check('equals() return non-Bool value', false)
+		catch TypeMismatchException
+			_check('equals() return non-Bool value', true)
+			passed = true
+	_check('equals() return non-Bool value', passed)
+
+def testWhile()
+	log('[testWhile]')
+
+	count = 0
+	a = 0
+	while a < 3
+		count++
+		_check('simple loop', count <= 3)
+		a++
+	_check('simple loop (post)', count == 3)
+
+	_check('while not bool (pre)', true)
+	passed = false
+	do
+		while 1
+			_check('while not bool', false)
+			catch TypeMismatchException
+				_check('while not bool', false)
+		_check('while not bool', false)
+		catch TypeMismatchException
+			_check('while not bool', true)
+			passed = true
+	_check('while not bool (post)', passed)
+
+	_check('while null(pre)', true)
+	passed = false
+	do
+		while null
+			_check('while null', false)
+			catch TypeMismatchException
+				_check('while null', false)
+		_check('while null', false)
+		catch TypeMismatchException
+			_check('while null', true)
+			passed = true
+	_check('while null (post)', passed)
+
+	// combination with break/continue
+	count = 0
+	a = 0
+	while true
+		if ++a > 3
+			break
+		count++
+		_check('while with break', count <= 3)
+	_check('while with break (post)', count == 3)
+
+	count = 0
+	a = 0
+	while a < 3
+		a++
+		if a == 1
+			continue
+		count++
+		_check('while with continue', count <= 2 and a != 1)
+	_check('while with continue (post)', count == 2 and a == 3)
+
+	count = 0
+	a = 0
+	labelA1: while a++ < 3
+		b = 0
+		labelA2: while b++ < 3
+			if a == 2 and b == 3
+				break labelA1
+			_check('while with labeled-break', a < 2 or b < 3)
+			count++
+	_check('while with labeled-break (post)', count == 5)
+
+	passed = false
+	do
+		a = 0
+		labelB1: while a++ < 3
+			b = 0
+			labelB2: while b++ < 3
+				break
+			break labelB2
+		_check('labeled-break with invalid label', false)
+		catch IllegalArgumentException
+			_check('labeled-break with invalid label', true)
+			passed = true
+	_check('labeled-break with invalid label', passed)
+
+	count = 0
+	a = 0
+	labelA1: while a++ < 3
+		b = 0
+		labelA2: while b++ < 3
+			if b == 2
+				continue labelA1
+			_check('while with labeled-continue',  b < 2)
+			count++
+	_check('while with labeled-continue (post)', count == 3)
+
+	passed = false
+	do
+		a = 0
+		labelB1: while a++ < 3
+			b = 0
+			labelB2: while b++ < 3
+				break
+			continue labelB2
+		_check('labeled-continue with invalid label', false)
+		catch IllegalArgumentException
+			_check('labeled-continue with invalid label', true)
+			passed = true
+	_check('labeled-continue with invalid label', passed)
+
+	// break/continue with finally blocks
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	while i++ < 1
+		while j++ < 1
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	while i++ < 1
+		while j++ < 1
+			break
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with break', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	labelA: while i++ < 1
+		while j++ < 1
+			break labelA
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with labelled break', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	while i++ < 1
+		while j++ < 1
+			continue
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with continue', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	labelA: while i++ < 1
+		while j++ < 1
+			continue labelA
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with labelled continue', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	while i++ < 1
+		while j++ < 1
+			finally
+				passed0 = true
+				break
+		catch UnsupportedOperationException
+			passed1 = true
+	_check('break from finally block', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	i = 0
+	j = 0
+	while i++ < 1
+		while j++ < 1
+			finally
+				passed0 = true
+				continue
+		catch UnsupportedOperationException
+			passed1 = true
+	_check('continue from finally block', passed0 and passed1)
+
+	// by tuple
+	passed = false
+	while ClassReturnsTrueByTuple().get()
+		passed = true
+		break
+	_check('single-value tuple to "while"', passed)
+
+	// scopes
+	count = 0
+	a: 123
+	b: 1234
+	while _check('scope (condition statement)', count == 0 ? a == 123 : a == 345)
+			and (a: 234) != 0 and count++ < 2
+
+		_check('scope', a == 234)
+		_check('scope', count == 1 ? b == 1234 : b == 3456)
+		a: 345
+		_check('scope', a == 345)
+		b = 2345
+		b: 3456
+
+	_check('scope', a == 123)
+	_check('scope', b == 2345)
+
+	// special cases
+	while false
+	_check('isolated while (only warnings)', true)
+
+	passed = false
+	do
+		break
+		_check('isolated break', false)
+		catch UnsupportedOperationException
+			_check('isolated break', true)
+			passed = true
+	_check('isolated break', passed)
+
+	passed = false
+	do
+		continue
+		_check('isolated continue', false)
+		catch UnsupportedOperationException
+			_check('isolated continue', true)
+			passed = true
+	_check('isolated continue', passed)
+
+class IterableClass
+	def init(message, value0, value1)
+		_check(message, value0 == value1)
+
+	def keyedIterator()
+		return {99, 100, 3, 5, 8, 13, 21, 34}.keyedIterator()
+
+class NotIterableClass
+	def init()
+		return
+
+class IterableButInvalidIteratorClass
+	def iterator()
+		return 1
+
+class IncompleteIterator1
+	def hoge()
+		return 1
+
+class IncompleteIterator2
+	def hasNext()
+		return true
+
+class IterableButIncompleteIteratorClass1
+	def iterator()
+		return IncompleteIterator1()
+
+class IterableButIncompleteIteratorClass2
+	def iterator()
+		return IncompleteIterator2()
+
+class ByTupleIterator
+	var v: 0
+	def hasNext()
+		return value: true
+	def next()
+		return value: v++
+	def remove()
+		return value: v
+
+class ByTupleIteratorClass
+	def iterator()
+		return value: ByTupleIterator()
+
+def testFor()
+	log('[testFor]')
+
+	someArray = {1, 2, 3, 5, 8, 13, 21, 34}
+
+	count = 0
+	for in someArray
+		count++
+	_check('simple loop', count == 8)
+
+	count = 0
+	for v in someArray
+		count++
+		if v == 13
+			_check('single loop variable', count == 6)
+	_check('single loop variable', count == 8)
+
+	count = 0
+	for index, v in someArray
+		count++
+		if v == 8
+			_check('pair loop variable', count == 5 && index == 4)
+	_check('pair loop variable', count == 8)
+
+	count = 0
+	for it: in someArray
+		count++
+		if count == 3
+			it.next()
+	_check('simple loop with iterator', count == 7)
+
+	count = 0
+	for it: v in someArray
+		if v == 21
+			_check('single loop variable with iterator', false)
+		count++
+		if v == 13
+			_check('single loop variable with iterator', count == 6)
+			it.next()
+	_check('single loop variable with iterator', count == 7)
+
+	count = 0
+	for it: index, v in someArray
+		if v == 13
+			_check('pair loop variable with iterator', false)
+		count++
+		if v == 8
+			_check('pair loop variable with iterator', count == 5 && index == 4)
+			it.next()
+	_check('pair loop variable with iterator', count == 7)
+
+	// combination with break/continue
+	count = 0
+	a = 0
+	for it: index, v in someArray
+		if ++a > 3
+			break
+		count++
+		_check('for with break', count <= 3)
+	_check('for with break (post)', count == 3)
+
+	count = 0
+	a = 0
+	for it: index, v in someArray
+		a++
+		if a == 1
+			continue
+		count++
+		if not (count <= 7 and a != 1)
+			_check('for with continue', false)
+	_check('for with continue (post)', count == 7 and a == 8)
+
+	count = 0
+	labelA1: for it1: index1, v1 in someArray
+		labelA2: for it2: index2, v2 in someArray
+			count++
+			if index1 == 2 and index2 == 3
+				break labelA1
+			if index1 > 2 and index2 > 3
+				_check('for with labeled-break', false)
+	_check('for with labeled-break (post)', count == 20)
+
+	passed = false
+	do
+		labelB1: for it1: index1, v1 in someArray
+			labelB2: for it2: index2, v2 in someArray
+				break
+			break labelB2
+		_check('labeled-break with invalid label', false)
+		catch IllegalArgumentException
+			_check('labeled-break with invalid label', true)
+			passed = true
+	_check('labeled-break with invalid label', passed)
+
+	count = 0
+	labelA1: for it1: index1, v1 in someArray
+		labelA2: for it2: index2, v2 in someArray
+			count++
+			if index2 == 2
+				continue labelA1
+			if index2 > 2
+				_check('continue with labeled-break', false)
+	_check('continue with labeled-break (post)', count == 24)
+
+	passed = false
+	do
+		labelB1: for it1: index1, v1 in someArray
+			labelB2: for it2: index2, v2 in someArray
+				break
+			continue labelB2
+		_check('labeled-continue with invalid label', false)
+		catch IllegalArgumentException
+			_check('labeled-continue with invalid label', true)
+			passed = true
+	_check('labeled-continue with invalid label', passed)
+
+	// break/continue with finally blocks
+	passed0 = false
+	passed1 = false
+	for in Range(2)
+		for in Range(2)
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	for in Range(2)
+		for in Range(2)
+			break
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with break', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	labelA: for in Range(2)
+		for in Range(2)
+			break labelA
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with labelled break', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	for in Range(2)
+		for in Range(2)
+			continue
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with continue', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	labelA: for in Range(2)
+		for in Range(2)
+			continue labelA
+			finally
+				passed0 = true
+		finally
+			passed1 = true
+	_check('finally block with labelled continue', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	for in Range(2)
+		for in Range(2)
+			finally
+				passed0 = true
+				break
+		catch UnsupportedOperationException
+			passed1 = true
+	_check('break from finally block', passed0 and passed1)
+
+	passed0 = false
+	passed1 = false
+	for in Range(2)
+		for in Range(2)
+			finally
+				passed0 = true
+				continue
+		catch UnsupportedOperationException
+			passed1 = true
+	_check('continue from finally block', passed0 and passed1)
+
+	// by tuple
+	def getByTupleIteratorClass()
+		return value: ByTupleIteratorClass()
+
+	passed = false
+	for a in getByTupleIteratorClass()
+		_check('iterator returns single-value tuple', a == 0)
+		passed = true
+		break
+	_check('iterator returns single-value tuple', passed)
+
+	passed = false
+	b = 0
+	for it: a in getByTupleIteratorClass()
+		_check('iterator returns single-value tuple', a == 0)
+		passed = true
+		b = it.remove()
+		break
+	_check('iterator returns single-value tuple', passed && b == 1)
+
+	// scopes
+	a: 123
+	b: 234
+	c: 345
+	for a: b, c in IterableClass('iterator access in for statement', a, null)
+		// 1st: b = function scope, c = function scope
+		// 2nd: b = block scope (due to "b: 678"), c = function scope
+
+		passed = false
+		do
+			a = 1
+			_check('iterator variable is constant', false)
+			catch UnsupportedOperationException
+				_check('iterator variable is constant', true)
+				passed = true
+		_check('iterator variable is constant (post)', passed)
+
+		if b == 1
+			_check('loop variable', b == 1)
+			_check('loop variable', c == 100)
+			break
+
+		_check('loop variable', b == 0)
+		_check('loop variable', c == 99)
+		b = 456
+		c = 567
+		b: 678
+		_check('inner loop local variable', b == 678)
+
+		passed = false
+		for a: d, e in someArray
+			passed = true
+			break
+		_check('nested loop uses same name variable', passed)
+
+	_check('modified in loop', b == 456)
+	_check('modified in loop', c == 100)
+
+	// special cases
+	passed = false
+	do
+		for in null
+			_check('not iterable (null)', false)
+			catch TypeMismatchException
+				_check('not iterable (null)', false)
+		catch TypeMismatchException
+			_check('not iterable (null)', true)
+			passed = true
+	_check('not iterable (null)', passed)
+
+	passed = false
+	do
+		for in 1
+			_check('not iterable (Int)', false)
+			catch TypeMismatchException
+				_check('not iterable (Int)', false)
+		catch TypeMismatchException
+			_check('not iterable (Int)', true)
+			passed = true
+	_check('not iterable (Int)', passed)
+
+	passed = false
+	do
+		for in NotIterableClass()
+			_check('not iterable (not iterable)', false)
+			catch MemberNotFoundException
+				_check('not iterable (not iterable)', false)
+		catch MemberNotFoundException
+			_check('not iterable (not iterable)', true)
+			passed = true
+	_check('not iterable (not iterable)', passed)
+
+	passed = false
+	do
+		for in IterableButInvalidIteratorClass()
+			_check('not iterable (iterable but invalid iterator)', false)
+			catch TypeMismatchException
+				_check('not iterable (iterable but invalid iterator)', false)
+		catch TypeMismatchException
+			_check('not iterable (iterable but invalid iterator)', true)
+			passed = true
+	_check('not iterable (iterable but invalid iterator)', passed)
+
+	passed = false
+	do
+		for in IterableButIncompleteIteratorClass1()
+			_check('not iterable (iterator has no hasNext())', false)
+			catch MemberNotFoundException
+				_check('not iterable (iterator has no hasNext())', false)
+		catch MemberNotFoundException
+			_check('not iterable (iterator has no hasNext())', true)
+			passed = true
+	_check('not iterable (iterator has no hasNext())', passed)
+
+	passed = false
+	do
+		for in IterableButIncompleteIteratorClass2()
+			_check('not iterable (iterator has no next())', false)
+			catch MemberNotFoundException
+				_check('not iterable (iterator has no next())', false)
+		catch MemberNotFoundException
+			_check('not iterable (iterator has no next())', true)
+			passed = true
+	_check('not iterable (iterator has no next())', passed)
+
+
+testDo()
+testIf()
+testSwitch()
+testWhile()
+testFor()
+
+_checkCmd('finished')

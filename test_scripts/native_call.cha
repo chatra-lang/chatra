@@ -1,0 +1,195 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+import n: test_native
+
+def testNative()
+	log('[testNative]')
+
+	log('runtimeId = ' + n.testCommand('runtimeId'))
+	log('instanceId = ' + n.testCommand('instanceId'))
+	n.testCommand('log', 'log() test')
+
+	_check('hasSelf', n.testCommand('hasSelf') == false)
+	_check('isConstructor', n.testCommand('isConstructor') == false)
+	_check('name', n.testCommand('name') == 'testCommand')
+	_check('subName', n.testCommand('subName') == '')
+	_check('size', n.testCommand('size', 1, 2, 3, 4) == 5)
+
+	_check('setNull', n.testCommand('setNull') == null)
+	_check('setBool', n.testCommand('setBool', false) == true)
+	_check('setInt', n.testCommand('setInt', 123) == 223)
+	_check('setFloat', n.testCommand('setFloat', 123.0) == 1123.0)
+	_check('setString', n.testCommand('setString', "test") == "testhoge")
+	_check('setBool', n.testCommand('setCString') == 'hogehoge')
+
+	_check('arg_isNull', n.testCommand('arg_isNull', 2, null) == true)
+	_check('arg_isNull', n.testCommand('arg_isNull', 3, null, 1) == false)
+	_check('arg_isBool', n.testCommand('arg_isBool', 2, true) == true)
+	_check('arg_isBool', n.testCommand('arg_isBool', 3, true, 1) == false)
+	_check('arg_isInt', n.testCommand('arg_isInt', 2, 1) == true)
+	_check('arg_isInt', n.testCommand('arg_isInt', 3, 1, 1.0) == false)
+	_check('arg_isFloat', n.testCommand('arg_isFloat', 2, 1.0) == true)
+	_check('arg_isFloat', n.testCommand('arg_isFloat', 3, 1.0, 'hoge') == false)
+	_check('arg_isString', n.testCommand('arg_isString', 2, 'hoge') == true)
+	_check('arg_isString', n.testCommand('arg_isString', 3, 'hoge', {1, 2, 3}) == false)
+	_check('arg_isArray', n.testCommand('arg_isArray', 2, {1, 2, 3}) == true)
+	_check('arg_isArray', n.testCommand('arg_isArray', 3, {1, 2, 3}, {a: 4, b: 5}) == false)
+	_check('arg_isDict', n.testCommand('arg_isDict', 2, {a: 4, b: 5}) == true)
+	_check('arg_isDict', n.testCommand('arg_isDict', 3, {a: 4, b: 5}, null) == false)
+
+	_check('arg_className', n.testCommand('arg_className', 2, null) == '')
+	_check('arg_className', n.testCommand('arg_className', 2, true) == 'Bool')
+	_check('arg_className', n.testCommand('arg_className', 2, 'hoge') == 'String')
+	_check('arg_className', n.testCommand('arg_className', 2, {1, 2, 3}) == 'Array')
+	_check('arg_className', n.testCommand('arg_className', 2, n.EmptyClass()) == 'EmptyClass')
+
+	_check('arg_getBool', n.testCommand('arg_getBool', 2, true) == false)
+	_check('arg_getInt', n.testCommand('arg_getInt', 2, 123) == 323)
+	_check('arg_getFloat', n.testCommand('arg_getFloat', 2, 123.0) == 2123.0)
+	_check('arg_getString', n.testCommand('arg_getString', 2, 'test_arg') == 'test_arguhe')
+
+	_check('arg_size', n.testCommand('arg_size', 2, {0, 1, 2, 3, 4, 5}) == 6)
+	v = Array()
+	n.testCommand('arg_keys', 3, v, {a: 0, b: 1, cdef: 2})
+	_check('arg_keys', v.size() == 3 and v.has('a') and v.has('b') and v.has('cdef'))
+
+	a = n.EmptyClass()
+	n.testCommand('arg_setPtr', 3, 1234, a)
+	_check('arg_setPtr/getPtr', n.testCommand('arg_getPtr', 2, a) == 1734)
+
+
+	_check('arg_array_at_isNull', n.testCommand('arg_array_at_isNull', 3, 0, {null, false, 1, 1.2, 'hoge'}) == true)
+	_check('arg_array_at_isNull', n.testCommand('arg_array_at_isNull', 3, 1, {null, false, 1, 1.2, 'hoge'}) == false)
+	_check('arg_array_at_isInt', n.testCommand('arg_array_at_isInt', 3, 2, {null, false, 1, 1.2, 'hoge'}) == true)
+	_check('arg_array_at_isInt', n.testCommand('arg_array_at_isInt', 3, 3, {null, false, 1, 1.2, 'hoge'}) == false)
+	_check('arg_array_at_isString', n.testCommand('arg_array_at_isString', 3, 4, {null, false, 1, 1.2, 'hoge'}) == true)
+	_check('arg_array_at_isString', n.testCommand('arg_array_at_isString', 3, 0, {null, false, 1, 1.2, 'hoge'}) == false)
+
+	def onlySingleElementsAreModified(v: Array)
+		count = 0
+		if v[0] != null
+			count++
+		if v[1] != false
+			count++
+		if v[2] != 1
+			count++
+		if v[3] != 1.2
+			count++
+		if v[4] != 'hoge'
+			count++
+		return v.size() == 5 and count == 1
+
+	v = {null, false, 1, 1.2, 'hoge'}
+	n.testCommand('arg_array_at_setNull', 4, 1, null, v)
+	_check('arg_array_at_setNull', onlySingleElementsAreModified(v) and v[1] == null)
+	v = {null, false, 1, 1.2, 'hoge'}
+	n.testCommand('arg_array_at_setBool', 4, 2, false, v)
+	_check('arg_array_at_setBool', onlySingleElementsAreModified(v) and v[2] == true)
+	v = {null, false, 1, 1.2, 'hoge'}
+	n.testCommand('arg_array_at_setInt', 4, 3, 123, v)
+	_check('arg_array_at_setInt', onlySingleElementsAreModified(v) and v[3] == 423)
+	v = {null, false, 1, 1.2, 'hoge'}
+	n.testCommand('arg_array_at_setFloat', 4, 4, 123.0, v)
+	_check('arg_array_at_setFloat', onlySingleElementsAreModified(v) and v[4] == 3123.0)
+	v = {null, false, 1, 1.2, 'hoge'}
+	n.testCommand('arg_array_at_setString', 4, 0, 'array', v)
+	_check('arg_array_at_setString', onlySingleElementsAreModified(v) and v[0] == 'arrayarray')
+
+
+	_check('arg_dict_at_isNull', n.testCommand('arg_dict_at_isNull', 3, 'a', {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}) == true)
+	_check('arg_dict_at_isNull', n.testCommand('arg_dict_at_isNull', 3, 'b', {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}) == false)
+	_check('arg_dict_at_isInt', n.testCommand('arg_dict_at_isInt', 3, 'c', {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}) == true)
+	_check('arg_dict_at_isInt', n.testCommand('arg_dict_at_isInt', 3, 'd', {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}) == false)
+	_check('arg_dict_at_isString', n.testCommand('arg_dict_at_isString', 3, 'e', {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}) == true)
+	_check('arg_dict_at_isString', n.testCommand('arg_dict_at_isString', 3, 'a', {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}) == false)
+
+	def onlySingleElementsAreModified(v: Dict)
+		count = 0
+		if v['a'] != null
+			count++
+		if v['b'] != false
+			count++
+		if v['c'] != 1
+			count++
+		if v['d'] != 1.2
+			count++
+		if v['e'] != 'hoge'
+			count++
+		return v.size() == 5 and count == 1
+
+	v = {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}
+	n.testCommand('arg_dict_at_setNull', 4, 'b', null, v)
+	_check('arg_dict_at_setNull', onlySingleElementsAreModified(v) and v['b'] == null)
+	v = {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}
+	n.testCommand('arg_dict_at_setBool', 4, 'c', false, v)
+	_check('arg_dict_at_setBool', onlySingleElementsAreModified(v) and v['c'] == true)
+	v = {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}
+	n.testCommand('arg_dict_at_setInt', 4, 'd', 123, v)
+	_check('arg_dict_at_setInt', onlySingleElementsAreModified(v) and v['d'] == 523)
+	v = {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}
+	n.testCommand('arg_dict_at_setFloat', 4, 'e', 123.0, v)
+	_check('arg_dict_at_setFloat', onlySingleElementsAreModified(v) and v['e'] == 4123.0)
+	v = {a: null, b: false, c: 1, d: 1.2, e: 'hoge'}
+	n.testCommand('arg_dict_at_setString', 4, 'a', 'dict', v)
+	_check('arg_dict_at_setString', onlySingleElementsAreModified(v) and v['a'] == 'dictdict')
+
+
+def testNativeClass()
+	log('[testNativeClass]')
+
+	a = n.TestClass('setSelf', 1234)
+	_check('setSelf/hasSelf/self', a.method('hasSelf') == true and a.method('self') == 1234)
+
+	b = n.TestClass.native('setSelf', 2345)
+	_check('setSelf/hasSelf/self', b.method('hasSelf') == true and b.method('self') == 2345)
+
+	c = n.TestClass.nop()
+	_check('setSelf/hasSelf/self', c.method('hasSelf') == true and c.method('self') == 0)
+
+
+var leaved
+
+def nativePause()
+	log('enter pause()')
+	n.testCommand('pause')
+	leaved = true
+	log('leave pause()')
+
+def yield()
+
+def testNativePause()
+	log('[testNativePause]')
+
+	leaved = false
+	async nativePause()
+	for in Range(10)
+		yield()
+	n.testCommand('resume')
+	for in Range(10)
+		yield()
+	_check('pause/resume', leaved)
+
+
+testNative()
+testNativeClass()
+testNativePause()
+
+_checkCmd('finished')

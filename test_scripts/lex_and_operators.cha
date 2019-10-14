@@ -1,0 +1,1031 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+def testInt()
+	log('[testInt]')
+	_check('decimal and hexadecimal literal', 1234 == 0x4D2)
+	_check('decimal and binary literal', 5678 == 0b1_0110_0010_1110)
+
+	if _checkCmd('testMode') != 'serialize'
+		do
+			do
+				a = 0x8000_0000_0000_0000_0000
+			_check('large integer value (literal out of range)', false)
+			catch ParserErrorException
+				_check('large integer value (literal out of range)', true)
+
+	a = 0x7FFF_ffff_FFFF_ffff
+	_check('large integer value (max integer)', true)
+
+	// This form of checking can be simplified, but at this point, some features such as lambda have not been verified.
+	// To keep things simple, we use minimal features to verify.
+	do
+		a = 0x8000_0000_0000_0000
+		_check('large integer value (max integer + 1)', false)
+		catch OverflowException
+			_check('large integer value (max integer + 1)', true)
+
+	a = -0x8000_0000_0000_0000
+	_check('large integer value (min integer)', true)
+
+	do
+		a = -0x8000_0000_0000_0001
+		_check('large integer value (min integer - 1)', false)
+		catch OverflowException
+			_check('large integer value (min integer - 1)', true)
+
+	_check('constructor', Int(127) == 127)
+	_check('converting constructor', Int(127.7) == 127)
+	_check('converting constructor', Int(-127.8) == -127)
+	_check('converting constructor', Int(true) == 1)
+	_check('converting constructor', Int(false) == 0)
+	_check('converting constructor', Int('127') == 127)
+	do
+		a = Int()
+		_check('constructor (no args)', false)
+		catch MemberNotFoundException
+			_check('constructor (no args)', true)
+	do
+		a = Int('abc')
+		_check('constructor (invalid String value)', false)
+		catch IllegalArgumentException
+			_check('constructor (invalid String value)', true)
+	do
+		a = Int('10000000000000000000000000000000')
+		_check('constructor (out of range)', false)
+		catch IllegalArgumentException
+			_check('constructor (out of range)', true)
+
+	// operators
+	a = 100
+	b = a++
+	_check('postfix increment', a == 101 and b == 100)
+	do
+		a = 9223372036854775807
+		a++
+		_check('postfix increment (overflow check)', false)
+		catch OverflowException
+			_check('postfix increment (overflow check)', true)
+
+	a = 100
+	b = a--
+	_check('postfix decrement', a == 99 and b == 100)
+	do
+		a = -9223372036854775808
+		a--
+		_check('postfix decrement (overflow check)', false)
+		catch OverflowException
+			_check('postfix decrement (overflow check)', true)
+
+	a = 100
+	b = ++a
+	_check('prefix increment', a == 101 and b == 101)
+	do
+		a = 9223372036854775807
+		++a
+		_check('prefix increment (overflow check)', false)
+		catch OverflowException
+			_check('prefix increment (overflow check)', true)
+
+	a = 100
+	b = --a
+	_check('prefix decrement', a == 99 and b == 99)
+	do
+		a = -9223372036854775808
+		--a
+		_check('prefix decrement (overflow check)', false)
+		catch OverflowException
+			_check('prefix decrement (overflow check)', true)
+
+	_check('bitwise complement', ~0xC3A5 & 0xFFFF == 0x3C5A)
+
+	do
+		a = !123
+		_check('logical NOT (!)', false)
+		catch UnsupportedOperationException
+			_check('logical NOT (!)', true)
+	do
+		a = not 123
+		_check('logical NOT (not)', false)
+		catch UnsupportedOperationException
+			_check('logical NOT (not)', true)
+
+	_check('unary plus', +1234 == 1234)
+
+	a = 1234
+	_check('unary minus (plus -> minus)', -a == -1234)
+	a = -1234
+	_check('unary minus (minus -> plus)', -a == 1234)
+	do
+		a = -0x8000_0000_0000_0000
+		b = -a
+		_check('unary minus (overflow check)', false)
+		catch OverflowException
+			_check('unary minus (overflow check)', true)
+
+	_check('multiplication', 123 * -45678 == -5618394)
+	do
+		a = 0x4000_0000_0000_0000 * 2
+		_check('multiplication (overflow check)', false)
+		catch OverflowException
+			_check('multiplication (overflow check)', true)
+
+	_check('multiplication with ignoring overflow',
+			0x4000_0000_0000_1234 &* -0x6000_0000_0000_5678
+			== 0x7FFF_FFFF_F9D9_FFA0)
+
+	_check('division', 1000 / 25 == 40)
+	_check('division', 1000 / -25 == -40)
+	_check('division (round to zero; plus / plus)', 1000 / 26 == 38)
+	_check('division (round to zero; minus / plus)', -1000 / 26 == -38)
+	_check('division (round to zero; plus / minus)', 1000 / -26 == -38)
+	_check('division (round to zero; minus / minus)', -1000 / -26 == 38)
+	do
+		a = 1 / 0
+		_check('division (divide by zero)', false)
+		catch DivideByZeroException
+			_check('division (divide by zero)', true)
+
+	_check('division with rounding down', 1000 /- 25 == 40)
+	_check('division with rounding down', 1000 /- -25 == -40)
+	_check('division with rounding down (plus / plus)', 1000 /- 26 == 38)
+	_check('division with rounding down (minus / plus)', -1000 /- 26 == -39)
+	_check('division with rounding down (plus / minus)', 1000 /- -26 == -39)
+	_check('division with rounding down (minus / minus)', -1000 /- -26 == 38)
+	do
+		a = 1 /- 0
+		_check('division with rounding down (divide by zero)', false)
+		catch DivideByZeroException
+			_check('division with rounding down (divide by zero)', true)
+
+	_check('division with rounding up', 1000 /+ 25 == 40)
+	_check('division with rounding up', 1000 /+ -25 == -40)
+	_check('division with rounding up (plus / plus)', 1000 /+ 26 == 39)
+	_check('division with rounding up (minus / plus)', -1000 /+ 26 == -38)
+	_check('division with rounding up (plus / minus)', 1000 /+ -26 == -38)
+	_check('division with rounding up (minus / minus)', -1000 /+ -26 == 39)
+	do
+		a = 1 /+ 0
+		_check('division with rounding up (divide by zero)', false)
+		catch DivideByZeroException
+			_check('division with rounding up (divide by zero)', true)
+
+	_check('modulus (plus % plus)', 1000 % 26 == 12)
+	_check('modulus (minus % plus)', -1000 % 26 == -12)
+	_check('modulus (plus % minus)', 1000 % -26 == 12)
+	_check('modulus (minus % minus)', -1000 % -26 == -12)
+	do
+		a = 1 % 0
+		_check('modulus (divide by zero)', false)
+		catch DivideByZeroException
+			_check('modulus (divide by zero)', true)
+
+	_check('modulus with rounding down (plus % plus)', 1000 %- 26 == 12)
+	_check('modulus with rounding down (minus % plus)', -1000 %- 26 == 14)
+	_check('modulus with rounding down (plus % minus)', 1000 %- -26 == -14)
+	_check('modulus with rounding down (minus % minus)', -1000 %- -26 == -12)
+	do
+		a = 1 %- 0
+		_check('modulus with rounding down (divide by zero)', false)
+		catch DivideByZeroException
+			_check('modulus with rounding down (divide by zero)', true)
+
+	_check('modulus with rounding up (plus % plus)', 1000 %+ 26 == -14)
+	_check('modulus with rounding up (minus % plus)', -1000 %+ 26 == -12)
+	_check('modulus with rounding up (plus % minus)', 1000 %+ -26 == 12)
+	_check('modulus with rounding up (minus % minus)', -1000 %+ -26 == 14)
+	do
+		a = 1 %+ 0
+		_check('modulus with rounding up (divide by zero)', false)
+		catch DivideByZeroException
+			_check('modulus with rounding up (divide by zero)', true)
+
+	_check('exponent', 3 ** 19 == 1162261467)
+	_check('exponent', -3 ** 19 == -1162261467)
+	_check('exponent', -3 ** 0 == 1)
+	_check('exponent', -3 ** 1 == -3)
+	do
+		a = 3 ** -1
+		_check('exponent (minus)', false)
+		catch UnsupportedOperationException
+			_check('exponent (minus)', true)
+
+	_check('addition', 123 + 4567 == 4690)
+	do
+		a = 0x7FFF_FFFF_FFFF_FFF0 + 16
+		_check('addition (+overflow check)', false)
+		catch OverflowException
+			_check('addition (+overflow check)', true)
+	do
+		a = -0x7FFF_FFFF_FFFF_FFF0
+		b = -17
+		c = a + b
+		_check('addition (-overflow check)', false)
+		catch OverflowException
+			_check('addition (-overflow check)', true)
+
+	_check('addition with ignoring overflow',
+			0x7FFF_FFFF_FFFF_FFFF &+ 0x7FFF_FFFF_FFFF_FFFF == -2)
+
+	_check('subtraction', 123 - 4567 == -4444)
+	do
+		a = -0x7FFF_FFFF_FFFF_FFF0 - 17
+		_check('subtraction (-overflow check)', false)
+		catch OverflowException
+			_check('subtraction (-overflow check)', true)
+	do
+		a = 0x7FFF_FFFF_FFFF_FFF0
+		b = -16
+		c = a - b
+		_check('addition (+overflow check)', false)
+		catch OverflowException
+			_check('addition (+overflow check)', true)
+
+	_check('subtraction with ignoring overflow',
+			-0x7FFF_FFFF_FFFF_FFFF &- 0x7FFF_FFFF_FFFF_FFFF == 2)
+
+	_check('left shift', 0x1234 << 10 == 0x48D000)
+	_check('left shift (overflow)', 0x1234 << 59 == -0x6000_0000_0000_0000)
+	_check('right shift', 0x48D000 >> 10 == 0x1234)
+	_check('right shift', -100 >> 2 == -25)
+	_check('right shift with zero extension', -1 >>> 60 == 15)
+	_check('bitwise AND', 0xC3F0 & 0xA1C3 == 0x81C0)
+	_check('bitwise OR', 0xC3F0 | 0xA1C3 == 0xE3F3)
+	_check('bitwise XOR', 0xC3F0 ^ 0xA1C3 == 0x6233)
+	_check('less than', 2 < 3)
+	_check('greater than', 4 > 3)
+	_check('less than or equal to', 2 <= 3)
+	_check('less than or equal to', 3 <= 3)
+	_check('greater than or equal to', 4 >= 4)
+	_check('greater than or equal to', 5 >= 4)
+	_check('equal to', 5 == 5)
+	_check('not equal to', 5 != 6)
+
+	do
+		a = 123 && 456
+		_check('logical AND (&&)', false)
+		catch UnsupportedOperationException
+			_check('logical AND (&&)', true)
+	do
+		a = 123 and 456
+		_check('logical AND (and)', false)
+		catch UnsupportedOperationException
+			_check('logical AND (and)', true)
+
+	do
+		a = 123 || 456
+		_check('logical OR (||)', false)
+		catch UnsupportedOperationException
+			_check('logical OR (||)', true)
+	do
+		a = 123 or 456
+		_check('logical OR (or)', false)
+		catch UnsupportedOperationException
+			_check('logical OR (or)', true)
+
+	do
+		a = 123 ^^ 456
+		_check('logical XOR (^^)', false)
+		catch UnsupportedOperationException
+			_check('logical XOR (^^)', true)
+	do
+		a = 123 xor 456
+		_check('logical XOR (xor)', false)
+		catch UnsupportedOperationException
+			_check('logical XOR (xor)', true)
+
+	do
+		a = 1 ? 123 : 456
+		_check('conditional', false)
+		catch TypeMismatchException
+			_check('conditional', true)
+
+	a: 123
+	_check('pair', a == 123)
+	do
+		a = 234
+		_check('assignment', a == 234)
+		a: 345
+		_check('define and assignment (child scope)', a == 345)
+	_check('define and assignment (parent scope)', a == 234)
+
+	a = 123
+	a *= -45678
+	_check('multiplication and assignment', a == -5618394)
+	a = 0x4000_0000_0000_0000
+	do
+		a *= 2
+		_check('multiplication and assignment (overflow check)', false)
+		catch OverflowException
+			_check('multiplication and assignment (overflow check)', true)
+
+	a = 0x4000_0000_0000_1234
+	a &*= -0x6000_0000_0000_5678
+	_check('multiplication with ignoring overflow and assignment',
+			a == 0x7FFF_FFFF_F9D9_FFA0)
+
+	a = 1000
+	a /= 25
+	_check('division and assignment', a == 40)
+	a = -1000
+	a /-= 26
+	_check('division with rounding down and assignment', a == -39)
+	a = -1000
+	a /+= -26
+	_check('division with rounding up and assignment', a == 39)
+	a = 1000
+	a %= 26
+	_check('modulus and assignment', a == 12)
+	a = 1000
+	a %-= -26
+	_check('modulus with rounding down and assignment', a == -14)
+	a = 1000
+	a %+= 26
+	_check('modulus with rounding up and assignment', a == -14)
+	a = 3
+	a **= 19
+	_check('exponent and assignment', a == 1162261467)
+	a = 123
+	a += 4567
+	_check('addition and assignment', a == 4690)
+	a = 0x7FFF_FFFF_FFFF_FFFF
+	a &+= 0x7FFF_FFFF_FFFF_FFFF
+	_check('addition with ignoring overflow and assignment', a == -2)
+	a = 123
+	a -= 4567
+	_check('subtraction and assignment', a == -4444)
+	a = -0x7FFF_FFFF_FFFF_FFFF
+	a &-= 0x7FFF_FFFF_FFFF_FFFF
+	_check('subtraction with ignoring overflow and assignment', a == 2)
+	a = 0x1234
+	a <<= 10
+	_check('left shift and assignment', a == 0x48D000)
+	a = 0x48D000
+	a >>= 10
+	_check('right shift and assignment', a == 0x1234)
+	a = -1
+	a >>>= 60
+	_check('right shift with zero extension and assignment', a == 15)
+	a = 0xC3F0
+	a &= 0xA1C3
+	_check('bitwise AND and assignment', a == 0x81C0)
+	a = 0xC3F0
+	a |= 0xA1C3
+	_check('bitwise OR and assignment', a == 0xE3F3)
+	a = 0xC3F0
+	a ^= 0xA1C3
+	_check('bitwise XOR and assignment', a == 0x6233)
+
+def testBool()
+	log('[testBool]')
+	_check('"true"', true)
+	_check('"false" and logical NOT', not false)
+
+	_check('constructor', Bool(true) == true)
+	_check('constructor', Bool(false) == false)
+	_check('converting constructor', Bool(-3) == true)
+	_check('converting constructor', Bool(0) == false)
+	_check('converting constructor', Bool('true') == true)
+	_check('converting constructor', Bool('false') == false)
+	do
+		a = Bool(1.5)
+		_check('converting constructor (Float -> Bool)', false)
+		catch MemberNotFoundException
+			_check('converting constructor (Float -> Bool)', true)
+
+	do
+		a = Bool()
+		_check('constructor (no args)', false)
+		catch MemberNotFoundException
+			_check('constructor (no args)', true)
+	do
+		a = Bool('abc')
+		_check('constructor (invalid String value)', false)
+		catch IllegalArgumentException
+			_check('constructor (invalid String value)', true)
+
+	// operators
+	a = false
+	b = a++
+	_check('postfix increment', a and !b)
+	a = true
+	b = a++
+	_check('postfix increment', a and b)
+
+	a = false
+	b = a--
+	_check('postfix decrement', !a and !b)
+	a = true
+	b = a--
+	_check('postfix decrement', !a and b)
+
+	a = false
+	b = ++a
+	_check('prefix increment', a and b)
+	a = true
+	b = ++a
+	_check('prefix increment', a and b)
+
+	a = false
+	b = --a
+	_check('prefix decrement', !a and !b)
+	a = true
+	b = --a
+	_check('prefix decrement', !a and !b)
+
+	_check('bitwise complement', ~false)
+	_check('bitwise complement', !~true)
+	_check('unary plus', +true)
+	_check('unary minus', -false)
+	_check('unary minus', -true == false)
+	_check('multiplication', false * false == false)
+	_check('multiplication', false * true == false)
+	_check('multiplication', true * false == false)
+	_check('multiplication', true * true == true)
+	_check('multiplication with ignoring overflow', false &* false == false)
+	_check('multiplication with ignoring overflow', false &* true == false)
+	_check('multiplication with ignoring overflow', true &* false == false)
+	_check('multiplication with ignoring overflow', true &* true == true)
+
+	do
+		a = true / true
+		_check('division', false)
+		catch UnsupportedOperationException
+			_check('division', true)
+	do
+		a = true /- true
+		_check('division with rounding down', false)
+		catch UnsupportedOperationException
+			_check('division with rounding down', true)
+	do
+		a = true /+ true
+		_check('division with rounding up', false)
+		catch UnsupportedOperationException
+			_check('division with rounding up', true)
+	do
+		a = true % true
+		_check('modulus', false)
+		catch UnsupportedOperationException
+			_check('modulus', true)
+	do
+		a = true %- true
+		_check('modulus with rounding down', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding down', true)
+	do
+		a = true %+ true
+		_check('modulus with rounding up', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding up', true)
+	do
+		a = true ** true
+		_check('exponent', false)
+		catch UnsupportedOperationException
+			_check('exponent', true)
+
+	_check('addition', false + false == false)
+	_check('addition', false + true == true)
+	_check('addition', true + false == true)
+	_check('addition', true + true == true)
+	_check('addition with ignoring overflow', false &+ false == false)
+	_check('addition with ignoring overflow', false &+ true == true)
+	_check('addition with ignoring overflow', true &+ false == true)
+	_check('addition with ignoring overflow', true &+ true == true)
+	_check('subtraction', false - false == false)
+	_check('subtraction', false - true == true)
+	_check('subtraction', true - false == true)
+	_check('subtraction', true - true == false)
+	_check('subtraction with ignoring overflow', false &- false == false)
+	_check('subtraction with ignoring overflow', false &- true == true)
+	_check('subtraction with ignoring overflow', true &- false == true)
+	_check('subtraction with ignoring overflow', true &- true == false)
+
+	do
+		a = true << true
+		_check('left shift', false)
+		catch UnsupportedOperationException
+			_check('left shift', true)
+	do
+		a = true >> true
+		_check('right shift', false)
+		catch UnsupportedOperationException
+			_check('right shift', true)
+	do
+		a = true >>> true
+		_check('right shift with zero extension', false)
+		catch UnsupportedOperationException
+			_check('right shift with zero extension', true)
+	do
+		a = true & true
+		_check('bitwise AND', false)
+		catch UnsupportedOperationException
+			_check('bitwise AND', true)
+	do
+		a = true | true
+		_check('bitwise OR', false)
+		catch UnsupportedOperationException
+			_check('bitwise OR', true)
+	do
+		a = true ^ true
+		_check('bitwise XOR', false)
+		catch UnsupportedOperationException
+			_check('bitwise XOR', true)
+
+	_check('less than', false < false == false)
+	_check('less than', false < true == true)
+	_check('less than', true < false == false)
+	_check('less than', true < true == false)
+	_check('greater than', false > false == false)
+	_check('greater than', false > true == false)
+	_check('greater than', true > false == true)
+	_check('greater than', true > true == false)
+	_check('less than or equal to', false <= false == true)
+	_check('less than or equal to', false <= true == true)
+	_check('less than or equal to', true <= false == false)
+	_check('less than or equal to', true <= true == true)
+	_check('greater than or equal to', false >= false == true)
+	_check('greater than or equal to', false >= true == false)
+	_check('greater than or equal to', true >= false == true)
+	_check('greater than or equal to', true >= true == true)
+	_check('equal to', (false == false) == true)
+	_check('equal to', (false == true) == false)
+	_check('equal to', (true == false) == false)
+	_check('equal to', (true == true) == true)
+	_check('not equal to', (false != false) == false)
+	_check('not equal to', (false != true) == true)
+	_check('not equal to', (true != false) == true)
+	_check('not equal to', (true != true) == false)
+
+	_check('logical AND (&&)', (false && false) == false)
+	_check('logical AND (&&)', (false && true) == false)
+	_check('logical AND (&&)', (true && false) == false)
+	_check('logical AND (&&)', (true && true) == true)
+	_check('logical AND (and)', (false and false) == false)
+	_check('logical AND (and)', (false and true) == false)
+	_check('logical AND (and)', (true and false) == false)
+	_check('logical AND (and)', (true and true) == true)
+
+	a = 1
+	b = 10
+	++a == 0 and ++b > 0
+	_check('logical AND (short-circuit evaluation)', b == 10)
+
+	_check('logical OR (||)', (false || false) == false)
+	_check('logical OR (||)', (false || true) == true)
+	_check('logical OR (||)', (true || false) == true)
+	_check('logical OR (||)', (true || true) == true)
+	_check('logical OR (or)', (false or false) == false)
+	_check('logical OR (or)', (false or true) == true)
+	_check('logical OR (or)', (true or false) == true)
+	_check('logical OR (or)', (true or true) == true)
+
+	a = 1
+	b = 10
+	++a > 0 or ++b > 0
+	_check('logical OR (short-circuit evaluation)', b == 10)
+
+	_check('logical XOR (^^)', (false ^^ false) == false)
+	_check('logical XOR (^^)', (false ^^ true) == true)
+	_check('logical XOR (^^)', (true ^^ false) == true)
+	_check('logical XOR (^^)', (true ^^ true) == false)
+	_check('logical XOR (xor)', (false xor false) == false)
+	_check('logical XOR (xor)', (false xor true) == true)
+	_check('logical XOR (xor)', (true xor false) == true)
+	_check('logical XOR (xor)', (true xor true) == false)
+
+	a = 1
+	b = 10
+	++a > 0 xor ++b > 0
+	_check('logical XOR (short-circuit evaluation never works)', b == 11)
+
+	a = 1
+	b = 10
+	++a == 0 xor ++b > 0
+	_check('logical XOR (short-circuit evaluation never works)', b == 11)
+
+	_check('conditional', (true ? 1 : 2) == 1)
+	_check('conditional', (false ? 2 : 1) == 1)
+
+	a: true
+	_check('pair', a == true)
+	do
+		a: false
+		_check('define and assignment (child scope)', a == false)
+	_check('define and assignment (parent scope)', a == true)
+
+	a = true
+	a *= false
+	_check('multiplication and assignment', a == false)
+	a = true
+	a &*= true
+	_check('multiplication with ignoring overflow and assignment', a == true)
+	do
+		a /= true
+		_check('division and assignment', false)
+		catch UnsupportedOperationException
+			_check('division and assignment', true)
+	do
+		a /-= true
+		_check('division with rounding down and assignment', false)
+		catch UnsupportedOperationException
+			_check('division with rounding down and assignment', true)
+	do
+		a /+= true
+		_check('division with rounding up and assignment', false)
+		catch UnsupportedOperationException
+			_check('division with rounding up and assignment', true)
+	do
+		a %= true
+		_check('modulus and assignment', false)
+		catch UnsupportedOperationException
+			_check('modulus and assignment', true)
+	do
+		a %-= true
+		_check('modulus with rounding down and assignment', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding down and assignment', true)
+	do
+		a %+= true
+		_check('modulus with rounding up and assignment', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding up and assignment', true)
+	do
+		a **= true
+		_check('exponent and assignment', false)
+		catch UnsupportedOperationException
+			_check('exponent and assignment', true)
+	a = true
+	a += false
+	_check('addition and assignment', a == true)
+	a = false
+	a &+= true
+	_check('addition with ignoring overflow and assignment', a == true)
+	a = true
+	a -= false
+	_check('subtraction and assignment', a == true)
+	a = true
+	a &-= true
+	_check('subtraction with ignoring overflow and assignment', a == false)
+	do
+		a <<= true
+		_check('left shift and assignment', false)
+		catch UnsupportedOperationException
+			_check('left shift and assignment', true)
+	do
+		a >>= true
+		_check('right shift and assignment', false)
+		catch UnsupportedOperationException
+			_check('right shift and assignment', true)
+	do
+		a >>>= true
+		_check('right shift with zero extension and assignment', false)
+		catch UnsupportedOperationException
+			_check('right shift with zero extension and assignment', true)
+	do
+		a &= true
+		_check('bitwise AND and assignment', false)
+		catch UnsupportedOperationException
+			_check('bitwise AND and assignment', true)
+	do
+		a |= true
+		_check('bitwise OR and assignment', false)
+		catch UnsupportedOperationException
+			_check('bitwise OR and assignment', true)
+	do
+		a ^= true
+		_check('bitwise XOR and assignment', false)
+		catch UnsupportedOperationException
+			_check('bitwise XOR and assignment', true)
+
+def testFloat()
+	log('[testFloat]')
+
+	def _check(message, value0, value1, tolerance : 0.000001)
+		diff : value0 - value1
+		_check(message, -tolerance < diff and diff < tolerance)
+
+	_check('literal', 1.2, 12. / 10.0)
+	_check('literal', 3.1e3, 3100.0)
+	_check('literal', 5.3e-3, 0.0053)
+	_check('literal (+large)',
+			1.797_693_134_862_315_7e308 / 1.e308, 1.797_693_134_862_315_7)
+	_check('literal (-large)',
+			-1.797_693_134_862_315_7e308 / 1.e308, -1.797_693_134_862_315_7)
+	_check('literal (+small)',
+			2.225_073_858_507_201_4e-308 * 1.e308, 2.225_073_858_507_201_4)
+	_check('literal (-small)',
+			-2.225_073_858_507_201_4e-308 * 1.e308, -2.225_073_858_507_201_4)
+
+	if _checkCmd('testMode') != 'serialize'
+		do
+			do
+				a = 1.897_693_134_862_315_7e308
+			_check('large float value (literal out of range)', false)
+			catch ParserErrorException
+				_check('large float value (literal out of range)', true)
+
+	_check('constructor', Float(1.23) == 1.23)
+	_check('converting constructor', Float(123), 123.0)
+	_check('converting constructor', Float(true), 1.0)
+	_check('converting constructor', Float(false), 0.0)
+	_check('converting constructor', Float('123'), 123.0)
+	_check('converting constructor', Float('1.2e3'), 1200.0)
+	_check('converting constructor', Float('1.2e-3'), 0.0012)
+	do
+		a = Float()
+		_check('constructor (no args)', false)
+		catch MemberNotFoundException
+			_check('constructor (no args)', true)
+	do
+		a = Float('abc')
+		_check('constructor (invalid String value)', false)
+		catch IllegalArgumentException
+			_check('constructor (invalid String value)', true)
+	do
+		a = Float('1e1000')
+		_check('constructor (out of range)', false)
+		catch IllegalArgumentException
+			_check('constructor (out of range)', true)
+
+	// operators
+	a = 100.1
+	b = a++
+	_check('postfix increment', a, 101.1)
+	_check('postfix increment', b, 100.1)
+
+	a = 100.3
+	b = a--
+	_check('postfix decrement', a, 99.3)
+	_check('postfix decrement', b, 100.3)
+
+	a = 100.5
+	b = ++a
+	_check('prefix increment', a, 101.5)
+	_check('prefix increment', b, 101.5)
+
+	a = 100.7
+	b = --a
+	_check('prefix decrement', a, 99.7)
+	_check('prefix decrement', b, 99.7)
+
+	do
+		a = !123.0
+		_check('logical NOT (!)', false)
+		catch UnsupportedOperationException
+			_check('logical NOT (!)', true)
+	do
+		a = not 123.0
+		_check('logical NOT (not)', false)
+		catch UnsupportedOperationException
+			_check('logical NOT (not)', true)
+
+	_check('unary plus', +1234.567, 1234.567)
+
+	a = 1234.56
+	_check('unary minus (plus -> minus)', -a, -1234.56)
+	a = -1234.56
+	_check('unary minus (minus -> plus)', -a, 1234.56)
+
+	_check('multiplication', 123.4 * -45678.9, -5636776.26)
+	_check('multiplication with ignoring overflow', 123.4 * -45678.9, -5636776.26)
+
+	_check('division', 1000.0 / 26.0, 38.461538461538462)
+	_check('division', 1000.0 / -26.0, -38.461538461538462)
+	do
+		a = 1.0 /- 0.3
+		_check('division with rounding down', false)
+		catch UnsupportedOperationException
+			_check('division with rounding down', true)
+	do
+		a = 1.0 /+ 0.3
+		_check('division with rounding up', false)
+		catch UnsupportedOperationException
+			_check('division with rounding up', true)
+
+	_check('modulus (plus % plus)', 100.0 % 2.6, 1.2)
+	_check('modulus (minus % plus)', -100.0 % 2.6, -1.2)
+	_check('modulus (plus % minus)', 100.0 % -2.6, 1.2)
+	_check('modulus (minus % minus)', -100.0 % -2.6, -1.2)
+	do
+		a = 1.0 %- 0.3
+		_check('modulus with rounding down', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding down', true)
+	do
+		a = 1.0 %+ 0.3
+		_check('modulus with rounding up', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding up', true)
+
+	_check('exponent', 3.0 ** 19.0, 1162261467.0)
+	_check('exponent', -3.0 ** 19.0, -1162261467.0)
+	_check('exponent', -3.0 ** 0.0, 1.0)
+	_check('exponent', -3.0 ** 1.0, -3.0)
+	_check('exponent', 2.0 ** 0.5, 1.414213562373095)
+	_check('addition', 12.3 + 456.7, 469.0)
+	_check('addition with ignoring overflow', 12.3 + 456.7, 469.0)
+	_check('subtraction', 12.3 - 456.7, -444.4)
+	_check('subtraction with ignoring overflow', 12.3 - 456.7, -444.4)
+
+	do
+		a = 1.1 << 2.2
+		_check('left shift', false)
+		catch UnsupportedOperationException
+			_check('left shift', true)
+	do
+		a = 1.1 >> 2.2
+		_check('right shift', false)
+		catch UnsupportedOperationException
+			_check('right shift', true)
+	do
+		a = 1.1 >>> 2.2
+		_check('right shift with zero extension', false)
+		catch UnsupportedOperationException
+			_check('right shift with zero extension', true)
+	do
+		a = 1.1 & 2.2
+		_check('bitwise AND', false)
+		catch UnsupportedOperationException
+			_check('bitwise AND', true)
+	do
+		a = 1.1 | 2.2
+		_check('bitwise OR', false)
+		catch UnsupportedOperationException
+			_check('bitwise OR', true)
+	do
+		a = 1.1 ^ 2.2
+		_check('bitwise XOR', false)
+		catch UnsupportedOperationException
+			_check('bitwise XOR', true)
+
+	_check('less than', 0.2 < 0.3)
+	_check('greater than', 0.4 > 0.3)
+	_check('less than or equal to', 0.2 <= 0.3)
+	_check('less than or equal to', 0.3 <= 0.3)
+	_check('greater than or equal to', 0.4 >= 0.4)
+	_check('greater than or equal to', 0.5 >= 0.4)
+	_check('equal to', 0.5 == 0.5)
+	_check('not equal to', 0.5 != 0.6)
+
+	do
+		a = 1.1 && 2.2
+		_check('logical AND (&&)', false)
+		catch UnsupportedOperationException
+			_check('logical AND (&&)', true)
+	do
+		a = 1.1 and 2.2
+		_check('logical AND (and)', false)
+		catch UnsupportedOperationException
+			_check('logical AND (and)', true)
+
+	do
+		a = 1.1 || 2.2
+		_check('logical OR (||)', false)
+		catch UnsupportedOperationException
+			_check('logical OR (||)', true)
+	do
+		a = 1.1 or 2.2
+		_check('logical OR (or)', false)
+		catch UnsupportedOperationException
+			_check('logical OR (or)', true)
+
+	do
+		a = 1.1 ^^ 2.2
+		_check('logical XOR (^^)', false)
+		catch UnsupportedOperationException
+			_check('logical XOR (^^)', true)
+	do
+		a = 1.1 xor 2.2
+		_check('logical XOR (xor)', false)
+		catch UnsupportedOperationException
+			_check('logical XOR (xor)', true)
+
+	do
+		a = 1.1 ? 2.2 : 3.3
+		_check('conditional', false)
+		catch TypeMismatchException
+			_check('conditional', true)
+
+	a: 12.3
+	_check('pair', a, 12.3)
+	do
+		a = 23.4
+		_check('assignment', a, 23.4)
+		a: 34.5
+		_check('define and assignment (child scope)', a, 34.5)
+	_check('define and assignment (parent scope)', a, 23.4)
+
+	a = 12.3
+	a *= -4567.8
+	_check('multiplication and assignment', a, -56183.94)
+	a = 12.3
+	a &*= -4567.8
+	_check('multiplication with ignoring overflow  and assignment', a, -56183.94)
+
+	a = 100.0
+	a /= 2.5
+	_check('division and assignment', a, 40.0)
+	do
+		a /-= 1.0
+		_check('division with rounding down and assignment', false)
+		catch UnsupportedOperationException
+			_check('division with rounding down and assignment', true)
+	do
+		a /+= 1.0
+		_check('division with rounding up and assignment', false)
+		catch UnsupportedOperationException
+			_check('division with rounding up and assignment', true)
+
+	a = 100.0
+	a %= 2.6
+	_check('modulus and assignment', a, 1.2)
+	do
+		a %-= 1.0
+		_check('modulus with rounding down and assignment', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding down and assignment', true)
+	do
+		a %+= 1.0
+		_check('modulus with rounding up and assignment', false)
+		catch UnsupportedOperationException
+			_check('modulus with rounding up and assignment', true)
+
+	a = 3.0
+	a **= 19.0
+	_check('exponent and assignment', a, 1162261467.0)
+	a = 12.3
+	a += 456.7
+	_check('addition and assignment', a, 469.0)
+	a = 12.3
+	a &+= 456.7
+	_check('addition with ignoring overflow and assignment', a, 469.0)
+	a = 12.3
+	a -= 456.7
+	_check('subtraction and assignment', a, -444.4)
+	a = 12.3
+	a &-= 456.7
+	_check('subtraction with ignoring overflow and assignment', a, -444.4)
+
+	do
+		a <<= 1.1
+		_check('left shift and assignment', false)
+		catch UnsupportedOperationException
+			_check('left shift and assignment', true)
+	do
+		a >>= 1.1
+		_check('right shift and assignment', false)
+		catch UnsupportedOperationException
+			_check('right shift and assignment', true)
+	do
+		a >>>= 1.1
+		_check('right shift with zero extension and assignment', false)
+		catch UnsupportedOperationException
+			_check('right shift with zero extension and assignment', true)
+	do
+		a &= 1.1
+		_check('bitwise AND and assignment', false)
+		catch UnsupportedOperationException
+			_check('bitwise AND and assignment', true)
+	do
+		a |= 1.1
+		_check('bitwise OR and assignment', false)
+		catch UnsupportedOperationException
+			_check('bitwise OR and assignment', true)
+	do
+		a ^= 1.1
+		_check('bitwise XOR and assignment', false)
+		catch UnsupportedOperationException
+			_check('bitwise XOR and assignment', true)
+
+
+def testOperatorSpecials()
+	log('[testOperatorSpecials]')
+
+	a = 123
+	b = (a += 1000) += 20000
+	_check('assignment operator return value', a == 21123 and b == 21123)
+
+
+testInt()
+testBool()
+testFloat()
+testOperatorSpecials()
+
+_checkCmd('finished')

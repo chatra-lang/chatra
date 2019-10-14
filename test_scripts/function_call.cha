@@ -1,0 +1,78 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+
+class TestClass1
+	def ()
+		return TestClass2(20000)
+
+class TestClass2
+	var bias : 10000
+
+	def init(_bias)
+		bias = _bias
+
+	def (a)
+		return a + 1000 + bias
+
+def returnsTuple1()
+	return value: 123
+
+def returnsTuple2()
+	return a: 234, b: 345
+
+def add1(v)
+	return v + 1
+
+def addBoth(a, b)
+	return a + b + 1000
+
+
+def testFunctionCall()
+	log('[testFunctionCall]')
+
+	a = TestClass1()
+	do
+		a(123)
+		_check('unmatched def()', false)
+		catch MemberNotFoundException
+			_check('unmatched def()', true)
+
+	a = TestClass1()
+	b = a()(123)
+	_check('series of function call', b == 21123)
+
+	v = add1(returnsTuple1())
+	_check('single-value Tuple to argument for function call', v == 124)
+
+	do
+		v = add1(returnsTuple2())
+		_check('multiple-value Tuple to arguments', false)
+		catch UnsupportedOperationException
+			_check('multiple-value Tuple to arguments', true)
+
+	v = addBoth(*returnsTuple2())
+	_check('Tuple extraction to arguments', v == 1579)
+
+
+testFunctionCall()
+
+
+_checkCmd('finished')

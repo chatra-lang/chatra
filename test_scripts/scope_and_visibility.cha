@@ -1,0 +1,209 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+var called
+
+
+def nameA()
+	called = 'A - global'
+
+def nameC()
+	called = 'C - global'
+
+def func0()
+	nameA()
+
+def func1()
+	def nameA()
+		called = 'A - inner'
+	nameA()
+
+class SuperSuperClass
+	def init()
+
+class SuperClass0 extends SuperSuperClass
+	def init()
+		super()
+
+	def nameA()
+		called = 'A - superClass0 - method'
+
+	def nameB()
+		called = 'B - superClass0 - method'
+
+class SuperClass1
+	def init(a: Int)
+
+	def nameB()
+		called = 'B - superClass1 - method'
+
+class SuperClass2
+	def init.hoge(a: String)
+		_check('constructor of superclass is called only once', a == '1st')
+
+class ClassA extends SuperClass0, SuperClass1, SuperClass2
+	def init()
+		super.SuperClass0()
+		super.SuperClass1(1)
+		super.SuperClass2('1st')
+
+		do
+			super.SuperSuperClass()
+			_check('attemt to call ancient-class constructor directly', false)
+			catch MemberNotFoundException
+				_check('attemt to call ancient-class constructor directly', true)
+
+		super()
+		super(1)
+		super('2nd')
+
+	def nameA()
+		called = 'A - method'
+
+	def func2()
+		nameA()
+
+	def func3()
+		def nameA()
+			called = 'A - method - inner'
+		nameA()
+
+	def func4()
+		def nameA()
+			called = 'A - inner'
+		super.nameA()
+
+	def func5()
+		def nameA()
+			called = 'A - inner'
+		super.SuperClass0.nameA()
+
+	def func6()
+		nameB()
+
+	def func7()
+		super.nameB()
+
+	def func8()
+		super.SuperClass1.nameB()
+
+	def func9()
+		def nameA()
+			called = 'A - inner'
+		self.nameA()
+
+	def func10()
+		def nameC()
+			called = 'C - inner'
+		self.nameC()
+
+def testVisibility()
+	log('[testVisibility]')
+
+	called = ''
+	func0()
+	_check('function', called == 'A - global')
+
+	called = ''
+	func1()
+	_check('inner function', called == 'A - inner')
+
+	a = ClassA()
+
+	called = ''
+	a.func2()
+	_check('method', called == 'A - method')
+
+	called = ''
+	a.func3()
+	_check('method inner function', called == 'A - method - inner')
+
+	called = ''
+	a.func4()
+	_check('superclass method call', called == 'A - superClass0 - method')
+
+	called = ''
+	a.func5()
+	_check('explicit superclass method call', called == 'A - superClass0 - method')
+
+	called = ''
+	a.func6()
+	_check('duplicated methods in superclasses', called == 'B - superClass0 - method')
+
+	called = ''
+	a.func7()
+	_check('duplicated methods in superclasses', called == 'B - superClass0 - method')
+
+	called = ''
+	a.func8()
+	_check('explicit superclass method call', called == 'B - superClass1 - method')
+
+	called = ''
+	a.func9()
+	_check('explicit method call', called == 'A - method')
+
+	called = ''
+	do
+		a.func10()
+		_check('explicit method call', false)
+		catch MemberNotFoundException
+			_check('explicit method call', true)
+
+
+class FunctorClass
+	def ()
+		called = 'functor class ()'
+
+	def (a: Int)
+		called = 'functor class (Int)'
+
+	def method()
+		called = 'class method()'
+
+	def method(a: Int)
+		called = 'class method(Int)'
+
+def testPartialEvaluation()
+	log('[testPartialEvaluation]')
+
+	a = FunctorClass()
+	called = ''
+	a()
+	_check('functor class call', called == 'functor class ()')
+
+	called = ''
+	a(1)
+	_check('functor class call', called == 'functor class (Int)')
+
+	b = &a.method
+	called = ''
+   	b()
+   	_check('call via FunctionObject', called == 'class method()')
+
+	called = ''
+   	b(1)
+   	_check('call via FunctionObject', called == 'class method(Int)')
+
+
+testVisibility()
+testPartialEvaluation()
+
+
+_checkCmd('finished')

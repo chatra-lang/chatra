@@ -1,0 +1,60 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+var passed
+
+class DeinitClass
+	var value
+
+	def init(value)
+		self.value = value
+
+	def deinit()
+		log('deinit() called; value = '.append(value))
+		if passed != 0
+			_checkCmd('abort')
+		passed += value + 1000
+
+def testDeinit()
+	log('[testDeinit]')
+
+	def yield()
+		// log('yield')
+		return
+
+	passed = 0
+	a = DeinitClass(123)
+	a = null
+	gc()
+	yield()  // run finalizer
+	yield()  // call deinit()
+	yield()  // call log() in deinit()
+	_check('simple deinit()', passed == 1123)
+	gc()
+	yield()
+	yield()
+	yield()
+	_check('deinit() called only once', passed == 1123)
+
+
+testDeinit()
+
+
+_checkCmd('finished')

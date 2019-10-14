@@ -1,0 +1,328 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+import special_operators_ext_classes1
+import ext: special_operators_ext_classes2
+
+var passed0, passed1
+
+def ReturnAndFinally1()
+	do
+		return 123
+		finally
+			passed0 = true
+	finally
+		passed1 = true
+
+def ReturnAndFinally2()
+	do
+		do
+			return value: 123
+			finally
+				passed0 = true
+		throw 'failed'
+	finally
+		passed1 = true
+
+
+def testExceptions()
+	log('[testExceptions]')
+
+	def createException()
+		return IllegalArgumentException()
+
+	def createExceptionByTuple()
+		return value: IllegalArgumentException()
+
+	do
+		throw IllegalArgumentException()
+		catch IllegalArgumentException
+			_check('simple "throw"', true)
+
+	do
+		throw 1
+		catch ex: Int
+			_check('simple "throw" (primitive)', ex == 1)
+
+	do
+		throw 'hoge'
+		catch ex: String
+			_check('simple "throw" (Object)', ex == 'hoge')
+
+	do
+		throw null
+		catch UnsupportedOperationException
+			_check('simple "throw" (null: unsupported)', true)
+
+	do
+		throw createException()
+		catch IllegalArgumentException
+			_check('argument to "throw" is expression', true)
+
+	do
+		throw createExceptionByTuple()
+		catch IllegalArgumentException
+			_check('argument to "throw" is single-value Tuple', true)
+
+	do
+		throw ClassA()
+		catch ClassA
+			_check('simple "throw" (external class)', true)
+
+	do
+		throw ClassA()
+		catch special_operators_ext_classes1.ClassA
+			_check('simple "throw" (external class)', true)
+
+	do
+		throw ext.ClassB()
+		catch ext.ClassB
+			_check('simple "throw" (external class)', true)
+
+	// with control-flow
+	def throw1()
+		throw 1
+	def throw2()
+		throw 2
+
+	do
+		if throw1()
+			_check('thrown from "if" condition expression #0', false)
+			catch Int
+				_check('thrown from "if" condition expression #1', false)
+		else
+			_check('thrown from "if" condition expression #2', false)
+		catch ex: Int
+			_check('thrown from "if" condition expression', ex == 1)
+
+	do
+		if false
+			_check('thrown from "if else" condition expression #0', false)
+			catch Int
+				_check('thrown from "if else" condition expression #1', false)
+		else if throw1()
+			_check('thrown from "if else" condition expression #2', false)
+			catch Int
+				_check('thrown from "if else" condition expression #3', false)
+			finally
+				_check('thrown from "if else" condition expression #4', false)
+		else
+			_check('thrown from "if else" condition expression #5', false)
+		catch ex: Int
+			_check('thrown from "if else" condition expression', ex == 1)
+
+	do
+		switch throw1()
+			case 0
+				_check('thrown from "switch" target expression #0', false)
+			case 1
+				_check('thrown from "switch" target expression #1', false)
+			default
+				_check('thrown from "switch" target expression #2', false)
+			catch Int
+				_check('thrown from "switch" target expression #3', false)
+			finally
+				_check('thrown from "switch" target expression #4', false)
+		catch ex: Int
+			_check('thrown from "switch" target expression', ex == 1)
+
+	do
+		switch 123
+			case 0
+				_check('thrown from "case" condition expression #0', false)
+			case throw1()
+				_check('thrown from "case" condition expression #1', false)
+				catch Int
+					_check('thrown from "case" condition expression #2', false)
+				finally
+					_check('thrown from "case" condition expression #3', false)
+			default
+				_check('thrown from "case" condition expression #4', false)
+			catch ex: Int
+				_check('thrown from "case" condition expression', ex == 1)
+
+	do
+		i: 0
+		passed = false
+		while i < 2
+			if i == 1
+				throw 1
+			catch Int
+				_check('thrown from "while" loop #0', i == 1)
+				passed = true
+			finally
+				i++
+		_check('thrown from "while" loop #1', passed)
+		catch Int
+			_check('thrown from "while" loop #2', false)
+
+	do
+		i: 0
+		while i < 2 and (i != 1 ? true : throw1())
+			i++
+			catch Int
+				_check('thrown from "while" condition expression #0', false)
+		_check('thrown from "while" condition expression #1', false)
+		catch Int
+			_check('thrown from "while" condition expression #2', true)
+
+	do
+		passed = false
+		for i in {0, 1}
+			if i == 1
+				throw 1
+			catch Int
+				_check('thrown from "for" loop #0', i == 1)
+				passed = true
+		_check('thrown from "for" loop #1', passed)
+		catch Int
+			_check('thrown from "for" loop #2', false)
+
+	do
+		passed = false
+		passedFinally = false
+		do
+			for i in null
+				catch TypeMismatchException
+					_check('thrown from "for" condition expression', false)
+			catch TypeMismatchException
+				passed = true
+			finally
+				passedFinally = true
+		_check('thrown from "for" condition expression', passed and passedFinally)
+
+	do
+		passed = false
+		passedFinally = false
+		do
+			do
+				throw 1
+				catch Int
+					throw
+				catch Int
+					_check('re-throw', false)
+			catch Int
+				passed = true
+			finally
+				passedFinally = true
+		_check('re-throw', passed and passedFinally)
+
+	do
+		passed = false
+		do
+			do
+				throw 1
+				catch Int
+					throw 'hoge'
+				catch Int
+					_check('throw another type from catch block', false)
+				catch String
+					_check('throw another type from catch block', false)
+			catch Int
+				_check('throw another type from catch block', false)
+			catch String
+				passed = true
+		_check('throw another type from catch block', passed)
+
+	do
+		passed = false
+		do
+			do
+				throw 1
+				catch ex: Int
+					_check('throw inside finally block #0', ex == 1)
+				finally
+					throw 2
+			catch ex: Int
+				_check('throw inside finally block #1', ex == 2)
+				passed = true
+		_check('throw inside finally block #2', passed)
+
+	do
+		passed = false
+		do
+			do
+				throw1()
+				catch ex: Int
+					_check('throw inside finally block (by function) #0', ex == 1)
+				finally
+					throw2()
+			catch ex: Int
+				_check('throw inside finally block (by function) #1', ex == 2)
+				passed = true
+		_check('throw inside finally block (by function) #2', passed)
+
+	do
+		passed = false
+		do
+			throw 1
+			catch ex: Int, String
+				passed = (ex == 1)
+		_check('multiple-type catch #0', passed)
+
+	do
+		passed = false
+		do
+			throw 'hoge'
+			catch ex: Int, String
+				passed = (ex == 'hoge')
+		_check('multiple-type catch #1', passed)
+
+	if _checkCmd('testMode') != 'serialize'
+		do
+			passed = false
+			do
+				do
+					a = 1
+					catch Int
+						a = 2
+					a = 3
+				catch ParserErrorException
+					passed = true
+			_check('expression after catch block', passed)
+
+	if _checkCmd('testMode') != 'serialize'
+		do
+			passed = false
+			do
+				do
+					a = 1
+					finally
+						a = 2
+					a = 3
+				catch ParserErrorException
+					passed = true
+			_check('expression after finally block', passed)
+
+	passed0 = false
+	passed1 = false
+	v = ReturnAndFinally1()
+	_check('return and finally', passed0 and passed1 and v == 123)
+
+	passed0 = false
+	passed1 = false
+	v = ReturnAndFinally2()
+	_check('return and finally', passed0 and passed1 and v == 123)
+
+
+testExceptions()
+
+
+_checkCmd('finished')

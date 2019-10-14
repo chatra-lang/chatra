@@ -1,0 +1,414 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+def testRange()
+	log('[testRange]')
+
+	a = 0
+	for v in Range(4)
+		_check('single argument Range #'.append(v), a++ == v)
+	_check('single argument Range', a == 4)
+
+	a = 2
+	for v in Range(2, 5)
+		_check('double argument Range #'.append(v), a++ == v)
+	_check('double argument Range', a == 5)
+
+	a = 3
+	for v in Range(3, 18, step: 4)
+		_check('Range with step #'.append(v), a == v)
+		a += 4
+	_check('Range with step', a == 19)
+
+	a = 2
+	for v in Range(2, -3, step: -1)
+		_check('Range with negative step #'.append(v), a == v)
+		a += -1
+	_check('Range with negative step', a == -3)
+
+	a = 4
+	for v in Range(4, -7, step: -3)
+		_check('Range with negative step #'.append(v), a == v)
+		a += -3
+	_check('Range with negative step', a == -8)
+
+
+class ToStringClass
+	def toString()
+		return 'uhyo'
+
+class EmptyClass
+
+def testString()
+	log('[testString]')
+
+	a = String.fromString('hoge')
+	_check('fromString constructor', a == 'hoge')
+
+	a = String.fromChar(0x34)
+	_check('fromChar constructor', a == '4')
+
+	_check('size', ''.size == 0)
+	_check('size', 'hogehoge'.size == 8)
+	_check('size', 'こんにちは'.size == 5)
+
+	a = '123'
+	a.set('hoge')
+	_check('set', a == 'hoge')
+
+	a = ''.add(0x30)
+	_check('add a character', a == '0')
+
+	a = ''.add(0x30, 0x32, 0x37)
+	_check('add characters', a == '027')
+
+	a = 'hoge'.add('uhe')
+	_check('add a String', a == 'hogeuhe')
+
+	a = 'hoge'.insert(1, 0x33)
+	_check('insert a character', a == 'h3oge')
+
+	a = 'hoge'.insert(3, 0x34, 0x35)
+	_check('insert characters', a == 'hog45e')
+
+	a = 'hoge'.insert(2, 'uhe')
+	_check('insert a String', a == 'houhege')
+
+	a = 'hoge'.append('fuga')
+	_check('append a String', a == 'hogefuga')
+
+	a = 'hoge'.append(null)
+	_check('append (null)', a == 'hogenull')
+	a = 'hoge'.append(true)
+	_check('append (Bool)', a == 'hogetrue')
+	a = 'hoge'.append(123)
+	_check('append (Int)', a == 'hoge123')
+	a = 'hoge'.append(1.2)
+	_check('append (Float)', a == 'hoge1.200000')
+	a = 'hoge'.append(ToStringClass())
+	_check('append (an object)', a == 'hogeuhyo')
+	do
+		a = 'hoge'.append(EmptyClass())
+		_check('append (an object w/o toString() method)', false)
+		catch MemberNotFoundException
+			_check('append (an object w/o toString() method)', true)
+
+	_check('at', '01234'[2] == 0x32)
+	_check('at', 'こんにちは'[2] == 0x306B)
+
+	a = '01234'
+	a[3] = 0x306B
+	_check('at (assignment)', a == '012に4')
+
+	a = '01234'
+	b = a.remove(4)
+	_check('remove a character', a == '0123' and b == 0x34)
+
+	a = '012こんにちは34'
+	b = a.remove(Range(1, 5))
+	_check('remove range', a == '0にちは34' and b == '12こん')
+
+	a = '012こんにちは34'
+	b = a.remove(Range(-2, -8, step: -2))
+	_check('remove range', a == '012こには4' and b == '3ちん')
+
+	a = '01234'
+	b = a.clone()
+	_check('clone', b == '01234')
+
+	a.clear()
+	_check('clear', a.size() == 0)
+	_check('cloned object is not affected from any modification to original object', b == '01234')
+
+	a = 'hoge'
+	b = 'hoge_'
+	_check('equals', !a.equals(b))
+	_check('equals', !'1'.equals(1))
+	_check('equals', !'1'.equals(null))
+
+	_check('sub', 'hoge'.sub(2) == 'ge')
+	_check('sub', 'hoge'.sub(1, 3) == 'og')
+	a = 'ho0123ge'
+	b = a.sub(2, 4)
+	b.clear()
+	_check('String.sub() returns copy of original string, not a view object', a == 'ho0123ge')
+
+	i = 0
+	for c in '456'
+		_check('iterator', c == (i == 0 ? 0x34 : i == 1 ? 0x35 : 0x36))
+		i++
+
+	for i, c in '567'
+		_check('keyedIterator', c == (i == 0 ? 0x35 : i == 1 ? 0x36 : 0x37))
+
+	a = 'hog6'
+	b = 0
+	for it: i, c in a
+		if i == 2  // this hits twice
+			b = it.remove()
+	_check('remove via iterator', a == 'ho' and b == 0x36)
+
+	v = '678'.toArray()
+	_check('toArray', v.size() == 3 and v[0] == 0x36 and v[1] == 0x37 and v[2] == 0x38)
+
+	_check('equality operator', '1' == '1')
+	_check('equality operator', !('1' == 1))
+
+	_check('addition operator', 'hoge' + 'uhe' == 'hogeuhe')
+	_check('addition operator', 'hoge' + false == 'hogefalse')
+	_check('addition operator', 'hoge' + 1 == 'hoge1')
+	_check('addition operator', 'hoge' + 2.5 == 'hoge2.500000')
+	_check('addition operator', 'hoge' + null == 'hogenull')
+
+
+def testArray()
+	log('[testArray]')
+
+	v = Array()
+	v.add(123)
+	_check('constructor call and add()', v.size() == 1 and v[0] == 123)
+	v.add(234)
+	_check('add an element', v.size() == 2 and v[0] == 123 and v[1] == 234)
+	v.add(345)
+	_check('element access', v[0] == 123 and v[1] == 234 and v[2] == 345 and
+			v[-1] == 345 and v[-2] == 234 and v[-3] == 123)
+	do
+		v[3]
+		_check('element access (outside boundary)', false)
+		catch IllegalArgumentException
+			_check('element access (outside boundary)', true)
+	do
+		v[-4]
+		_check('element access (outside boundary)', false)
+		catch IllegalArgumentException
+			_check('element access (outside boundary)', true)
+
+	_check('has', v.has(123) and v.has(234) and v.has(345) and !v.has(0))
+
+	v = Array().add(12, 23, 34)
+	_check('add array', v.size() == 3 and v[0] == 12 and v[1] == 23 and v[2] == 34)
+
+	v = {123, 234, 345}
+	a = v.remove(1)
+	_check('remove an element', v.size() == 2 and v[0] == 123 and v[1] == 345 and a == 234)
+	a = v.remove(-1)
+	_check('remove an element', v.size() == 1 and v[0] == 123 and a == 345)
+	a = v.remove(0)
+	_check('remove an element', v.size() == 0 and a == 123)
+	do
+		v.remove(0)
+		_check('remove (invalid index)', false)
+		catch IllegalArgumentException
+			_check('remove (invalid index)', true)
+
+	v = Array()
+	v.insert(0, 123)
+	_check('constructor call and insert()', v.size() == 1 and v[0] == 123)
+	v.insert(0, 234)
+	_check('insert an element', v.size() == 2 and v[0] == 234 and v[1] == 123)
+	v.insert(1, 345)
+	_check('insert an element', v.size() == 3 and v[0] == 234 and v[1] == 345 and v[2] == 123)
+	v.insert(3, 456)
+	_check('insert an element', v.size() == 4 and v[0] == 234 and v[1] == 345 and v[2] == 123 and v[3] == 456)
+	v.insert(-2, 456)
+	_check('insert an element', v.size() == 5 and v[0] == 234 and v[1] == 345 and v[2] == 456 and v[3] == 123 and v[4] == 456)
+	do
+		v.insert(6, 678)
+		_check('insert (invalid index)', false)
+		catch IllegalArgumentException
+			_check('insert (invalid index)', true)
+
+	v = {123, 234}
+	v.insert(0, 456, 567)
+	_check('insert array', v.size() == 4 and v[0] == 456 and v[1] == 567 and v[2] == 123 and v[3] == 234)
+
+	v = a{1, 2, 3, 4}
+	v.append(a{5, 6, 7, 8})
+	_check('append', v.size() == 8 and v[0] == 1 and v[3] == 4 and v[4] == 5 and v[7] == 8)
+
+	v1 = a{0, 1, 2, 3, 4, 5}
+	v2 = v1.remove(Range(1, 4))
+	_check('remove range', v1.size() == 3 and v1[0] == 0 and v1[1] == 4 and v1[2] == 5 and
+			v2.size() == 3 and v2[0] == 1 and v2[1] == 2 and v2[2] == 3)
+
+	v1 = a{0, 1, 2, 3, 4, 5}
+	v2 = v1.remove(Range(1, 6, step: 2))
+	_check('remove range', v1.size() == 3 and v1[0] == 0 and v1[1] == 2 and v1[2] == 4 and
+			v2.size() == 3 and v2[0] == 1 and v2[1] == 3 and v2[2] == 5)
+
+	v1 = a{0, 1, 2, 3, 4, 5}
+	v2 = v1.remove(Range(4, 0, step: -3))
+	_check('remove range', v1.size() == 4 and v1[0] == 0 and v1[1] == 2 and v1[2] == 3 and v1[3] == 5 and
+			v2.size() == 2 and v2[0] == 4 and v2[1] == 1)
+
+	v1 = a{0, 1, 2, 3, 4, 5}
+	v2 = v1.remove(Range(-2, -6, step: -2))
+	_check('remove range', v1.size() == 4 and v1[0] == 0 and v1[1] == 1 and v1[2] == 3 and v1[3] == 5 and
+			v2.size() == 2 and v2[0] == 4 and v2[1] == 2)
+
+	v1 = a{1, 2, 3, 4}
+	v2 = v1.clone()
+	_check('clone', v2.size() == 4 and v2[0] == 1 and v2[1] == 2 and v2[2] == 3 and v2[3] == 4)
+
+	v1.clear()
+	_check('clear', v1.size() == 0)
+	_check('cloned object is not affected from any modification to original object',
+			v2.size() == 4 and v2[0] == 1 and v2[1] == 2 and v2[2] == 3 and v2[3] == 4)
+
+	v1 = a{1, true, 3.5, null, 'hoge'}
+	v2 = a{1, true, 3.5, null, 'hoge'}
+	_check('equals', v1.equals(v2))
+
+	v = a{1, 2.5, null, 'hoge'}
+	_check('toString', v.toString() == '{1, 2.500000, null, "hoge"}')
+
+	v = a{}
+	_check('toString', v.toString() == '{}')
+
+	v = a{null}
+	_check('toString', v.toString() == '{null}')
+
+	v1 = a{1, 2, 3, 4, 5, 6, 7, 8}
+	v2 = v1.sub(Range(1, 5))
+	_check('sub', v2.size() == 4 and v2[0] == 2 and v2[1] == 3 and v2[2] == 4 and v2[3] == 5)
+
+	v2 = v1.sub(Range(1, 8, step: 2))
+	_check('sub (step: 2)', v2.size() == 4 and v2[0] == 2 and v2[1] == 4 and v2[2] == 6 and v2[3] == 8)
+
+	v3 = v2.toArray()
+	_check('toArray from ArrayView', v3 is Array and
+			v3.size() == 4 and v3[0] == 2 and v3[1] == 4 and v3[2] == 6 and v3[3] == 8)
+
+	_check('ArrayView.toString', v2.toString() == '{1, 2, 3, 4, 5, 6, 7, 8}.sub(Range(1, 9, step: 2))')
+
+	v = a{1, 2, 3, 4, 5, 6, 7, 8}
+	a = 0
+	for it: e in v
+		if e % 3 != 0
+			a = it.remove()
+	_check('remove via iterator', v.size() == 2 and v[0] == 3 and v[1] == 6 and a == 8)
+
+
+def testDict()
+	log('[testDict]')
+
+	v = Dict()
+	v.add('abc', 123)
+	_check('constructor call and add()', v.size() == 1 and v['abc'] == 123)
+	_check('has()', v.has('abc') and !v.has('hoge'))
+	v.add('def', 234)
+	_check('add an element', v.size() == 2 and v['abc'] == 123 and v['def'] == 234)
+	v.add(ghi: 345, jkl: 456)
+	_check('add multiple elements', v.size() == 4 and v['abc'] == 123 and v['def'] == 234 and
+			v['ghi'] == 345 and v['jkl'] == 456)
+	v['abc'] = 1234
+	v['mno'] = 567
+	do
+		v['pqr']
+		_check('member access which is not exist', false)
+		catch IllegalArgumentException
+			_check('member access which is not exist', true)
+	_check('add an element with operator suffix', v.size() == 5 and v['abc'] == 1234 and v['def'] == 234 and
+			v['ghi'] == 345 and v['jkl'] == 456 and v['mno'] == 567)
+
+	v = Dict()
+	v.append(null).append({abc: 123, bcd: 234, cde: 345})
+	_check('append', v.size() == 3 and v['abc'] == 123 and v['bcd'] == 234 and v['cde'] == 345)
+
+	a = v.remove('bcd')
+	_check('remove an element', v.size() == 2 and v['abc'] == 123 and v['cde'] == 345 and a == 234)
+
+	v0 = {abc: 123, bcd: 234, cde: 345, efg: 'EFG', fgh: null, ghi: false}
+	v1 = v0.remove({'bcd', 'efg', 'ghi'})
+	_check('remove array of keys', v0.size() == 3 and v0['abc'] == 123 and v0['cde'] == 345 and v0['fgh'] == null and
+			v1.size() == 3 and v1['bcd'] == 234 and v1['efg'] == 'EFG' and v1['ghi'] == false)
+
+	v1 = v0.clone()
+	log(v0.toString())
+	log(v1.toString())
+	_check('clone', v1.size() == 3 and v1['abc'] == 123 and v1['cde'] == 345 and v1['fgh'] == null)
+
+	v1.clear()
+	_check('clear', v1.size() == 0)
+	_check('cloned object is not affected from any modification to original object',
+			v0.size() == 3 and v0['abc'] == 123 and v0['cde'] == 345 and v0['fgh'] == null)
+
+	v0 = {abc: 123, bcd: 234, cde: 345, efg: 'EFG', fgh: null, ghi: false}
+	v1 = {abc: 123, bcd: 234, cde: 345, efg: 'EFG', fgh: null, ghi: false}
+	_check('equals', v0.equals(v1))
+
+	keys = v0.keys()
+	passed = true
+	if keys.size() != 6
+		passed = false
+	if passed
+		for key in {'abc', 'bcd', 'cde', 'efg', 'fgh', 'ghi'}
+			if !keys.has(key)
+				passed = false
+	_check('keys', passed)
+
+	values = v0.values()
+	passed = true
+	if values.size() != 6
+		passed = false
+	if passed
+		for value in {123, 234, 345, 'EFG', null, false}
+			if !values.has(value)
+				passed = false
+	_check('values', passed)
+
+	v = {abc: 123}
+	_check('toString', v.toString() == '{"abc": 123}')
+	v = {cde: 3.45}
+	_check('toString', v.toString() == '{"cde": 3.450000}')
+	v = {efg: 'EFG'}
+	_check('toString', v.toString() == '{"efg": "EFG"}')
+	v = {fgh: null}
+	_check('toString', v.toString() == '{"fgh": null}')
+	v = {ghi: false}
+	_check('toString', v.toString() == '{"ghi": false}')
+
+	v = d{}
+	_check('toString', v.toString() == '{}')
+
+	do
+		v = {*null: 1}
+		_check('null key', false)
+		catch IllegalArgumentException
+			_check('null key', true)
+
+	do
+		v = {*'': 1}
+		_check('empty key', false)
+		catch IllegalArgumentException
+			_check('empty key', true)
+	do
+		v = {'': 1}
+		_check('empty key', false)
+		catch IllegalArgumentException
+			_check('empty key', true)
+
+
+testRange()
+testString()
+testArray()
+testDict()
+
+_checkCmd('finished')

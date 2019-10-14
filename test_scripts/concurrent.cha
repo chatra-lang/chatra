@@ -1,0 +1,128 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+def yield()
+
+// contrast
+var a0
+var b0
+
+def add0()
+	a0 |= b0
+
+def interrupt0()
+	b0 = 1
+	for in Range(10)
+		yield()
+	b0 = 2
+
+def interruptThread0()
+	for in Range(100)
+		interrupt0()
+	log('finished interruptThread0')
+
+def contrast()
+	a0 = 0
+	b0 = 2
+
+	t = async interruptThread0()
+	for in Range(500)
+		add0()
+
+	wait(t)
+	log('a0 = ' + a0)
+
+// with "sync"
+sync
+	var a1
+	var b1
+
+def init1()
+	a1 = 0
+	b1 = 2
+
+def add1()
+	a1 |= b1
+
+def interrupt1()
+	b1 = 1
+	for in Range(10)
+		yield()
+	b1 = 2
+
+def interruptThread1()
+	for in Range(100)
+		interrupt1()
+	log('finished interruptThread1')
+
+def withSync()
+	init1()
+
+	t = async interruptThread1()
+	for in Range(500)
+		add1()
+
+	wait(t)
+	log('a1 = ' + a1)
+	_check('sync', a1 == 2)
+
+class TestClass
+	sync
+		var a2: 0
+		var b2
+
+	def init()
+		b2 = 2
+
+	def add2()
+		a2 |= b2
+
+	def interrupt2()
+		b2 = 1
+		for in Range(10)
+			yield()
+		b2 = 2
+
+	def debugMethod()
+		yield()
+
+def interruptThread2(c)
+	for in Range(100)
+		c.interrupt2()
+	log('finished interruptThread2')
+
+def withSyncInClass()
+	c = TestClass()
+
+	t = async interruptThread2(c)
+	for in Range(500)
+		c.add2()
+
+	wait(t)
+	log('a2 = ' + c.a2)
+	_check('sync', c.a2 == 2)
+
+
+contrast()
+withSync()
+withSyncInClass()
+
+
+_checkCmd('finished')

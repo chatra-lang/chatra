@@ -1,0 +1,550 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2019 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+import exco: special_operators_ext_container
+import excl1: special_operators_ext_classes1
+import special_operators_ext_classes2
+
+var passed
+
+class TestClass
+	def method1()
+		return 123
+	def method2()
+		return 'method1'
+	def method3()
+		return value: 'method1'
+
+def testElementSelection()
+	log('[testElementSelection]')
+
+	a = TestClass()
+	_check('standard element selection', a.method1() == 123)
+	_check('element selection by string', a.'method1'() == 123)
+
+	b = 'method1'
+	_check('element selection by expression', a.(b) == 123)
+	_check('element selection by expression', a.(a.method2()) == 123)
+	_check('element selection by expression', a.(a.method3()) == 123)
+
+
+class TestContainer
+	var values
+
+	def init.another()
+		passed = 2
+
+	def init()
+		passed = 1
+
+	def init.another(value)
+		passed = value + 200
+
+	def init(value)
+		passed = value + 100
+
+	def add(args...;)
+		values = args
+		return self
+
+def testContainer()
+	log('[testContainer]')
+
+	passed = 0
+	a = TestContainer {}
+	_check('class name only (no values)', passed == 1 && a.values.size() == 0)
+
+	passed = 0
+	a = TestContainer {123}
+	_check('class name only (1 value)', passed == 1 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	passed = 0
+	a = TestContainer {123, 23.4}
+	_check('class name only (2 values)', passed == 1 && a.values.size() == 2 &&
+			a.values[0] == 123 && a.values[1] == 23.4)
+
+	passed = 0
+	a = TestContainer(1234) {123}
+	_check('with parameter', passed == 1334 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	passed = 0
+	a = TestContainer.another {123}
+	_check('with constructor variation suffix', passed == 2 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	passed = 0
+	a = TestContainer.another() {234}
+	_check('with constructor variation suffix', passed == 2 && a.values.size() == 1 &&
+			a.values[0] == 234)
+
+	passed = 0
+	a = TestContainer.another(1234) {123}
+	_check('with constructor variation suffix and parameter', passed == 1434 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	// external package
+	exco.passed = 0
+	a = exco.ExternalTestContainer {}
+	_check('external container - class name only (no values)', exco.passed == 10001 && a.values.size() == 0)
+
+	exco.passed = 0
+	a = exco.ExternalTestContainer {123}
+	_check('external container - class name only (1 value)', exco.passed == 10001 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	exco.passed = 0
+	a = exco.ExternalTestContainer {123, 23.4}
+	_check('external container - class name only (2 values)', exco.passed == 10001 && a.values.size() == 2 &&
+			a.values[0] == 123 && a.values[1] == 23.4)
+
+	exco.passed = 0
+	a = exco.ExternalTestContainer(1234) {123}
+	_check('external container - with parameter', exco.passed == 11334 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	exco.passed = 0
+	a = exco.ExternalTestContainer.another {123}
+	_check('external container - with constructor variation suffix', exco.passed == 10002 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	exco.passed = 0
+	a = exco.ExternalTestContainer.another() {234}
+	_check('external container - with constructor variation suffix', exco.passed == 10002 && a.values.size() == 1 &&
+			a.values[0] == 234)
+
+	exco.passed = 0
+	a = exco.ExternalTestContainer.another(1234) {123}
+	_check('external container - with constructor variation suffix and parameter', exco.passed == 11434 && a.values.size() == 1 &&
+			a.values[0] == 123)
+
+	// array/dict auto selection
+	a = {123, 2.34}
+	_check('array (auto selection)', a is Array && a.size() == 2 && a[0] == 123 && a[1] == 2.34)
+
+	a = {foo: 123, bar: 3.45}
+	_check('dict (auto selection)', a is Dict && a.size() == 2 && a['foo'] == 123 && a['bar'] == 3.45)
+
+	do
+		a = {123, bar: 3.45}
+		_check('invalid container initializer', false)
+		catch IllegalArgumentException
+			_check('invalid container initializer', true)
+
+	// shortcuts to embedded containers
+	a = a{123, 2.34}
+	_check('array (explicit)', a is Array && a.size() == 2 && a[0] == 123 && a[1] == 2.34)
+
+	a = a{foo: 234, bar: 3.45}
+	_check('array (explicit) with key', a is Array && a.size() == 2 && a[0] == 234 && a[1] == 3.45)
+
+	a = d{}
+	_check('dict (explicit)', a is Dict && a.size() == 0)
+
+	do
+		d{234, 3.45}
+		_check('dict (explicit) without key', false)
+		catch MemberNotFoundException
+			_check('dict (explicit) without key', true)
+
+
+def testTupleExtraction()
+	log('[testTupleExtraction]')
+
+	// tuple extraction for keys
+	key = 'foo'
+	a, foo: b, bar: c, d = 1, 2, *key: 3, bar: 4
+	_check('for keys', a == 1 && b == 3 && c == 4 && d == 2)
+
+	do
+		key2 = 1
+		a, b, c, d = 1, 2, *key2: 3, bar: 4
+		_check('for keys (not String)', false)
+		catch IllegalArgumentException
+			_check('for keys (not String)', true)
+
+	// tuple extraction for keys; key for unregistered name on StringTable
+	v = {*'abcdef': 1}
+	_check('tuple extraction for keys', v.size() == 1 and v['abcdef'] == 1)
+
+	v = {'bcdefg': 1}
+	_check('implicit tuple extraction by string value', v.size() == 1 and v['bcdefg'] == 1)
+
+	// tuple extraction for key-value pairs
+	def returnsTuple()
+		return 1, 2, foo: 3
+	a, foo: b, c, d = 4, *returnsTuple()
+	_check('tuple extraction from Tuple', a == 4 && b == 3 && c == 1 && d == 2)
+
+	sub = {5, 6, 7}
+	a, b, c, d = *sub, 8
+	_check('tuple extraction from Array', a == 5 && b == 6 && c == 7 && d == 8)
+
+	sub = {foo: 9, bar: 10}
+	foo: a, bar: b, baz: c, d = baz: 11, *sub, 12
+	_check('tuple extraction from Dict', a == 9 && b == 10 && c == 11 && d == 12)
+
+
+var assignedValue
+
+def scriptMethod1(v)
+	return v + 1000
+
+def scriptMethod2(v)
+	return v + 2000
+
+def scriptMethod2(v).set(r)
+	assignedValue = r + 3000
+	return v + r + 3000
+
+def scriptMethod3()
+	assignedValue = 4000
+	return 4000
+
+def scriptMethod3().set(r)
+	assignedValue = r + 5000
+	return r + 5000
+
+def scriptMethod1(v: Float)
+	return Int(v) + 6000
+
+class TestFunctionObjectClass
+	var bias
+	def init(bias)
+		self.bias = bias
+
+	def classMethod1(v)
+		return v + 1000 + bias
+
+	def classMethod2(v)
+		return v + 2000 + bias
+
+	def classMethod2(v).set(r)
+		assignedValue = r + 3000 + bias
+		return v + r + 3000 + bias
+
+	def classMethod3()
+		return 4000 + bias
+
+	def classMethod3().set(r)
+		assignedValue = r + 5000 + bias
+		return r + 5000 + bias
+
+def testFunctionObject()
+	log('[testFunctionObject]')
+
+	// script method
+	func1 = &scriptMethod1
+	a = func1(123)
+	_check('simple call', a == 1123)
+
+	a = func1(456.1)
+	_check('simple call (overload)', a == 6456)
+
+	func2 = &scriptMethod2
+	a = func2(123)
+	_check('method with .set() (call)', a == 2123)
+
+	a = (func2(234) = 10000)
+	_check('method with .set() (assignment)', a == 13234 && assignedValue == 13000)
+
+	func2(234), a = 20000, 30000
+	_check('method with .set() (tuple assignment)', a == 30000 && assignedValue == 23000)
+
+	a, func2 = 40000, &scriptMethod1
+	b = func2(345)
+	_check('function object re-assignment', a == 40000 && b == 1345)
+
+	func3 = &scriptMethod3
+	assignedValue = 0
+	func3
+	_check('call without argument', assignedValue == 0)
+	func3()
+	_check('call with argument', assignedValue == 4000)
+
+	assignedValue = 0
+	func3() = 567
+	_check('assignment with argument', assignedValue == 5567)
+	func3 = 1
+	_check('assignment without argument', func3 == 1)
+
+	// class method
+	object = TestFunctionObjectClass(1)
+
+	func1 = &object.classMethod1
+	a = func1(123)
+	_check('simple call', a == 1124)
+
+	func2 = &object.classMethod2
+	a = func2(123)
+	_check('method with .set() (call)', a == 2124)
+
+	a = (func2(234) = 10000)
+	_check('method with .set() (assignment)', a == 13235 && assignedValue == 13001)
+
+	func2(234), a = 20000, 30000
+	_check('method with .set() (tuple assignment)', a == 30000 && assignedValue == 23001)
+
+	object2 = TestFunctionObjectClass(2)
+	a, func2 = 40000, &object2.classMethod1
+	b = func2(345)
+	_check('function object re-assignment', a == 40000 && b == 1347)
+
+	// scope method
+	capturedVariable: 0
+
+	def scopeMethod1(v)
+    	return v + 1000 + capturedVariable
+
+    def scopeMethod2(v)
+    	return v + 2000 + capturedVariable
+
+    def scopeMethod2(v).set(r)
+    	capturedVariable = r + 3000
+    	return capturedVariable + v + 3
+
+	def scopeMethod1(v: Float)
+		return Int(v) + 6000 + capturedVariable
+
+	func1 = &scopeMethod1
+	capturedVariable = 10000
+	a = func1(123)
+	_check('simple call', a == 11123)
+
+	capturedVariable = 20000
+	a = func1(456.1)
+	_check('simple call (overload)', a == 26456)
+
+	func2 = &scopeMethod2
+	capturedVariable = 30000
+	a = func2(123)
+	_check('method with .set() (call)', a == 32123)
+
+	a = (func2(234) = 40000)
+	_check('method with .set() (assignment)', a == 43237 && capturedVariable == 43000)
+
+
+var asyncStep
+
+def asyncAdd(timeout, count)
+	sleep(timeout, 'test', relative: false)
+	asyncStep += count
+	return count + 10000
+
+def testAsync()
+	log('[testAsync]')
+
+	asyncStep = 0
+	a = async asyncAdd(time('test') + 2000, 2)
+	_check('before timeout', asyncStep == 0)
+	_incrementTestTimer(1500)
+	_check('before timeout', asyncStep == 0)
+	_incrementTestTimer(1500)
+	wait(a)
+	_check('after timeout', asyncStep == 2 && a.result == 10002)
+
+	func1 = &asyncAdd
+	a = async func1(time('test') + 2000, 4)
+	_check('before timeout (via function object)', asyncStep == 2)
+	_incrementTestTimer(1500)
+	_check('before timeout (via function object)', asyncStep == 2)
+	_incrementTestTimer(1500)
+	wait(a)
+	_check('after timeout (via function object)', asyncStep == 6 && a.result == 10004)
+
+
+class ClassA  // same name as excl1.ClassA
+	def init()
+
+var classCInitialized: false
+
+class ClassC  // same name as (excl2.)ClassC
+	def init()
+		classCInitialized = true
+
+def testInstanceOf()
+	log('[testInstanceOf]')
+
+	_check('integer literal', 1 is Int)
+	_check('integer literal is not Float', !(1 is Float))
+	_check('null literal', !(null is Int))
+	a = 1
+	_check('integer variable', a is Int)
+	_check('integer variable is not Float', !(a is Float))
+	a = null
+	_check('null variable', !(a is Int))
+
+	_check('float literal', 1.0 is Float)
+	_check('float literal is not Int', !(1.0 is Int))
+	_check('boolean literal', true is Bool)
+	_check('boolean literal', false is Bool)
+	_check('boolean literal is not Int', !(true is Int))
+
+	_check('class name provided by string literal', 1 is 'Int')
+	_check('class name provided by string literal', !(1.0 is 'Int'))
+
+	do
+		1 is 'invalid class name'
+		_check('class name provided by string literal (invalid name)', false)
+		catch ClassNotFoundException
+			_check('class name provided by string literal (invalid name)', true)
+
+	b = 'Int'
+	_check('class name provided by expression', 1 is (b))
+	_check('class name provided by expression', !(1.0 is (b)))
+
+	def returnStringOfIntAsSingleValueTuple()
+		return value: 'Int'
+	_check('class name provided as single-value Tuple', 1 is (returnStringOfIntAsSingleValueTuple()))
+
+	do
+		1 is b
+		_check('class name provided by expression (bad syntax)', false)
+		catch ClassNotFoundException
+			_check('class name provided by expression (bad syntax)', true)
+	do
+		1 is null
+		_check('class name provided by expression (bad syntax - null)', false)
+		catch TypeMismatchException
+			_check('class name provided by expression (bad syntax - null)', true)
+	do
+		1 is 1
+		_check('class name provided by expression (bad syntax - literal)', false)
+		catch TypeMismatchException
+			_check('class name provided by expression (bad syntax - literal)', true)
+	do
+		1 is (null)
+		_check('class name provided by expression (null)', false)
+		catch TypeMismatchException
+			_check('class name provided by expression (null)', true)
+	do
+		1 is (1)
+		_check('class name provided by expression (literal)', false)
+		catch TypeMismatchException
+			_check('class name provided by expression (literal)', true)
+	do
+		b = null
+		1 is (b)
+		_check('class name provided by expression (variable - null)', false)
+		catch TypeMismatchException
+			_check('class name provided by expression (variable - null)', true)
+	do
+		b = 1
+		1 is (b)
+		_check('class name provided by expression (variable - literal)', false)
+		catch TypeMismatchException
+			_check('class name provided by expression (variable - literal)', true)
+	do
+		b = 'invalid class name'
+		1 is (b)
+		_check('class name provided by expression (invalid name)', false)
+		catch ClassNotFoundException
+			_check('class name provided by expression (invalid name)', true)
+
+	// external package
+	a = excl1.ClassA()
+	_check('class defined in external package', a is excl1.ClassA)
+	_check('class defined in external package', !(a is ClassA))
+	b = 'excl1.ClassA'
+	_check('class defined in external package (variable)', a is (b))
+	b = 'ClassA'
+	_check('class defined in external package (variable)', !(a is (b)))
+
+	a = ClassA()
+	_check('class defined in this package', a is ClassA)
+	_check('class defined in this package', !(a is excl1.ClassA))
+	b = 'ClassA'
+	_check('class defined in this package (variable)', a is (b))
+	b = 'excl1.ClassA'
+	_check('class defined in this package (variable)', !(a is (b)))
+
+	a = special_operators_ext_classes2.ClassB()
+	_check('class defined in non-aliased external package', a is special_operators_ext_classes2.ClassB)
+	_check('class defined in non-aliased external package', a is ClassB)
+	b = 'special_operators_ext_classes2.ClassB'
+	_check('class defined in non-aliased external package (variable)', a is (b))
+	b = 'ClassB'
+	_check('class defined in non-aliased external package (variable)', a is (b))
+
+	a = ClassB()
+	_check('class defined in non-aliased external package', a is special_operators_ext_classes2.ClassB)
+	_check('class defined in non-aliased external package', a is ClassB)
+	b = 'special_operators_ext_classes2.ClassB'
+	_check('class defined in non-aliased external package (variable)', a is (b))
+	b = 'ClassB'
+	_check('class defined in non-aliased external package (variable)', a is (b))
+
+	special_operators_ext_classes2.classCInitialized = false
+	classCInitialized = false
+	a = ClassC()
+	_check('instance created', !special_operators_ext_classes2.classCInitialized && classCInitialized)
+	_check('class defined in this package', a is ClassC)
+	_check('class defined in this package', !(a is special_operators_ext_classes2.ClassC))
+	b = 'ClassC'
+	_check('class defined in this package (variable)', a is (b))
+	b = 'special_operators_ext_classes2.ClassC'
+	_check('class defined in this package (variable)', !(a is (b)))
+
+	special_operators_ext_classes2.classCInitialized = false
+	classCInitialized = false
+	a = special_operators_ext_classes2.ClassC()
+	_check('instance created', special_operators_ext_classes2.classCInitialized && !classCInitialized)
+	_check('class defined in external package', a is special_operators_ext_classes2.ClassC)
+	_check('class defined in external package', !(a is ClassC))
+	b = 'special_operators_ext_classes2.ClassC'
+	_check('class defined in external package (variable)', a is (b))
+	b = 'ClassC'
+	_check('class defined in external package (variable)', !(a is (b)))
+
+
+def testType()
+	log('[testType]')
+
+	_check('null', type(null) == null)
+	_check('Bool', type(false) == 'Bool')
+	_check('Int', type(1) == 'Int')
+	_check('Float', type(1.2) == 'Float')
+	_check('String', type('hoge') == 'String')
+	_check('current package', type(TestClass()) == 'special_operators.TestClass')
+	_check('external package', type(excl1.ClassA()) == 'special_operators_ext_classes1.ClassA')
+	_check('external package', type(ClassB()) == 'special_operators_ext_classes2.ClassB')
+
+
+def testObjectId()
+	log('[testObjectId]')
+
+	a = objectId(TestClass())
+	log('objectId = ' + a)
+	_check('objectId has valid value', a >= 0)
+
+
+
+testElementSelection()
+testContainer()
+testTupleExtraction()
+testFunctionObject()
+testAsync()
+testInstanceOf()
+testType()
+testObjectId()
+
+
+_checkCmd('finished')

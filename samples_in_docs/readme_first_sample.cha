@@ -1,0 +1,7 @@
+class HelloWorld
+    def someMethod(to: 'Earth')
+        log('Hello,' + to + '!')
+
+instance = HelloWorld()
+for in Range(5)
+    instance.someMethod('World')
