@@ -56,7 +56,6 @@ static std::string loadScript(const char* fileName) {
 	std::fseek(fp, 0, SEEK_SET);
 	auto size = std::fread(buffer.data(), 1, buffer.size(), fp);
 	std::fclose(fp);
-	buffer.push_back('\0');
 	return std::string(buffer.cbegin(), buffer.cbegin() + size);
 }
 
@@ -71,7 +70,6 @@ static std::string loadStdin() {
 				break;
 		}
 	}
-	buffer.push_back('\0');
 	return std::string(buffer.cbegin(), buffer.cend());
 }
 
