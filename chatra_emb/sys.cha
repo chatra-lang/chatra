@@ -22,7 +22,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 // TODO
 
 def chatraVersion()
-	return '0.1.0 alpha'
+	return '0.1.0 develop'
 
 
 CHATRA_IGNORE_THIS_LINE )***"
