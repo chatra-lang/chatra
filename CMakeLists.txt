@@ -1,7 +1,8 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.10)
 project(Chatra CXX)
 
 set(CMAKE_CXX_STANDARD 11)
+find_package(Threads REQUIRED)
 
 # Compiler options
 # These are used for keeping healthiness of Chatra's code, and are not required when building your project.
@@ -19,7 +20,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 set(CMAKE_CXX_FLAGS "-pedantic -Wall -Wextra \
 -Wcast-align -Wcast-qual -Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 \
 -Winit-self -Wlogical-op -Wmissing-include-dirs -Wnoexcept \
--Wold-style-cast -Woverloaded-virtual -Wredundant-decls -Wshadow \
+-Wold-style-cast -Woverloaded-virtual -Wredundant-decls \
 -Wsign-promo -Wstrict-null-sentinel -Wstrict-overflow=5 -Wundef \
 -Wno-shadow -Wno-return-type -Wno-switch")
 endif()
@@ -51,7 +52,7 @@ endif()
 add_executable(chatra main.cpp)
 
 if (CHATRA_ENABLE_LANGUAGE_TESTS)
-    target_link_libraries(chatra chatra_core chatra_emb chatra_language_test)
+    target_link_libraries(chatra chatra_core chatra_emb chatra_language_test ${CMAKE_THREAD_LIBS_INIT})
 else()
-    target_link_libraries(chatra chatra_core chatra_emb)
+    target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
 endif()

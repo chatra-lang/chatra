@@ -364,6 +364,7 @@ void RuntimeImp::launchStorage() {
 	// Register pseudo package for finalizer
 	auto _finalizerPackageId = loadPackage({std::string("(finalizer)"), ""});
 	assert(_finalizerPackageId == finalizerPackageId);
+    (void)_finalizerPackageId;
 
 	auto* finalizerPackage = packageIds.ref(finalizerPackageId);
 	finalizerPackage->initialized = true;
@@ -380,6 +381,7 @@ void RuntimeImp::launchStorage() {
 void RuntimeImp::launchFinalizerThread() {
 	auto _finalizerInstanceId = run(finalizerPackageId);  // global scope will be restored later
 	assert(_finalizerInstanceId == finalizerInstanceId);
+    (void)_finalizerInstanceId;
 
 	finalizerThread = instanceIds.ref(finalizerInstanceId)->threads.begin()->second.get();
 	assert(finalizerThread->getId() == finalizerThreadId);
