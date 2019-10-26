@@ -51,7 +51,7 @@ protected:
 	virtual void onHandlerInserted() = 0;
 
 	Time getNextTime();
-	void popAndInvokeHandlers();
+	void popAndInvokeHandlers(Time currentTime);
 
 private:
 	unsigned submitHandler(Time tm, TimerHandler handler);

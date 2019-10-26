@@ -27,13 +27,17 @@ Time Timer::getNextTime() {
 	return timeQueue.empty() ? Time::max() : timeQueue.front();
 }
 
-void Timer::popAndInvokeHandlers() {
+void Timer::popAndInvokeHandlers(Time currentTime) {
 	std::unordered_map<unsigned, TimerHandler> handlers;
 	{
 		std::lock_guard<SpinLock> lock(lockMap);
-		assert(!map.empty());
+		if (timeQueue.empty())
+		    return;
 
 		auto tm = timeQueue.front();
+		if (tm > currentTime)
+		    return;
+
 		timeQueue.pop_front();
 
 		auto it = map.find(tm);
@@ -125,14 +129,15 @@ private:
 private:
 	void run() {
 		for (;;) {
+		    Time nextTime;
 			{
 				std::unique_lock<std::mutex> lock0(mt);
-				auto nextTime = getNextTime();
+				nextTime = getNextTime();
 				auto nextPoint = (nextTime == Time::max() ? Clock::time_point::max() : Clock::time_point(nextTime));
 				if (cv.wait_until(lock0, nextPoint, [&]() { return stop; }))
 					return;
 			}
-			popAndInvokeHandlers();
+			popAndInvokeHandlers(nextTime);
 		}
 	}
 
@@ -170,7 +175,7 @@ protected:
 	void onHandlerInserted() override {
 		auto currentTime = getTime();
 		while (getNextTime() <= currentTime)
-			popAndInvokeHandlers();
+			popAndInvokeHandlers(currentTime);
 	}
 
 public:
@@ -189,7 +194,7 @@ public:
 			currentTime = (time += step);
 		}
 		while (getNextTime() <= currentTime)
-			popAndInvokeHandlers();
+			popAndInvokeHandlers(currentTime);
 	}
 };
 
