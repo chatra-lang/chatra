@@ -41,6 +41,7 @@ public:
 
 private:
 	SpinLock lockMap;
+	std::deque<Time> timeQueue;
 	std::map<Time, TimerElement> map;
 	std::unordered_map<unsigned, Time> idToTime;
 	std::vector<unsigned> recycledIds;

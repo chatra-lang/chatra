@@ -24,15 +24,22 @@ namespace chatra {
 
 Time Timer::getNextTime() {
 	std::lock_guard<SpinLock> lock(lockMap);
-	return map.empty() ? Time::max() : map.cbegin()->first;
+	return timeQueue.empty() ? Time::max() : timeQueue.front();
 }
 
 void Timer::popAndInvokeHandlers() {
 	std::unordered_map<unsigned, TimerHandler> handlers;
 	{
 		std::lock_guard<SpinLock> lock(lockMap);
-		handlers = std::move(map.begin()->second.handlers);
-		map.erase(map.begin());
+		assert(!map.empty());
+
+		auto tm = timeQueue.front();
+		timeQueue.pop_front();
+
+		auto it = map.find(tm);
+		assert(it != map.cend());
+		handlers = std::move(it->second.handlers);
+		map.erase(it);
 		for (auto& e : handlers) {
 			idToTime.erase(e.first);
 			recycledIds.emplace_back(e.first);
@@ -69,6 +76,14 @@ unsigned Timer::submitHandler(Time tm, TimerHandler handler) {
 			map[tm].handlers.emplace(id, std::move(handler));
 			if (map.cbegin()->first == tm)
 				handlerInserted = true;
+
+			if (timeQueue.empty())
+			    timeQueue.emplace_back(tm);
+			else {
+                timeQueue.insert(std::partition_point(timeQueue.cbegin(), timeQueue.cend(), [&](Time _tm) {
+                    return _tm < tm;
+                }), tm);
+            }
 		}
 		else
 			it->second.handlers.emplace(id, std::move(handler));
@@ -92,6 +107,7 @@ bool Timer::cancel(unsigned id) {
 
 void Timer::cancelAll() {
 	std::lock_guard<SpinLock> lock0(lockMap);
+	timeQueue.clear();
 	map.clear();
 	idToTime.clear();
 	recycledIds.clear();
