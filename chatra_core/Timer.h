@@ -41,6 +41,7 @@ public:
 
 private:
 	SpinLock lockMap;
+	std::deque<Time> timeQueue;
 	std::map<Time, TimerElement> map;
 	std::unordered_map<unsigned, Time> idToTime;
 	std::vector<unsigned> recycledIds;
@@ -50,7 +51,7 @@ protected:
 	virtual void onHandlerInserted() = 0;
 
 	Time getNextTime();
-	void popAndInvokeHandlers();
+	void popAndInvokeHandlers(Time currentTime);
 
 private:
 	unsigned submitHandler(Time tm, TimerHandler handler);
