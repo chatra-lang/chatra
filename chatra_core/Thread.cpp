@@ -3310,7 +3310,7 @@ bool Thread::processSwitchCase() {
 		}
 		auto ref0 = v0->getRef();
 		if (ref0.valueType() == ReferenceValueType::Bool) {
-			if (f.node->subNodes[0]->type == NodeType::Literal) {
+			if (f.node->subNodes[0]->type == NodeType::Literal && f.phase == Phase::Case_Check0) {
 				errorAtNode(*this, ErrorLevel::Warning, f.node->subNodes[0].get(),
 						"case statement with Bool constant always produces same result", {});
 			}
