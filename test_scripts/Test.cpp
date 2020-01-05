@@ -87,7 +87,8 @@ static constexpr const char* standardTests[] = {
 		"exceptions",
 		"embedded_containers",
 		"syntax_sugar",
-		"emb_sys"
+		"emb_sys",
+		"emb_format",
 };
 
 static constexpr const char* multiThreadTests[] = {
@@ -108,7 +109,8 @@ static constexpr const char* serializeTests[] = {
 		"exceptions",
 		"embedded_containers",
 		"syntax_sugar",
-		"emb_sys"
+		"emb_sys",
+		"emb_format",
 };
 
 static void runTest(std::shared_ptr<cha::Runtime>& runtime, const char* fileName) {

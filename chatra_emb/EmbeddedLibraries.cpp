@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include <mutex>
 
 cha::PackageInfo chatra_emb_sysPackageInfo();
+cha::PackageInfo chatra_emb_formatPackageInfo();
 
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
@@ -35,7 +36,8 @@ static void initialize() {
 		return;
 
 	std::vector<cha::PackageInfo> packageList = {
-			chatra_emb_sysPackageInfo()
+			chatra_emb_sysPackageInfo(),
+			chatra_emb_formatPackageInfo(),
 	};
 
 	for (auto& pi : packageList)
