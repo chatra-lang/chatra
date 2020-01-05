@@ -1,0 +1,47 @@
+CHATRA_IGNORE_THIS_LINE R"***(
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2020 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+def _native_format(format, indexes, values, arrayArgs) as native
+
+def format(format: String, a0...; a1...)
+	indexes = a{}
+	values = a{}
+
+	for i, v in a0
+		indexes.add(i)
+		if v == null or (v is String or v is Bool or v is Int or v is Float)
+			values.add(v)
+		else
+			values.add(v.toString())
+
+	for k, v in a1
+		indexes.add(k)
+		if v == null or (v is String or v is Bool or v is Int or v is Float)
+			values.add(v)
+		else
+			values.add(v.toString())
+
+	return _native_format(format, indexes, values, a0.size())
+
+def operator(a0: String % a1)
+	return format(a0, *a1)
+
+CHATRA_IGNORE_THIS_LINE )***"
