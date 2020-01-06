@@ -862,6 +862,12 @@ void Thread::importMethodArguments(const Method* method, TemporaryObject* argsVa
 	}
 }
 
+#define CHATRA_CATCH_NATIVE_EXCEPTION(name)  \
+	catch (name& ex) {  \
+		errorAtNode(*this, ErrorLevel::Error, method->node, ex.message, {});  \
+		throw RuntimeException(StringId::name);  \
+	}
+
 template <typename PostProcess>
 bool Thread::invokeNativeMethod(size_t callerFrame, ObjectBase* object,
 		TemporaryObject* methodValue, TemporaryObject* argsValue, PostProcess postProcess) {
@@ -888,6 +894,10 @@ bool Thread::invokeNativeMethod(size_t callerFrame, ObjectBase* object,
 		errorAtNode(*this, ErrorLevel::Error, method->node, "exception raised from native method", {});
 		throw;
 	}
+	CHATRA_CATCH_NATIVE_EXCEPTION(PackageNotFoundException)
+	CHATRA_CATCH_NATIVE_EXCEPTION(IllegalArgumentException)
+	CHATRA_CATCH_NATIVE_EXCEPTION(UnsupportedOperationException)
+	CHATRA_CATCH_NATIVE_EXCEPTION(NativeException)
 	catch (...) {
 		errorAtNode(*this, ErrorLevel::Error, method->node, "exception raised from native method", {});
 		throw RuntimeException(StringId::NativeException);
