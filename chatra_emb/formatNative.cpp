@@ -82,13 +82,14 @@ static std::string restoreValue(const std::string& value) {
 }
 
 template <class Type>
-static std::string convert(char* spec, size_t specSize, const char* type, Type value) {
+static std::string convert(size_t specifierIndex, char* spec, size_t specSize, const char* type, Type value) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 	std::strcpy(spec + specSize, type);
 	auto length = std::snprintf(nullptr, 0, spec, value);
 	if (length < 0)
-		throw cha::NativeException();
+		throw cha::IllegalArgumentException("failed to apply format specifier #%u",
+				static_cast<unsigned>(specifierIndex));
 	std::vector<char> buffer(length + 1);
 	std::snprintf(buffer.data(), buffer.size(), spec, value);
 	return std::string(buffer.data());
@@ -166,29 +167,34 @@ static void format(cha::Ct& ct) {
 			continue;
 		}
 
+		size_t valueIndex = specifierIndex++;
+
 		// Find boundary of format specifier
 		if (i + 1 >= f.length())
-			throw cha::NativeException();
+			throw cha::IllegalArgumentException("unterminated format specifier at end of text");
 
 		size_t i0, i1;
 		if (f[i + 1] == '{') {
 			i0 = i + 2;
 			i1 = findOffset(f, i0, f.length(), [](char c) { return c == '}'; });
 			if (i1 >= f.length())
-				throw cha::NativeException();
+				throw cha::IllegalArgumentException(
+						"unterminated format specifier #%u (started from offset %+u)",
+						static_cast<unsigned>(specifierIndex), static_cast<unsigned>(i));
 			i = i1;
 		}
 		else {
 			i0 = i + 1;
 			i1 = findOffset(f, i0, f.length(), [](char c) { return isAlpha(c); });
 			if (i1 >= f.length())
-				throw cha::NativeException();
+				throw cha::IllegalArgumentException(
+						"unterminated format specifier #%u (started from offset %+u)",
+						static_cast<unsigned>(specifierIndex), static_cast<unsigned>(i));
 			i = i1++;
 		}
 
 		// Format string
 		size_t specSize = 1;
-		size_t valueIndex = specifierIndex++;
 		char type = 's';
 
 		dMarker = ".";
@@ -201,19 +207,25 @@ static void format(cha::Ct& ct) {
 		if (t0 != i1) {
 			auto firstChar = f[iSpec];
 			if (isDigit(firstChar) || firstChar == '-') {
+				errno = 0;
 				auto index = std::strtol(f.data() + iSpec, nullptr, 10);
-				if (index == 0 || index >= std::numeric_limits<int32_t>::max() ||
-						index <= std::numeric_limits<int32_t>::min())
-					throw cha::NativeException();
+				if (errno == ERANGE)
+					throw cha::IllegalArgumentException(
+							"at format specifier #%u: index is out of range",
+							static_cast<unsigned>(specifierIndex));
 				valueIndex = static_cast<size_t>(index >= 0 ? index : arrayArgs + index);
 				if (valueIndex >= arrayArgs)
-					throw cha::NativeException();
+					throw cha::IllegalArgumentException(
+							"at format specifier #%u: specified index (%ld) is out of range",
+							static_cast<unsigned>(specifierIndex), index);
 			}
 			else {
 				auto key = f.substr(iSpec, t0 - iSpec);
 				auto it = keyedIndexes.find(key);
 				if (it == keyedIndexes.cend())
-					throw cha::NativeException();
+					throw cha::IllegalArgumentException(
+							"at format specifier #%u: specified key (%s) is not present on arguments list",
+							static_cast<unsigned>(specifierIndex), key.data());
 				valueIndex = it->second;
 			}
 			iSpec = t0 + 1;
@@ -240,7 +252,9 @@ static void format(cha::Ct& ct) {
 		if (isDigit(f[iSpec])) {
 			auto length = findOffset(f, iSpec, i1, [](char c) { return !isDigit(c); }) - iSpec;
 			if (length > 10)
-				throw cha::NativeException();
+				throw cha::IllegalArgumentException(
+						"at format specifier #%u: width field is out of range",
+						static_cast<unsigned>(specifierIndex));
 			std::strncpy(spec + specSize, f.data() + iSpec, length);
 			specSize += length;
 			iSpec += length;
@@ -249,7 +263,9 @@ static void format(cha::Ct& ct) {
 		if (f[iSpec] == '.' && iSpec + 1 < i1 && isDigit(f[iSpec + 1])) {
 			auto length = findOffset(f, iSpec + 1, i1, [](char c) { return !isDigit(c); }) - iSpec;
 			if (length > 1 + 10)
-				throw cha::NativeException();
+				throw cha::IllegalArgumentException(
+						"at format specifier #%u: precision field is out of range",
+						static_cast<unsigned>(specifierIndex));
 			std::strncpy(spec + specSize, f.data() + iSpec, length);
 			specSize += length;
 			iSpec += length;
@@ -264,7 +280,9 @@ static void format(cha::Ct& ct) {
 				auto last = findOffset(f, iSpec, i1, [](char c) { return c == ','; });
 				auto sep = findOffset(f, iSpec + 1, last, [](char c) { return c == '='; });
 				if (last == sep)
-					throw cha::NativeException();
+					throw cha::IllegalArgumentException(
+							"at format specifier #%u: option field requires 'key=value' form",
+							static_cast<unsigned>(specifierIndex));
 
 				if (sep - iSpec == 1 && !std::strncmp(f.data() + iSpec, "m", 1)) {
 					dMarker.assign(f.data() + sep + 1, f.data() + last);
@@ -279,7 +297,9 @@ static void format(cha::Ct& ct) {
 					requiresPostProcess = true;
 				}
 				else
-					throw cha::NativeException();
+					throw cha::IllegalArgumentException(
+							"at format specifier #%u: unknown option (%s)",
+							static_cast<unsigned>(specifierIndex), f.substr(iSpec, sep - iSpec).data());
 
 				iSpec = last + 1;
 			}
@@ -295,39 +315,46 @@ static void format(cha::Ct& ct) {
 				type = 'g';
 		}
 
+		bool typeMismatch = false;
 		switch (type) {
 		case 's':
-			if (value.isBool())
-				valueString = convert(spec, specSize, "s", value.getBool() ? "true" : "false");
+			if (value.isNull())
+				valueString = convert(specifierIndex, spec, specSize, "s", "null");
+			else if (value.isBool())
+				valueString = convert(specifierIndex, spec, specSize, "s", value.getBool() ? "true" : "false");
 			else if (value.isString())
-				valueString = convert(spec, specSize, "s", value.getString().data());
+				valueString = convert(specifierIndex, spec, specSize, "s", value.getString().data());
 			else
-				throw cha::NativeException();
+				typeMismatch = true;
 			requiresPostProcess = false;
 			break;
 
 		case 'd':
-			if (value.isInt())
-				valueString = convert(spec, specSize, "lld", static_cast<long long>(value.getInt()));
+			if (value.isNull())
+				valueString = convert(specifierIndex, spec, specSize, "d", 0);
+			else if (value.isInt())
+				valueString = convert(specifierIndex, spec, specSize, "lld", static_cast<long long>(value.getInt()));
 			else if (value.isFloat())
-				valueString = convert(spec, specSize, "lld", static_cast<long long>(value.getFloat()));
+				valueString = convert(specifierIndex, spec, specSize, "lld", static_cast<long long>(value.getFloat()));
 			else if (value.isBool())
-				valueString = convert(spec, specSize, "d", value.getBool() ? 1 : 0);
+				valueString = convert(specifierIndex, spec, specSize, "d", value.getBool() ? 1 : 0);
 			else
-				throw cha::NativeException();
+				typeMismatch = true;
 			break;
 
 		case 'x':
 		case 'X': {
 			char typeString[4] = {'l', 'l', type, '\0'};
-			if (value.isInt())
-				valueString = convert(spec, specSize, typeString, static_cast<long long>(value.getInt()));
+			if (value.isNull())
+				valueString = convert(specifierIndex, spec, specSize, "d", 0);
+			else if (value.isInt())
+				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getInt()));
 			else if (value.isFloat())
-				valueString = convert(spec, specSize, typeString, static_cast<long long>(value.getFloat()));
+				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getFloat()));
 			else if (value.isBool())
-				valueString = convert(spec, specSize, "d", value.getBool() ? 1 : 0);
+				valueString = convert(specifierIndex, spec, specSize, "d", value.getBool() ? 1 : 0);
 			else
-				throw cha::NativeException();
+				typeMismatch = true;
 			break;
 		}
 
@@ -340,17 +367,27 @@ static void format(cha::Ct& ct) {
 		case 'a':
 		case 'A': {
 			char typeString[2] = {type, '\0'};
-			if (value.isInt())
-				valueString = convert(spec, specSize, typeString, static_cast<double>(value.getInt()));
+			if (value.isNull())
+				valueString = convert(specifierIndex, spec, specSize, typeString, 0.0);
+			else if (value.isInt())
+				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<double>(value.getInt()));
 			else if (value.isFloat())
-				valueString = convert(spec, specSize, typeString, static_cast<double>(value.getFloat()));
+				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<double>(value.getFloat()));
 			else
-				throw cha::NativeException();
+				typeMismatch = true;
 			break;
 		}
 
 		default:
-			throw cha::NativeException();
+			throw cha::IllegalArgumentException(
+					"at format specifier #%u: unknown type name (%c)",
+					static_cast<unsigned>(specifierIndex), type);
+		}
+
+		if (typeMismatch) {
+			throw cha::IllegalArgumentException(
+					"at format specifier #%u: type '%c' cannot be used with specified value",
+					static_cast<unsigned>(specifierIndex), type);
 		}
 
 		// Post-processing (adding/replacing marker or separators)

@@ -19,12 +19,37 @@
  */
 
 #include "Runtime.h"
+#include <cstdio>
+#include <cstdarg>
 
 namespace chatra {
 
 class NativeReferenceImp;
 class NativeCallContextImp;
 
+NativeException::NativeException(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	setMessage(format, args);
+	va_end(args);
+}
+
+void NativeException::setMessage(const char *format, va_list args) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+	va_list args2;
+	va_copy(args2, args);
+	auto length = std::vsnprintf(nullptr, 0, format, args);
+	if (length < 0)
+		message = "(error)";
+	else {
+		std::vector<char> buffer(length + 1);
+		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
+		message = std::string(buffer.data());
+	}
+	va_end(args2);
+#pragma GCC diagnostic pop
+}
 
 NativeEventObjectImp::NativeEventObjectImp(RuntimeImp& runtime, unsigned waitingId) noexcept
 		: runtime(runtime), waitingId(waitingId) {

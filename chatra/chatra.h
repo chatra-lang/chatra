@@ -26,6 +26,7 @@
 #include <memory>
 #include <type_traits>
 #include <limits>
+#include <cstdarg>
 
 #define CHATRA_IGNORE_THIS_LINE
 
@@ -39,10 +40,26 @@ enum class InstanceId : size_t {};
 enum class TimerId : size_t {};
 
 
-struct NativeException : public std::exception {};
-struct IllegalArgumentException : public NativeException {};
-struct PackageNotFoundException : public IllegalArgumentException {};
-struct UnsupportedOperationException : public NativeException {};
+struct NativeException : public std::exception {
+	std::string message;
+	NativeException() = default;
+	explicit NativeException(const char* format, ...);
+protected:
+	void setMessage(const char* format, va_list args);
+};
+
+// note: inherit constructors with variadic arguments may not work correctly on some compilers.
+#define CHATRA_DEFINE_EXCEPTION(name, baseName)  \
+	struct name : public baseName {  \
+		name() = default;  \
+		explicit name(const char* format, ...) : baseName() {  \
+			va_list args;  va_start(args, format);  setMessage(format, args);  va_end(args);  \
+		}  \
+	}
+
+CHATRA_DEFINE_EXCEPTION(IllegalArgumentException, NativeException);
+CHATRA_DEFINE_EXCEPTION(PackageNotFoundException, IllegalArgumentException);
+CHATRA_DEFINE_EXCEPTION(UnsupportedOperationException, NativeException);
 
 
 struct Script {
