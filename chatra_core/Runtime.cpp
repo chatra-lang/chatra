@@ -192,11 +192,8 @@ static std::vector<std::tuple<StringId, StringId, NativeMethod>> filterNativeMet
 void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	assert(node->blockNodesState == NodeState::Parsed);
 
-	// Register variables, classes and operator overrides
-	assert(!clPackage);
-	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
-
-	// Performs two-path initialization to allow cross references in constructor arguments
+	// Performs two-path initialization to allow cross references in
+	// constructor arguments or package-global defs
 	std::unordered_map<StringId, Node*> classNames;
 	std::vector<Class*> classList;
 	for (auto& n : node->symbols) {
@@ -213,6 +210,11 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 
 		classList.push_back(classes.emplace(this, n.get()));
 	}
+
+	// Register variables, classes and operator overrides
+	assert(!clPackage);
+	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
+
 	for (auto* cl : classList)
 		cl->initialize(errorReceiver, sTable, *this, nullptr, filterNativeMethods(sTable, handlers, cl->getName()));
 
