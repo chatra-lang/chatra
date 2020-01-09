@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,107 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-// TODO
+// Flags for compilation time
+var MultiLine: 1
+var M: 1
+var IgnoreCase: 2
+var I: 2
+var DotAll: 4
+var S: 4
+
+// Flags for Pattern.search/match
+var NotBoL: 8
+var NotEoL: 0x10
+var NotBoW: 0x20
+var NotEoW: 0x40
+var NotEmpty: 0x80
+var Continuous: 0x100
+var Global: 0x200  // for replace() only
+var G: 0x200  // for replace() only
+var NoCopy: 0x400  // for replace() only
+
+def _native_compile(p: Pattern, pattern: String, flags: 0) as native
+
+def compile(pattern: String, flags: 0)
+	p = Pattern()
+	_native_compile(p, pattern, flags)
+	return p
+
+class Pattern
+	def _native_search(m: Match, str: String, flags: 0) as native
+	def _native_match(m: Match, str: String, flags: 0) as native
+	def _native_replace(str: String, format: String, flags: 0) as native
+
+	def search(str: String, flags: 0)
+		m = Match()
+		ret = _native_search(m, str, flags)
+		return ret ? m._postInit() : null
+
+	def match(str: String, flags: 0)
+		m = Match()
+		ret = _native_match(m, str, flags)
+		return ret ? m._postInit() : null
+
+	def replace(str: String, format: String, flags: 0)
+		return _native_replace(str, format, flags)
+
+class MatchedValue
+	var position
+	var length
+	var str
+
+	def toString()
+		return '@' + position + '+' + length + '{' + str+ '}'
+
+class Match
+	var groups: {}
+
+	def _native_size() as native
+	def _native_position(position: Int) as native
+	def _native_length(position: Int) as native
+	def _native_str(position: Int) as native
+
+	def _postInit()
+		size: _native_size()
+		for i in Range(size)
+			v: MatchedValue()
+			v.position = _native_position(i)
+			v.length = _native_length(i)
+			v.str = _native_str(i)
+			groups.add(v)
+		return self
+
+	def size()
+		return groups.size()
+
+	def (position: Int)
+		return groups[position]
+
+	def (position: Int).set(r)
+		throw UnsupportedOperationException()
+
+	def sub(a0: IndexSet)
+		return ArrayView(groups, a0)
+
+	def iterator()
+		return groups.iterator()
+
+	def keyedIterator()
+		return groups.keyedIterator()
+
+	def toArray()
+		return groups.toArray()
+
+	def toString()
+		return 'regex.Match' + groups.toString()
+
+def search(str: String, pattern: String, flags: 0)
+	return compile(pattern, flags).search(str, flags)
+
+def match(str: String, pattern: String, flags: 0)
+	return compile(pattern, flags).match(str, flags)
+
+def replace(str: String, pattern: String, format: String, flags: 0)
+	return compile(pattern, flags).replace(str, format, flags)
 
 CHATRA_IGNORE_THIS_LINE )***"

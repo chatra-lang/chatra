@@ -25,6 +25,7 @@
 
 cha::PackageInfo chatra_emb_sysPackageInfo();
 cha::PackageInfo chatra_emb_formatPackageInfo();
+cha::PackageInfo chatra_emb_regexPackageInfo();
 
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
@@ -38,6 +39,7 @@ static void initialize() {
 	std::vector<cha::PackageInfo> packageList = {
 			chatra_emb_sysPackageInfo(),
 			chatra_emb_formatPackageInfo(),
+			chatra_emb_regexPackageInfo(),
 	};
 
 	for (auto& pi : packageList)
