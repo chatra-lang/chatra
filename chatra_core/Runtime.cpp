@@ -1245,7 +1245,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 	}
 
 	for (; workerThreads.size() < threadCount; nextId++) {
-		workerThreads.emplace(nextId, new std::thread([&, this](unsigned wsId) {
+		workerThreads.emplace(nextId, std::unique_ptr<std::thread>(new std::thread([&, this](unsigned wsId) {
 			for (;;) {
 				Thread* thread;
 				{
@@ -1271,7 +1271,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 					outputError("fatal: uncaught exception raised\n");
 				}
 			}
-		}, nextId));
+		}, nextId)));
 	}
 	cvQueue.notify_all();
 }

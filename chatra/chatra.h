@@ -26,6 +26,7 @@
 #include <memory>
 #include <type_traits>
 #include <limits>
+#include <cstddef>
 
 #define CHATRA_IGNORE_THIS_LINE
 
