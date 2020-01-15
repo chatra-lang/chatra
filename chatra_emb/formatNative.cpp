@@ -26,6 +26,7 @@
 #include <string>
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
 
 static const char* script =
 #include "format.cha"
