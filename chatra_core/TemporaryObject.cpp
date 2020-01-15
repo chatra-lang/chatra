@@ -40,17 +40,15 @@ void TemporaryObject::resolveNativeMethod(StringId name, StringId subName) {
 	assert(methodTable != nullptr);
 
 	if (method1 != nullptr || method0->node == nullptr || !(method0->node->flags & NodeFlags::Native)) {
-		nativeMethod = NativeMethod(nullptr);
+		nativeMethod = nullptr;
 		return;
 	}
 
 	nativeMethod = methodTable->findNativeMethod(name, subName);
-	if (nativeMethod.isNull() && method0->node->blockNodes.empty()) {
+	if (nativeMethod == nullptr && method0->node->blockNodes.empty()) {
 		errorAtNode(thread, ErrorLevel::Error, method0->node, "native method not found", {});
 		throw RuntimeException(StringId::MemberNotFoundException);
 	}
-	nativeMethodName = name;
-	nativeMethodSubName = subName;
 }
 
 bool TemporaryObject::findOnObject(Reference sourceRef, const MethodTable& table, const Class* cl,
@@ -827,12 +825,12 @@ bool TemporaryObject::methodHasArguments() const {
 	return (1U << static_cast<unsigned>(type) & mask) && methodHasArgs;
 }
 
-NativeMethod TemporaryObject::getNativeMethod() const {
+const NativeMethod* TemporaryObject::getNativeMethod() const {
 	static constexpr unsigned mask = 1U << static_cast<unsigned>(Type::Constructor) |
 			1U << static_cast<unsigned>(Type::ConstructorCall) |
 			1U << static_cast<unsigned>(Type::FrameMethod) |
 			1U << static_cast<unsigned>(Type::ObjectMethod);
-	return 1U << static_cast<unsigned>(type) & mask ? nativeMethod : NativeMethod(nullptr);
+	return 1U << static_cast<unsigned>(type) & mask ? nativeMethod : nullptr;
 }
 
 void TemporaryObject::saveThread(Writer& w) const {
@@ -857,10 +855,10 @@ bool TemporaryObject::save(Writer& w) const {
 		w.out(method1);
 		w.out(methodHasArgs);
 
-		w.out(!nativeMethod.isNull());
-		if (!nativeMethod.isNull()) {
-			w.out(nativeMethodName);
-			w.out(nativeMethodSubName);
+		w.out(nativeMethod != nullptr);
+		if (nativeMethod != nullptr) {
+			w.out(nativeMethod->name);
+			w.out(nativeMethod->subName);
 		}
 	}
 
@@ -911,13 +909,14 @@ bool TemporaryObject::restore(Reader& r) {
 		r.in(methodHasArgs);
 
 		if (r.read<bool>()) {
+			StringId nativeMethodName, nativeMethodSubName;
 			r.in(nativeMethodName);
 			r.in(nativeMethodSubName);
 
 			if (methodTable == nullptr)
 				throw IllegalArgumentException();
 			nativeMethod = methodTable->findNativeMethod(nativeMethodName, nativeMethodSubName);
-			if (nativeMethod.isNull())
+			if (nativeMethod == nullptr)
 				throw IllegalArgumentException();
 		}
 	}

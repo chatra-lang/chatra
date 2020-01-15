@@ -136,10 +136,7 @@ private:
 	const Method* method0 = nullptr;
 	const Method* method1 = nullptr;
 	bool methodHasArgs = false;
-
-	NativeMethod nativeMethod = NativeMethod(nullptr);
-	StringId nativeMethodName = StringId::Invalid;
-	StringId nativeMethodSubName = StringId::Invalid;
+	const NativeMethod* nativeMethod = nullptr;
 
 	// Restrictions
 	bool hasName = false;
@@ -294,7 +291,7 @@ public:
 	const Method* getRefMethod() const;
 	const Method* getSetMethod() const;
 	bool methodHasArguments() const;
-	NativeMethod getNativeMethod() const;
+	const NativeMethod* getNativeMethod() const;
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS_WITH_THREAD(TemporaryObject);
 	CHATRA_DECLARE_SERIALIZE_OBJECT_REFS_METHODS;

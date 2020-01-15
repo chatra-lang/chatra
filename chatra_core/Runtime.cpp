@@ -171,15 +171,15 @@ static StringId getStringIdOrThrow(const StringTable* sTable, const std::string&
 	return sid;
 }
 
-static std::vector<std::tuple<StringId, StringId, NativeMethod>> filterNativeMethods(
+static std::vector<NativeMethod> filterNativeMethods(
 		const StringTable* sTable, const std::vector<NativeCallHandlerInfo>& handlers, StringId sidClass = StringId::Invalid) {
 
-	std::vector<std::tuple<StringId, StringId, NativeMethod>> ret;
+	std::vector<NativeMethod> ret;
 	for (auto& e : handlers) {
 		try {
 			if (sidClass == getStringIdOrThrow(sTable, e.className)) {
 				ret.emplace_back(getStringIdOrThrow(sTable, e.name), getStringIdOrThrow(sTable, e.subName),
-						NativeMethod(nativeCall, e.handler));
+						nativeCall, e.handler);
 			}
 		}
 		catch (RuntimeException&) {

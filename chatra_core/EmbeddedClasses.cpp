@@ -1321,7 +1321,7 @@ static void registerException_Derived() {
 
 static std::unique_ptr<Class> createEmbeddedClass(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, IClassFinder& classFinder, std::string script,
-		ObjectBuilder nativeConstructor, std::vector<std::tuple<StringId, StringId, NativeMethod>> nativeMethods) {
+		ObjectBuilder nativeConstructor, const std::vector<NativeMethod>& nativeMethods) {
 
 	auto lines = parseLines(errorReceiver, sTable, "(internal-classes)", 1, std::move(script));
 	auto node = groupScript(errorReceiver, sTable, lines);
@@ -1332,7 +1332,7 @@ static std::unique_ptr<Class> createEmbeddedClass(ParserWorkingSet& ws, IErrorRe
 	nodeMap.emplace(node->blockNodes[0]->sid, node.get());
 
 	std::unique_ptr<Class> cl(new Class(errorReceiver, sTable.get(), classFinder, nullptr, node->blockNodes[0].get(),
-			nativeConstructor, std::move(nativeMethods)));
+			nativeConstructor, nativeMethods));
 	embeddedClasses.add(cl.get());
 	embeddedClassesNode.emplace_front(std::move(node));
 	return cl;
@@ -1402,40 +1402,40 @@ void initializeEmbeddedClasses() {
 			*/
 
 	clAsync = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initAsync, createAsync, {
-			{StringId::_native_updated, StringId::Invalid, NativeMethod(&Async::native_updated)},
+			{StringId::_native_updated, StringId::Invalid, &Async::native_updated},
 	});
 
 	clString = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initString, createString, {
-			{StringId::Init, StringId::fromString, NativeMethod(&String::native_initFromString)},
-			{StringId::Init, StringId::fromChar, NativeMethod(&String::native_initFromChar)},
-			{StringId::size, StringId::Invalid, NativeMethod(&String::native_size)},
-			{StringId::Set, StringId::Invalid, NativeMethod(&String::native_set)},
-			{StringId::_native_add, StringId::Invalid, NativeMethod(&String::native_add)},
-			{StringId::_native_insert, StringId::Invalid, NativeMethod(&String::native_insert)},
-			{StringId::_native_append, StringId::Invalid, NativeMethod(&String::native_append)},
-			{StringId::_native_at, StringId::Invalid, NativeMethod(&String::native_at)},
-			{StringId::remove, StringId::Invalid, NativeMethod(&String::native_remove)},
-			{StringId::clone, StringId::Invalid, NativeMethod(&String::native_clone)},
-			{StringId::equals, StringId::Invalid, NativeMethod(&String::native_equals)},
-			{StringId::_native_sub, StringId::Invalid, NativeMethod(&String::native_sub)}
+			{StringId::Init, StringId::fromString, &String::native_initFromString},
+			{StringId::Init, StringId::fromChar, &String::native_initFromChar},
+			{StringId::size, StringId::Invalid, &String::native_size},
+			{StringId::Set, StringId::Invalid, &String::native_set},
+			{StringId::_native_add, StringId::Invalid, &String::native_add},
+			{StringId::_native_insert, StringId::Invalid, &String::native_insert},
+			{StringId::_native_append, StringId::Invalid, &String::native_append},
+			{StringId::_native_at, StringId::Invalid, &String::native_at},
+			{StringId::remove, StringId::Invalid, &String::native_remove},
+			{StringId::clone, StringId::Invalid, &String::native_clone},
+			{StringId::equals, StringId::Invalid, &String::native_equals},
+			{StringId::_native_sub, StringId::Invalid, &String::native_sub}
 	});
 
 	clArray = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initArray, createArray, {
-			{StringId::size, StringId::Invalid, NativeMethod(&Array::native_size)},
-			{StringId::_native_add, StringId::Invalid, NativeMethod(&Array::native_add)},
-			{StringId::_native_insert, StringId::Invalid, NativeMethod(&Array::native_insert)},
-			{StringId::remove, StringId::Invalid, NativeMethod(&Array::native_remove)},
-			{StringId::_native_at, StringId::Invalid, NativeMethod(&Array::native_at)}
+			{StringId::size, StringId::Invalid, &Array::native_size},
+			{StringId::_native_add, StringId::Invalid, &Array::native_add},
+			{StringId::_native_insert, StringId::Invalid, &Array::native_insert},
+			{StringId::remove, StringId::Invalid, &Array::native_remove},
+			{StringId::_native_at, StringId::Invalid, &Array::native_at}
 	});
 
 	clDict = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initDict, createDict, {
-			{StringId::size, StringId::Invalid, NativeMethod(&Dict::native_size)},
-			{StringId::has, StringId::Invalid, NativeMethod(&Dict::native_has)},
-			{StringId::_native_add, StringId::Invalid, NativeMethod(&Dict::native_add)},
-			{StringId::_native_at, StringId::Invalid, NativeMethod(&Dict::native_at)},
-			{StringId::remove, StringId::Invalid, NativeMethod(&Dict::native_remove)},
-			{StringId::keys, StringId::Invalid, NativeMethod(&Dict::native_keys)},
-			{StringId::values, StringId::Invalid, NativeMethod(&Dict::native_values)}
+			{StringId::size, StringId::Invalid, &Dict::native_size},
+			{StringId::has, StringId::Invalid, &Dict::native_has},
+			{StringId::_native_add, StringId::Invalid, &Dict::native_add},
+			{StringId::_native_at, StringId::Invalid, &Dict::native_at},
+			{StringId::remove, StringId::Invalid, &Dict::native_remove},
+			{StringId::keys, StringId::Invalid, &Dict::native_keys},
+			{StringId::values, StringId::Invalid, &Dict::native_values}
 	});
 
 	// Add embedded conversions
