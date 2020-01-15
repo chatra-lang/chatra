@@ -313,7 +313,7 @@ void EventObject::activateWatcher(void* tag) {
 			activated.emplace(tag, watcher);
 			return;
 		}
-		if (count != UINT_MAX) {
+		if (count != std::numeric_limits<unsigned>::max()) {
 			count--;
 			shouldRestore = true;
 		}
@@ -333,7 +333,7 @@ void EventObject::notifyOne() {
 		EventWatcher watcher;
 		{
 			std::lock_guard<SpinLock> lock(lockWatchers);
-			assert(count != UINT_MAX);
+			assert(count != std::numeric_limits<unsigned>::max());
 			if (activated.empty()) {
 				count++;
 				return;
@@ -352,7 +352,7 @@ void EventObject::notifyAll() {
 	std::unordered_map<void*, EventWatcher>  watchersCopy;
 	{
 		std::lock_guard<SpinLock> lock(lockWatchers);
-		count = UINT_MAX;
+		count = std::numeric_limits<unsigned>::max();
 		std::swap(activated, watchersCopy);
 	}
 	for (auto& e : watchersCopy)

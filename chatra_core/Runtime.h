@@ -446,7 +446,7 @@ public:
 #ifdef CHATRA_DEBUG_LOCK
 	Thread* thread = nullptr;
 	size_t frameIndex = SIZE_MAX;
-	unsigned id = UINT_MAX;
+	unsigned id = std::numeric_limits<unsigned>::max();
 	std::unordered_set<Reference> suspendedRefs;
 	mutable bool saved = false;
 

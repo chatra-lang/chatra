@@ -401,7 +401,7 @@ void RuntimeImp::launchFinalizerThread() {
 void RuntimeImp::launchSystem(unsigned initialThreadCount) {
 	timers.emplace("", newSystemTimer());
 
-	multiThread = (initialThreadCount != UINT_MAX);
+	multiThread = (initialThreadCount != std::numeric_limits<unsigned>::max());
 	if (multiThread)
 		setWorkers(initialThreadCount);
 }
@@ -951,7 +951,7 @@ void RuntimeImp::enqueue(Thread* thread) {
 
 	/*{
 		static unsigned count = 0;
-		static constexpr unsigned breakCount = UINT_MAX;  // UINT_MAX
+		static constexpr unsigned breakCount = std::numeric_limits<unsigned>::max();  // std::numeric_limits<unsigned>::max()
 		std::unique_lock<std::mutex> lock(mtQueue);
 		count++;
 		if (count == breakCount)
@@ -1106,7 +1106,7 @@ void RuntimeImp::initialize(unsigned initialThreadCount) {
 }
 
 void RuntimeImp::initialize(unsigned initialThreadCount, const std::vector<uint8_t>& savedState) {
-	multiThread = (initialThreadCount != UINT_MAX);
+	multiThread = (initialThreadCount != std::numeric_limits<unsigned>::max());
 
 	registerEmbeddedClasses(classes);
 	registerEmbeddedFunctions(methods, operators);

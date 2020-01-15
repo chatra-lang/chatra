@@ -62,8 +62,8 @@ struct Line {
 	std::vector<Token> tokens;
 };
 
-constexpr unsigned WholeFile = UINT_MAX - 1;
-constexpr unsigned UnknownLine = UINT_MAX;
+constexpr unsigned WholeFile = std::numeric_limits<unsigned>::max() - 1;
+constexpr unsigned UnknownLine = std::numeric_limits<unsigned>::max();
 
 std::vector<std::shared_ptr<Line>> parseLines(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, const std::string& fileName, unsigned lineNo, std::string source);
