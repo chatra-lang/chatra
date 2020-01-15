@@ -1,0 +1,8 @@
+very = 'very'
+long = 'long'
+sentence = 'sentence'
+
+// These two sentences have the same meaning.
+This = 'is' + very + long + sentence
+This = 'is' + very +
+		long + sentence

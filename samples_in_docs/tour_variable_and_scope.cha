@@ -1,0 +1,26 @@
+abc = 1
+some_variable = 2
+Porsche911 = 3
+もうかりまっか = 4
+福神漬 = 5
+
+a = 123
+log("a is Int: " + (a is Int))
+a = "text"
+log("a is String: " + (a is String))
+
+for in Range(2)
+	t = 0
+	for in Range(3)
+		t++
+		log("t = " + t)
+	log("t = " + t)
+// This emits an error
+//log("t = " + t)
+
+a = -1
+for i in Range(2)
+	// これはfor文の外側にある "a" に代入するのではなく、新しく "a" という変数を用意することを意味しています。
+	a: i
+	log("a = " + a)
+log("a = " + a)

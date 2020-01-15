@@ -1,0 +1,3 @@
+message = 'Hello '
+message = message + 'World!'
+log(message)

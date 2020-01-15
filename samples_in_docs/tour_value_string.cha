@@ -1,0 +1,14 @@
+a = 'This is text.'
+b = "This is text."
+
+log("This is text with \t Tab character")
+log("Text \n with \n LineFeed character")
+log('Quoted "word" in text')
+log("Quoted \"word\" in text")
+
+
+log(R<<<
+		This
+		  // is
+		/* text */
+		>>>)

@@ -1,0 +1,4 @@
+// This is a comment. This line is not executed.
+log('hoge')  // This is also a comment. The content before the comment is executed.
+// Of course, you can also comment out part of the script.
+// log('fuga')  // This will not be executed.

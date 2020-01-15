@@ -1,0 +1,3 @@
+for in Range(10)
+	for in Range(20)
+		log('Hello!')  // Hello! will be displayed 200 times

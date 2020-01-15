@@ -1,0 +1,20 @@
+a: 1
+
+if a == 1
+	log("a is 1")
+else if a == 2
+	log("a is 2")
+else
+	log("what's that?")
+
+a: 0
+while a++ < 3
+	log("a is " + a)
+
+
+a: 0
+b: 0
+while a++ < 3
+	log("a is " + a + ", b is " + b)
+	b: a + 100
+log("b is " + b)

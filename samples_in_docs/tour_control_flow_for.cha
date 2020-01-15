@@ -1,0 +1,23 @@
+for in Range(5)
+	log("Hello World!")
+
+for i in Range(3)
+	log("Hello World! #" + i)
+
+test_array = {3, 5, 7, 9}
+for element in test_array
+	log("element is " + element)
+
+for index, element in test_array
+	log("#" + index + " element is " + element)
+
+test_dict = {first: 123, second: 234, third: 345}
+for key, value in test_dict
+	log("(key, value) = (" + key + ", " + value + ")")
+
+for iterator: key, value in test_dict
+	if key == "second"
+		iterator.remove()
+
+for key, value in test_dict
+	log("(key, value) = (" + key + ", " + value + ")")

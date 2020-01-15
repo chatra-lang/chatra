@@ -1,0 +1,16 @@
+/* Comment starts from here
+/* */ This end sequence corresponds to the start sequence at THIS line.
+// So this line is still inside a comment.
+Comment ends */
+
+for in Range(2)
+	log('hoge')  /*
+Indents inside block comment are ignored.
+	*/
+	/*
+	If you write text after the end sequence, the indent before the comment on that line is carried over.
+	*/ log('inside loop')
+	/*
+	Thus, the following line is considered to be outside the "for" statement.
+	Also, the spaces/tabs immediately after the end sequence is ignored.
+comment text */ log('outside loop')

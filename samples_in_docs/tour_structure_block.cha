@@ -1,0 +1,5 @@
+a = 0
+for in Range(10)  // Indicates that the block is repeated 10 times.
+	// These statements are executed 10 times, and 'Hello, World! #Number' is displayed 10 times.
+	a = a + 1
+	log('Hello, World! #' + a)

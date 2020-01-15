@@ -1,0 +1,31 @@
+for value in Range(5)
+	switch value
+		case 0
+			log("value is 0")
+		case 1
+		case 2
+			log("value may be less than 3")
+		default
+			log("unknown value")
+
+// (2)
+container = {"abc": 123, "bcd": 234, "def": 345}
+switch key: "bcd"
+	case container  // Array and Dict have "has()" method
+		log("true - value is " + container[key])
+
+// (3)
+switch "text"
+	case "text"  // String has "equals()" method
+		log("true")
+
+// (4)
+a: null
+switch a
+	case null
+		log("true")
+
+// (5)
+switch "actually, this value won't be used"
+	case 123 + 234 == 357
+		log("true")
