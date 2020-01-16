@@ -86,8 +86,11 @@ static std::string restoreValue(const std::string& value) {
 
 template <class Type>
 static std::string convert(size_t specifierIndex, char* spec, size_t specSize, const char* type, Type value) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#if defined(__GNUC__)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
+
 	std::strcpy(spec + specSize, type);
 	auto length = std::snprintf(nullptr, 0, spec, value);
 	if (length < 0)
@@ -96,7 +99,10 @@ static std::string convert(size_t specifierIndex, char* spec, size_t specSize, c
 	std::vector<char> buffer(length + 1);
 	std::snprintf(buffer.data(), buffer.size(), spec, value);
 	return std::string(buffer.data());
-#pragma GCC diagnostic pop
+
+#if defined(__GNUC__)
+	#pragma GCC diagnostic pop
+#endif
 }
 
 template <typename IsDigitPred>
