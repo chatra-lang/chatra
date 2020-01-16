@@ -29,10 +29,18 @@ using namespace chatraEmb;
 // SRELL
 // http://www.akenotsuki.com/misc/srell/
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#if defined(__GNUC__)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+	#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 #include "regexNative_srell.h"
-#pragma GCC diagnostic pop
+
+#if defined(__GNUC__)
+	#pragma GCC diagnostic pop
+#endif
+
 
 namespace chatraEmbRegex {
 
