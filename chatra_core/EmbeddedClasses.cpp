@@ -221,25 +221,27 @@ class DictKeyedIterator extends KeyedIterator
 		return m0.remove(m1[m2 - 1])
 )***";
 
+static const char* initSequence = R"***(
+class Sequence
+)***";
+
+static const char* initVariableLengthSequence = R"***(
+class VariableLengthSequence extends Sequence
+	def init()
+		super()
+)***";
+
 static const char* initArrayView = R"***(
-class ArrayView
+class ArrayView extends Sequence
 	var m0, m1
 
 	def init(a0, a1: IndexSet)
+		super()
 		m0 = a0
 		m1 = a1
 
 	def size()
 		return m1.size()
-
-	def add(a0...)
-		throw UnsupportedOperationException()
-
-	def insert(a0...)
-		throw UnsupportedOperationException()
-
-	def append(a0...)
-		throw UnsupportedOperationException()
 
 	def (a0: Int)
 		return m0[m1[a0]]
@@ -247,17 +249,11 @@ class ArrayView
 	def (a0: Int).set(r)
 		return m0[m1[a0]] = r
 
-	def remove(a0...)
-		throw UnsupportedOperationException()
-
-	def clear(a0...)
-		throw UnsupportedOperationException()
-
 	def clone()
 		return ArrayView(m0, m1)
 
 	def equals(a0)
-		if a0 == null or !(a0 is Array or a0 is ArrayView)
+		if a0 == null or !(a0 is Sequence)
 			return false
 		if size != a0.size
 			return false
@@ -514,7 +510,7 @@ bool String::restore(chatra::Reader& r) {
 }
 
 static const char* initString = R"***(
-class String
+class String extends VariableLengthSequence
 	def init()
 
 	def init.fromString(a0: String) as native
@@ -882,7 +878,7 @@ bool Array::restore(Reader& r) {
 }
 
 static const char* initArray = R"***(
-class Array
+class Array extends VariableLengthSequence
 	def init()
 
 	def size() as native
@@ -959,7 +955,7 @@ class Array
 		return Array().append(self)
 
 	def equals(a0)
-		if a0 == null or !(a0 is Array or a0 is ArrayView)
+		if a0 == null or !(a0 is Sequence)
 			return false
 		if size != a0.size
 			return false
@@ -1393,6 +1389,8 @@ void initializeEmbeddedClasses() {
 	addClass(initArrayKeyedIterator);
 	addClass(initDictIterator);
 	addClass(initDictKeyedIterator);
+	addClass(initSequence);
+	addClass(initVariableLengthSequence);
 	addClass(initArrayView);
 
 	/*embeddedClassesPtr.emplace_front(

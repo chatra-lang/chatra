@@ -18,7 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#include "chatra.h"
+#include "EmbInternal.h"
+using namespace chatraEmb;
 
 // note: <regex> in C++11 only supports char or wchar_t;
 // This specification does not have sufficient capabilities to support unicode string.
@@ -32,6 +33,8 @@
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #include "regexNative_srell.h"
 #pragma GCC diagnostic pop
+
+namespace chatraEmbRegex {
 
 static const char* script =
 #include "regex.cha"
@@ -51,6 +54,7 @@ struct NativeData : public cha::INativePtr {
 };
 
 struct Pattern : public NativeData {
+	SpinLock lock;
 	std::string pattern;
 	srell::regex_constants::syntax_option_type flags = srell::regex_constants::ECMAScript;
 	std::unique_ptr<srell::u8cregex> re;
@@ -58,6 +62,7 @@ struct Pattern : public NativeData {
 };
 
 struct Match : public NativeData {
+	SpinLock lock;
 	std::string pattern;
 	srell::regex_constants::syntax_option_type flags = srell::regex_constants::ECMAScript;
 	std::string str;
@@ -67,42 +72,6 @@ struct Match : public NativeData {
 	bool matched = false;
 	Match() : NativeData(Type::Match) {}
 };
-
-static void writeInt(std::vector<uint8_t>& buffer, uint64_t value) {
-	while (value >= 0x80U) {
-		buffer.push_back(0x80U | static_cast<uint8_t>(value & 0x7FU));
-		value >>= 7U;
-	}
-	buffer.push_back(static_cast<uint8_t>(value));
-}
-
-static void writeString(std::vector<uint8_t>& buffer, const std::string& str) {
-	writeInt(buffer, static_cast<uint64_t>(str.length()));
-	auto* ptr = reinterpret_cast<const uint8_t*>(str.data());
-	buffer.insert(buffer.cend(), ptr, ptr + str.length());
-}
-
-static uint64_t readInt(const std::vector<uint8_t>& buffer, size_t& offset) {
-	uint64_t value = 0;
-	for (unsigned position = 0;; position += 7) {
-		if (offset >= buffer.size())
-			throw cha::NativeException();
-		auto c = buffer[offset++];
-		value |= (static_cast<uint64_t>(c) & 0x7FU) << position;
-		if ((c & 0x80U) == 0)
-			break;
-	}
-	return value;
-}
-
-static std::string readString(const std::vector<uint8_t>& buffer, size_t& offset) {
-	auto length = static_cast<size_t>(readInt(buffer, offset));
-	if (offset + length > buffer.size())
-		throw cha::NativeException();
-	auto* ptr = reinterpret_cast<const char*>(buffer.data() + offset);
-	offset += length;
-	return std::string(ptr, ptr + length);
-}
 
 struct RegexPackageInterface : public cha::IPackage {
 	std::vector<uint8_t> saveNativePtr(cha::PackageContext& pct, cha::INativePtr* ptr) override {
@@ -139,13 +108,13 @@ struct RegexPackageInterface : public cha::IPackage {
 		(void)pct;
 		size_t offset = 0;
 
-		auto type = static_cast<Type>(readInt(stream, offset));
+		auto type = readInt<Type>(stream, offset);
 		switch (type) {
 		case Type::Pattern: {
 			auto* p = new Pattern();
 			p->pattern = readString(stream, offset);
-			p->flags = static_cast<srell::regex_constants::syntax_option_type>(readInt(stream, offset));
-			if (readInt(stream, offset))
+			p->flags = readInt<srell::regex_constants::syntax_option_type>(stream, offset);
+			if (readInt<int>(stream, offset))
 				p->re.reset(new srell::u8cregex(p->pattern, p->flags));
 			return p;
 		}
@@ -153,11 +122,11 @@ struct RegexPackageInterface : public cha::IPackage {
 		case Type::Match: {
 			auto* m = new Match();
 			m->pattern = readString(stream, offset);
-			m->flags = static_cast<srell::regex_constants::syntax_option_type>(readInt(stream, offset));
+			m->flags = readInt<srell::regex_constants::syntax_option_type>(stream, offset);
 			m->str = readString(stream, offset);
-			m->searchType = static_cast<SearchType>(readInt(stream, offset));
-			m->mFlags = static_cast<srell::regex_constants::match_flag_type>(readInt(stream, offset));
-			m->matched = (readInt(stream, offset) != 0);
+			m->searchType = readInt<SearchType>(stream, offset);
+			m->mFlags = readInt<srell::regex_constants::match_flag_type>(stream, offset);
+			m->matched = (readInt<int>(stream, offset) != 0);
 			if (m->matched) {
 				srell::u8cregex re(m->pattern, m->flags);
 				switch (m->searchType) {
@@ -252,6 +221,7 @@ static void parseCommonMatchFlags(srell::regex_constants::match_flag_type& mFlag
 template <typename Pred>
 static void searchOrMatch(cha::Ct& ct, SearchType searchType, Pred pred) {
 	auto* p = derefSelfAsPattern(ct);
+	std::lock_guard<SpinLock> lock(p->lock);
 
 	auto* m = new Match();
 	ct.at(0).setNative(m);
@@ -287,6 +257,7 @@ static void match(cha::Ct& ct) {
 
 static void replace(cha::Ct& ct) {
 	auto* p = derefSelfAsPattern(ct);
+	std::lock_guard<SpinLock> lock(p->lock);
 
 	auto str = ct.at(0).get<std::string>();
 	auto format = ct.at(1).get<std::string>();
@@ -324,6 +295,8 @@ static size_t getPositionOrThrow(cha::Ct& ct, Match* m) {
 
 static void patternSize(cha::Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
+	std::lock_guard<SpinLock> lock(m->lock);
+
 	ct.set(!m->matched ? 0 : m->m.size());
 }
 
@@ -339,12 +312,16 @@ static size_t countChar(const std::string& str, size_t offset) {
 
 static void patternPosition(cha::Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
+	std::lock_guard<SpinLock> lock(m->lock);
+
 	auto position = getPositionOrThrow(ct, m);
 	ct.set(countChar(m->str, m->m.position(position)));
 }
 
 static void patternLength(cha::Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
+	std::lock_guard<SpinLock> lock(m->lock);
+
 	auto position = getPositionOrThrow(ct, m);
 	auto str = m->m.str(position);
 	ct.set(countChar(str, str.length()));
@@ -352,11 +329,13 @@ static void patternLength(cha::Ct& ct) {
 
 static void patternStr(cha::Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
+	std::lock_guard<SpinLock> lock(m->lock);
+
 	auto position = getPositionOrThrow(ct, m);
 	ct.set(m->m.str(position));
 }
 
-cha::PackageInfo chatra_emb_regexPackageInfo() {
+cha::PackageInfo packageInfo() {
 	return {{{"regex", script}}, {
 			{compile, "_native_compile"},
 			{search, "Pattern", "_native_search"},
@@ -368,3 +347,5 @@ cha::PackageInfo chatra_emb_regexPackageInfo() {
 			{patternStr, "Match", "_native_str"},
 	}, std::make_shared<RegexPackageInterface>()};
 }
+
+} // namespace chatraEmbRegex
