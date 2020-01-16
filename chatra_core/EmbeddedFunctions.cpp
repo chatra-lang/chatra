@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,17 +127,17 @@ void initializeEmbeddedFunctions() {
 		throw InternalError();
 	}
 
-	embeddedMethods.add(StringId::log, StringId::Invalid, NativeMethod(native_log));
-	embeddedMethods.add(StringId::dump, StringId::Invalid, NativeMethod(native_dump));
-	embeddedMethods.add(StringId::gc, StringId::Invalid, NativeMethod(native_gc));
-	embeddedMethods.add(StringId::_native_time, StringId::Invalid, NativeMethod(native_time));
-	embeddedMethods.add(StringId::_native_sleep, StringId::Invalid, NativeMethod(native_sleep));
-	embeddedMethods.add(StringId::_native_wait, StringId::Invalid, NativeMethod(native_wait));
-	embeddedMethods.add(StringId::type, StringId::Invalid, NativeMethod(native_type));
-	embeddedMethods.add(StringId::objectId, StringId::Invalid, NativeMethod(native_objectId));
-	embeddedMethods.add(StringId::_check, StringId::Invalid, NativeMethod(native_check));
-	embeddedMethods.add(StringId::_checkCmd, StringId::Invalid, NativeMethod(native_checkCmd));
-	embeddedMethods.add(StringId::_incrementTestTimer, StringId::Invalid, NativeMethod(native_incrementTestTimer));
+	embeddedMethods.add(NativeMethod(StringId::log, StringId::Invalid, native_log));
+	embeddedMethods.add(NativeMethod(StringId::dump, StringId::Invalid, native_dump));
+	embeddedMethods.add(NativeMethod(StringId::gc, StringId::Invalid, native_gc));
+	embeddedMethods.add(NativeMethod(StringId::_native_time, StringId::Invalid, native_time));
+	embeddedMethods.add(NativeMethod(StringId::_native_sleep, StringId::Invalid, native_sleep));
+	embeddedMethods.add(NativeMethod(StringId::_native_wait, StringId::Invalid, native_wait));
+	embeddedMethods.add(NativeMethod(StringId::type, StringId::Invalid, native_type));
+	embeddedMethods.add(NativeMethod(StringId::objectId, StringId::Invalid, native_objectId));
+	embeddedMethods.add(NativeMethod(StringId::_check, StringId::Invalid, native_check));
+	embeddedMethods.add(NativeMethod(StringId::_checkCmd, StringId::Invalid, native_checkCmd));
+	embeddedMethods.add(NativeMethod(StringId::_incrementTestTimer, StringId::Invalid, native_incrementTestTimer));
 }
 
 void registerEmbeddedFunctions(MethodTable& methods, AsyncOperatorTable& operators) {

@@ -368,6 +368,8 @@ int runLanguageTests(int argc, char* argv[]) {
 					throw OptionError();
 				optParseFile = argv[++i];
 			}
+			else if (opt == "-diag")  // What's this?  This is observed only under CTest.
+				continue;
 			else
 				throw OptionError();
 		}

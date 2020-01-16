@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -688,7 +688,7 @@ void Thread::methodCall(bool hasSetArg) {
 		throw RuntimeException(StringId::UnsupportedOperationException);
 	}
 
-	if (!methodValue->getNativeMethod().isNull()) {
+	if (methodValue->getNativeMethod() != nullptr) {
 		auto isNative = invokeNativeMethod(callerFrame,
 				methodValue->hasSource() ? &methodValue->getSourceRef().deref<ObjectBase>() : nullptr,
 				methodValue, argsValue, [&]() { f.pop(valueIndex + 1, f.values.size() - 1); });
@@ -866,8 +866,8 @@ template <typename PostProcess>
 bool Thread::invokeNativeMethod(size_t callerFrame, ObjectBase* object,
 		TemporaryObject* methodValue, TemporaryObject* argsValue, PostProcess postProcess) {
 
-	auto nativeMethod = methodValue->getNativeMethod();
-	if (nativeMethod.isNull())
+	auto* nativeMethod = methodValue->getNativeMethod();
+	if (nativeMethod == nullptr)
 		return false;
 
 	// This is required for avoiding conflicts with resuming this thread and postProcess()
@@ -881,7 +881,7 @@ bool Thread::invokeNativeMethod(size_t callerFrame, ObjectBase* object,
 	pauseRequested = false;
 	try {
 		auto& emptyTuple = *this->emptyTuple;
-		(*nativeMethod.method)(nativeMethod.handler, *this, object, method->name, method->subName,
+		(*nativeMethod->method)(nativeMethod->handler, *this, object, method->name, method->subName,
 				argsValue == nullptr ? emptyTuple : argsValue->getRef().deref<Tuple>(), ret);
 	}
 	catch (RuntimeException&) {

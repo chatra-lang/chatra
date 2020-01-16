@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.5)
 project(Chatra CXX)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -55,4 +55,12 @@ if (CHATRA_ENABLE_LANGUAGE_TESTS)
     target_link_libraries(chatra chatra_core chatra_emb chatra_language_test ${CMAKE_THREAD_LIBS_INIT})
 else()
     target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
+endif()
+
+if (CHATRA_ENABLE_LANGUAGE_TESTS)
+	enable_testing()
+	add_test(NAME language_test CONFIGURATIONS Debug 
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} 
+		COMMAND $<TARGET_FILE:chatra> "--language-test" "--baseline"
+		)
 endif()

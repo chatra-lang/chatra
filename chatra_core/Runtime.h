@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,10 +136,7 @@ private:
 	const Method* method0 = nullptr;
 	const Method* method1 = nullptr;
 	bool methodHasArgs = false;
-
-	NativeMethod nativeMethod = NativeMethod(nullptr);
-	StringId nativeMethodName = StringId::Invalid;
-	StringId nativeMethodSubName = StringId::Invalid;
+	const NativeMethod* nativeMethod = nullptr;
 
 	// Restrictions
 	bool hasName = false;
@@ -294,7 +291,7 @@ public:
 	const Method* getRefMethod() const;
 	const Method* getSetMethod() const;
 	bool methodHasArguments() const;
-	NativeMethod getNativeMethod() const;
+	const NativeMethod* getNativeMethod() const;
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS_WITH_THREAD(TemporaryObject);
 	CHATRA_DECLARE_SERIALIZE_OBJECT_REFS_METHODS;
@@ -449,7 +446,7 @@ public:
 #ifdef CHATRA_DEBUG_LOCK
 	Thread* thread = nullptr;
 	size_t frameIndex = SIZE_MAX;
-	unsigned id = UINT_MAX;
+	unsigned id = std::numeric_limits<unsigned>::max();
 	std::unordered_set<Reference> suspendedRefs;
 	mutable bool saved = false;
 

@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include <iterator>
 #include <utility>
 #include <limits>
+#include <cstddef>
 #include <climits>
 #include <cstdint>
 #include <cassert>
@@ -63,9 +64,17 @@
 
 #if defined(__clang__)
 	#define CHATRA_FALLTHROUGH  [[clang::fallthrough]]
-#elif defined(__GNUC__)
-	#define CHATRA_FALLTHROUGH  [[fallthrough]]
-#else
+	#define CHATRA_FALLTHROUGH_DEFINED
+#endif
+
+#if defined(__GNUC__)
+	#if __GNUC__ >= 7
+		#define CHATRA_FALLTHROUGH  [[gnu::fallthrough]]
+		#define CHATRA_FALLTHROUGH_DEFINED
+	#endif
+#endif
+
+#ifndef CHATRA_FALLTHROUGH_DEFINED
 	#define CHATRA_FALLTHROUGH
 #endif
 

@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -171,15 +171,15 @@ static StringId getStringIdOrThrow(const StringTable* sTable, const std::string&
 	return sid;
 }
 
-static std::vector<std::tuple<StringId, StringId, NativeMethod>> filterNativeMethods(
+static std::vector<NativeMethod> filterNativeMethods(
 		const StringTable* sTable, const std::vector<NativeCallHandlerInfo>& handlers, StringId sidClass = StringId::Invalid) {
 
-	std::vector<std::tuple<StringId, StringId, NativeMethod>> ret;
+	std::vector<NativeMethod> ret;
 	for (auto& e : handlers) {
 		try {
 			if (sidClass == getStringIdOrThrow(sTable, e.className)) {
 				ret.emplace_back(getStringIdOrThrow(sTable, e.name), getStringIdOrThrow(sTable, e.subName),
-						NativeMethod(nativeCall, e.handler));
+						nativeCall, e.handler);
 			}
 		}
 		catch (RuntimeException&) {
@@ -401,7 +401,7 @@ void RuntimeImp::launchFinalizerThread() {
 void RuntimeImp::launchSystem(unsigned initialThreadCount) {
 	timers.emplace("", newSystemTimer());
 
-	multiThread = (initialThreadCount != UINT_MAX);
+	multiThread = (initialThreadCount != std::numeric_limits<unsigned>::max());
 	if (multiThread)
 		setWorkers(initialThreadCount);
 }
@@ -951,7 +951,7 @@ void RuntimeImp::enqueue(Thread* thread) {
 
 	/*{
 		static unsigned count = 0;
-		static constexpr unsigned breakCount = UINT_MAX;  // UINT_MAX
+		static constexpr unsigned breakCount = std::numeric_limits<unsigned>::max();  // std::numeric_limits<unsigned>::max()
 		std::unique_lock<std::mutex> lock(mtQueue);
 		count++;
 		if (count == breakCount)
@@ -1106,7 +1106,7 @@ void RuntimeImp::initialize(unsigned initialThreadCount) {
 }
 
 void RuntimeImp::initialize(unsigned initialThreadCount, const std::vector<uint8_t>& savedState) {
-	multiThread = (initialThreadCount != UINT_MAX);
+	multiThread = (initialThreadCount != std::numeric_limits<unsigned>::max());
 
 	registerEmbeddedClasses(classes);
 	registerEmbeddedFunctions(methods, operators);
@@ -1245,7 +1245,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 	}
 
 	for (; workerThreads.size() < threadCount; nextId++) {
-		workerThreads.emplace(nextId, new std::thread([&, this](unsigned wsId) {
+		workerThreads.emplace(nextId, std::unique_ptr<std::thread>(new std::thread([&, this](unsigned wsId) {
 			for (;;) {
 				Thread* thread;
 				{
@@ -1271,7 +1271,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 					outputError("fatal: uncaught exception raised\n");
 				}
 			}
-		}, nextId));
+		}, nextId)));
 	}
 	cvQueue.notify_all();
 }
