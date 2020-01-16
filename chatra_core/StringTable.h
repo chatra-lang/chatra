@@ -157,6 +157,8 @@ enum class StringId : uint_least32_t {
 	ArrayKeyedIterator,
 	DictIterator,
 	DictKeyedIterator,
+	Sequence,
+	VariableLengthSequence,
 	ArrayView,
 	Async,
 	String,

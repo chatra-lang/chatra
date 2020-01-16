@@ -28,6 +28,8 @@
 #include <cstring>
 #include <cerrno>
 
+namespace chatraEmbFormat {
+
 static const char* script =
 #include "format.cha"
 ;
@@ -412,8 +414,10 @@ static void format(cha::Ct& ct) {
 	ct.setString(out);
 }
 
-cha::PackageInfo chatra_emb_formatPackageInfo() {
+cha::PackageInfo packageInfo() {
 	return {{{"format", script}}, {
 			{format, "_native_format"}
 	}, nullptr};
 }
+
+}  // namespace chatraEmbFormat

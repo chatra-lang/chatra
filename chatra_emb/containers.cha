@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,123 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
+def ByteArray extends VariableLengthSequence
+	def _init_instance() as native
+	def _init_instance(value) as native
+
+	def init()
+		super()
+		_init_instance()
+
+	def init(value: String)
+		super()
+		_init_instance(value)
+
+	def init(value: ByteArray)
+		super()
+		_init_instance(value)
+
+	def size() as native
+
+	def has(value)
+		t0 = size()
+		t1 = 0
+		while t1 < t0
+			if _native_at(t1++) == a0
+				return true
+		return false
+
+	def _native_add(a0) as native
+
+	def add(a0...;)
+		t0 = a0.size()
+		t1 = 0
+		while t1 < t0
+			_native_add(a0[t1++])
+		return self
+
+	def add(a0)
+		_native_add(a0)
+		return self
+
+	def _native_insert(a0, a1) as native
+
+	def insert(position: Int, a0...;)
+		t0 = a0.size()
+		t1 = 0
+		while t1 < t0
+			_native_insert(position + t1, a0[t1])
+			t1++
+		return self
+
+	def insert(position: Int, a0)
+		_native_insert(position, a0)
+		return self
+
+	def _native_at(a0) as native
+
+	def (position: Int)
+		return _native_at(position)
+
+	def _native_at(a0, a1) as native
+
+	def (position: Int).set(r)
+		return _native_at(position, r)
+
+	def remove(position: Int) as native
+
+	def remove(a0: IndexSet)
+		t0 = Array()
+		if a0.first == a0.last
+			return t0
+		t2 = size
+		if a0.ascend
+			for t1 in a0.reverse
+				t0.insert(0, remove(t1 >= 0 ? t1 : t2 + t1))
+		else
+			for t1 in a0
+				t0.add(remove(t1 >= 0 ? t1 : t2 + t1))
+		return t0
+
+	def clear()
+		while size > 0
+			remove(size - 1)
+		return self
+
+	def clone()
+		return ByteArray().append(self)
+
+	def equals(a0)
+		if a0 == null or !(a0 is Sequence)
+			return false
+		if size != a0.size
+			return false
+		t0 = size
+		t1 = 0
+		while t1 < t0
+			if self[t1] != a0[t1]
+				return false
+			t1++
+		return true
+
+	def sub(a0: IndexSet)
+		return ArrayView(self, a0)
+
+	def iterator()
+		return ArrayIterator(self)
+
+	def keyedIterator()
+		return ArrayKeyedIterator(self)
+
+	def toArray()
+		return Array().append(self)
+
+	def toString()
+		return 'ByteArray' + toArray().toString()
+
 // TODO
+// Deque
+// List
+// Set, Map -> HashSet, HashMap (with hashCode(), equals())
 
 CHATRA_IGNORE_THIS_LINE )***"
