@@ -1,5 +1,7 @@
 add_library(chatra_emb
         EmbeddedLibraries.cpp
+        EmbInternal.h
+        EmbInternal.cpp
         sys.cha
         sysNative.cpp
         format.cha
@@ -7,6 +9,8 @@ add_library(chatra_emb
         regex.cha
         regexNative_srell.h
         regexNative.cpp
+        containers.cha
+        containersNative.cpp
         )
 
 target_link_libraries(chatra_emb INTERFACE chatra_core)

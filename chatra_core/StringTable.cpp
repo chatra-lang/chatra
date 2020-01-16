@@ -150,6 +150,8 @@ StringTable::StringTable() noexcept {
 			{"ArrayKeyedIterator", StringId::ArrayKeyedIterator},
 			{"DictIterator", StringId::DictIterator},
 			{"DictKeyedIterator", StringId::DictKeyedIterator},
+			{"Sequence", StringId::Sequence},
+			{"VariableLengthSequence", StringId::VariableLengthSequence},
 			{"ArrayView", StringId::ArrayView},
 			{"Async", StringId::Async},
 			{"String", StringId::String},

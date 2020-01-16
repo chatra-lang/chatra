@@ -123,8 +123,8 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-#if 0
-	//const char* args_test[] = {"chatra", "--language-test", "--baseline"};
+#if 1
+	const char* args_test[] = {"chatra", "--language-test", "--baseline"};
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize", "1000"};
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "exceptions: 5 4 14 97 15 28"};
 	//const char* args_test[] = {"chatra", "samples_in_docs/readme_first_sample.cha"};
