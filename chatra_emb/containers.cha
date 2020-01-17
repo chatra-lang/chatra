@@ -37,6 +37,12 @@ def ByteArray extends VariableLengthSequence
 
 	def size() as native
 
+	def _native_resize(a0) as native
+
+	def resize(newSize: Int)
+		_native_resize(newSize)
+		return self
+
 	def has(value)
 		t0 = size()
 		t1 = 0
