@@ -1,8 +1,7 @@
-CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +17,22 @@ CHATRA_IGNORE_THIS_LINE R"***(
  *
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
+#ifndef CHATRA_CONTAINERSNATIVE_H
+#define CHATRA_CONTAINERSNATIVE_H
 
-// TODO
+#include "EmbInternal.h"
+using namespace chatraEmb;
 
-CHATRA_IGNORE_THIS_LINE )***"
+namespace chatraEmbContainers {
+
+struct ByteArray {
+	SpinLock lock;
+	std::vector<uint8_t> data;
+};
+
+ByteArray& refByteArray(cha::Ref& ref);
+
+
+}  // namespace chatraEmbContainers
+
+#endif //CHATRA_CONTAINERSNATIVE_H

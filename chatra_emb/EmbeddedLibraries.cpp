@@ -27,6 +27,7 @@ namespace chatraEmbSys { cha::PackageInfo packageInfo(); }
 namespace chatraEmbFormat { cha::PackageInfo packageInfo(); }
 namespace chatraEmbRegex { cha::PackageInfo packageInfo(); }
 namespace chatraEmbContainers { cha::PackageInfo packageInfo(); }
+namespace chatraEmbIo { cha::PackageInfo packageInfo(); }
 
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
@@ -42,6 +43,7 @@ static void initialize() {
 			chatraEmbFormat::packageInfo(),
 			chatraEmbRegex::packageInfo(),
 			chatraEmbContainers::packageInfo(),
+			chatraEmbIo::packageInfo(),
 	};
 
 	for (auto& pi : packageList)

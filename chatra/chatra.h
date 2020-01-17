@@ -307,6 +307,34 @@ struct PackageInfo {
 // This requires "chatra_emb" module.
 PackageInfo queryEmbeddedPackage(const std::string& packageName);
 
+enum class SeekOrigin {
+	Begin, End, Current
+};
+
+struct IFile {
+	virtual ~IFile() = default;
+
+	virtual void close() = 0;
+	virtual void flush() = 0;
+	virtual size_t available() = 0;
+	virtual size_t position() = 0;
+	virtual void seek(ptrdiff_t offset, SeekOrigin origin) = 0;
+	virtual size_t read(uint8_t* dest, size_t length) = 0;
+	virtual size_t write(const uint8_t* src, size_t length) = 0;
+};
+
+namespace FileOpenFlags {
+	using Type = unsigned;
+	constexpr Type Read = 0x1U;
+	constexpr Type Write = 0x2U;
+	constexpr Type Append = 0x4U | Write;
+}
+
+// This requires "chatra_emb" module.
+std::unique_ptr<IFile> openStandardFile(const std::string& fileName, FileOpenFlags::Type flags,
+		const NativeReference& kwargs);
+
+
 struct IHost {
 	virtual ~IHost() = default;
 
@@ -315,6 +343,11 @@ struct IHost {
 	virtual PackageInfo queryPackage(const std::string& packageName) {
 		(void)packageName;
 		return {{}, {}, nullptr};  // or return queryEmbeddedPackage(packageName);
+	}
+
+	virtual std::unique_ptr<IFile> openFile(const std::string& fileName, FileOpenFlags::Type flags,
+			const NativeReference& kwargs) {
+		return nullptr;
 	}
 };
 
