@@ -19,16 +19,18 @@
  */
 
 #include "EmbInternal.h"
-using namespace chatraEmb;
 
 #include "containersNative.h"
 #include <cstdio>
+#include <algorithm>
 
 // note: This is not part of C++11 standard
 // This is because there is no canonical way in C++11 standard to get length of binary files.
 #include <sys/stat.h>
 
-namespace chatraEmbIo {
+namespace chatra {
+namespace emb {
+namespace io {
 
 static const char* script =
 #include "io.cha"
@@ -63,76 +65,93 @@ struct IoPackageInterface : public cha::IPackage {
 		std::vector<uint8_t> buffer;
 
 		// TODO
+		(void)ptr;
 
 		return buffer;
 	}
 
 	cha::INativePtr* restoreNativePtr(cha::PackageContext& pct, const std::vector<uint8_t>& stream) override {
 		(void)pct;
-		size_t offset = 0;
+		// size_t offset = 0;
 
 		// TODO
+		(void)stream;
+
 		return nullptr;
 	}
 };
 
 static void fileInputStream_initInstance(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileInputStream_close(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileInputStream_available(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileInputStream_read(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileInputStream_seek(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileInputStream_position(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileOutputStream_initInstance(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileOutputStream_close(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileOutputStream_flush(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileOutputStream_write(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileOutputStream_seek(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void fileOutputStream_position(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void reader_convertToString(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
 static void writer_convertToUtf8(cha::Ct& ct) {
 	// TODO
+	(void)ct;
 }
 
-cha::PackageInfo packageInfo() {
+PackageInfo packageInfo() {
 	return {{{"io", script}}, {
 			{fileInputStream_initInstance, "FileInputStream", "_init_instance"},
 			{fileInputStream_close, "FileInputStream", "close"},
@@ -151,7 +170,11 @@ cha::PackageInfo packageInfo() {
 	}, std::make_shared<IoPackageInterface>()};
 }
 
-}  // namespace chatraEmbIo
+}  // namespace io
+}  // namespace emb
+}  // namespace chatra
+
+// TODO split file
 
 namespace chatra {
 
@@ -274,6 +297,9 @@ std::unique_ptr<IFile> openStandardFile(const std::string& fileName, FileOpenFla
 	(void)kwargs;
 
 	// TODO Do not use 'a' mode
+	(void)fileName;
+	(void)flags;
+
 	return nullptr;
 }
 

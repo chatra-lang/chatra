@@ -20,7 +20,9 @@
 
 #include "containersNative.h"
 
-namespace chatraEmbContainers {
+namespace chatra {
+namespace emb {
+namespace containers {
 
 static const char *script =
 #include "containers.cha"
@@ -187,7 +189,7 @@ static void byteArray_remove(cha::Ct& ct) {
 	self->data.erase(self->data.cbegin() + position);
 }
 
-cha::PackageInfo packageInfo() {
+PackageInfo packageInfo() {
 	return {{{"containers", script}}, {
 			{byteArray_initInstance, "ByteArray", "_init_instance"},
 			{byteArray_size, "ByteArray", "size"},
@@ -200,4 +202,6 @@ cha::PackageInfo packageInfo() {
 }
 
 
-}  // namespace chatraEmbContainers
+}  // namespace containers
+}  // namespace emb
+}  // namespace chatra

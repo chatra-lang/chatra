@@ -24,7 +24,12 @@
 #include <atomic>
 #include <mutex>
 
-namespace chatraEmb {
+#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
+	#define CHATRA_MAYBE_GCC   __GNUC__
+#endif
+
+namespace chatra {
+namespace emb {
 
 class SpinLock {
 private:
@@ -32,8 +37,7 @@ private:
 
 public:
 	void lock() {
-		while (flag.test_and_set(std::memory_order_acq_rel))
-			;
+		while (flag.test_and_set(std::memory_order_acq_rel));
 	}
 
 	void unlock() {
@@ -41,24 +45,25 @@ public:
 	}
 };
 
-void writeRawInt(std::vector<uint8_t>& buffer, int64_t value);
+void writeRawInt(std::vector<uint8_t> &buffer, int64_t value);
 
-template <class Type>
-inline void writeInt(std::vector<uint8_t>& buffer, Type value) {
+template<class Type>
+inline void writeInt(std::vector<uint8_t> &buffer, Type value) {
 	writeRawInt(buffer, static_cast<int64_t>(value));
 }
 
-void writeString(std::vector<uint8_t>& buffer, const std::string& str);
+void writeString(std::vector<uint8_t> &buffer, const std::string &str);
 
-int64_t readRawInt(const std::vector<uint8_t>& buffer, size_t& offset);
+int64_t readRawInt(const std::vector<uint8_t> &buffer, size_t &offset);
 
-template <class Type>
-inline Type readInt(const std::vector<uint8_t>& buffer, size_t& offset) {
+template<class Type>
+inline Type readInt(const std::vector<uint8_t> &buffer, size_t &offset) {
 	return static_cast<Type>(readRawInt(buffer, offset));
 }
 
-std::string readString(const std::vector<uint8_t>& buffer, size_t& offset);
+std::string readString(const std::vector<uint8_t> &buffer, size_t &offset);
 
-}  // namespace chatraEmb
+}  // namespace emb
+}  // namespace chatra
 
 #endif //CHATRA_EMBINTERNAL_H

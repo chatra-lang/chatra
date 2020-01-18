@@ -18,9 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#include "chatra.h"
+#include "EmbInternal.h"
 #include <algorithm>
-#include <iterator>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -28,7 +27,9 @@
 #include <cstring>
 #include <cerrno>
 
-namespace chatraEmbFormat {
+namespace chatra {
+namespace emb {
+namespace format {
 
 static const char* script =
 #include "format.cha"
@@ -84,13 +85,17 @@ static std::string restoreValue(const std::string& value) {
 	return out;
 }
 
-template <class Type>
-static std::string convert(size_t specifierIndex, char* spec, size_t specSize, const char* type, Type value) {
-#if defined(__GNUC__)
+#if defined(__clang__)
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
+#if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Wformat-nonliteral"
 #endif
 
+template <class Type>
+static std::string convert(size_t specifierIndex, char* spec, size_t specSize, const char* type, Type value) {
 	std::strcpy(spec + specSize, type);
 	auto length = std::snprintf(nullptr, 0, spec, value);
 	if (length < 0)
@@ -99,11 +104,14 @@ static std::string convert(size_t specifierIndex, char* spec, size_t specSize, c
 	std::vector<char> buffer(length + 1);
 	std::snprintf(buffer.data(), buffer.size(), spec, value);
 	return std::string(buffer.data());
+}
 
-#if defined(__GNUC__)
+#if defined(__clang__)
+	#pragma clang diagnostic pop
+#endif
+#if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic pop
 #endif
-}
 
 template <typename IsDigitPred>
 static void postProcess(std::string& valueString,
@@ -420,10 +428,12 @@ static void format(cha::Ct& ct) {
 	ct.setString(out);
 }
 
-cha::PackageInfo packageInfo() {
+PackageInfo packageInfo() {
 	return {{{"format", script}}, {
 			{format, "_native_format"}
 	}, nullptr};
 }
 
-}  // namespace chatraEmbFormat
+}  // namespace format
+}  // namespace emb
+}  // namespace chatra

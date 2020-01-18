@@ -346,6 +346,7 @@ struct IHost {
 
 	virtual std::unique_ptr<IFile> openFile(const std::string& fileName, FileOpenFlags::Type flags,
 			const NativeReference& kwargs) {
+		(void)fileName; (void)flags; (void)kwargs;
 		return nullptr;
 	}
 };
