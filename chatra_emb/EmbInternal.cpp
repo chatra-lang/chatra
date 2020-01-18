@@ -20,9 +20,10 @@
 
 #include "EmbInternal.h"
 
-namespace chatraEmb {
+namespace chatra {
+namespace emb {
 
-void writeRawInt(std::vector<uint8_t>& buffer, int64_t value) {
+void writeRawInt(std::vector<uint8_t> &buffer, int64_t value) {
 	int sign = (value >= 0 ? 1 : -1);
 	auto t = (sign > 0 ? static_cast<uint64_t>(value) : static_cast<uint64_t>(~value));
 	if (sign > 0 && t < 128) {
@@ -39,18 +40,18 @@ void writeRawInt(std::vector<uint8_t>& buffer, int64_t value) {
 	}
 }
 
-void writeString(std::vector<uint8_t>& buffer, const std::string& str) {
+void writeString(std::vector<uint8_t> &buffer, const std::string &str) {
 	writeInt(buffer, static_cast<uint64_t>(str.length()));
-	auto* ptr = reinterpret_cast<const uint8_t*>(str.data());
+	auto *ptr = reinterpret_cast<const uint8_t *>(str.data());
 	buffer.insert(buffer.cend(), ptr, ptr + str.length());
 }
 
-static void checkSpace(const std::vector<uint8_t>& buffer, size_t offset, size_t size = 1) {
+static void checkSpace(const std::vector<uint8_t> &buffer, size_t offset, size_t size = 1) {
 	if (offset + size > buffer.size())
 		throw cha::IllegalArgumentException("broken stream");
 }
 
-int64_t readRawInt(const std::vector<uint8_t>& buffer, size_t& offset) {
+int64_t readRawInt(const std::vector<uint8_t> &buffer, size_t &offset) {
 	checkSpace(buffer, offset);
 	auto t = static_cast<uint64_t>(buffer[offset++]);
 	if (t < 128)
@@ -69,13 +70,14 @@ int64_t readRawInt(const std::vector<uint8_t>& buffer, size_t& offset) {
 	throw cha::IllegalArgumentException("broken stream");
 }
 
-std::string readString(const std::vector<uint8_t>& buffer, size_t& offset) {
+std::string readString(const std::vector<uint8_t> &buffer, size_t &offset) {
 	auto length = readInt<size_t>(buffer, offset);
 	if (offset + length > buffer.size())
 		throw cha::NativeException();
-	auto* ptr = reinterpret_cast<const char*>(buffer.data() + offset);
+	auto *ptr = reinterpret_cast<const char *>(buffer.data() + offset);
 	offset += length;
 	return std::string(ptr, ptr + length);
 }
 
-}  // namespace chatraEmb
+}  // namespace emb
+}  // namespace chatra

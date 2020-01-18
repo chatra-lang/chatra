@@ -23,11 +23,15 @@
 #include <atomic>
 #include <mutex>
 
-namespace chatraEmbSys { cha::PackageInfo packageInfo(); }
-namespace chatraEmbFormat { cha::PackageInfo packageInfo(); }
-namespace chatraEmbRegex { cha::PackageInfo packageInfo(); }
-namespace chatraEmbContainers { cha::PackageInfo packageInfo(); }
-namespace chatraEmbIo { cha::PackageInfo packageInfo(); }
+namespace chatra {
+
+namespace emb {
+namespace sys { cha::PackageInfo packageInfo(); }
+namespace format { cha::PackageInfo packageInfo(); }
+namespace regex { cha::PackageInfo packageInfo(); }
+namespace containers { cha::PackageInfo packageInfo(); }
+namespace io { cha::PackageInfo packageInfo(); }
+}  // namespace emb
 
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
@@ -39,11 +43,11 @@ static void initialize() {
 		return;
 
 	std::vector<cha::PackageInfo> packageList = {
-			chatraEmbSys::packageInfo(),
-			chatraEmbFormat::packageInfo(),
-			chatraEmbRegex::packageInfo(),
-			chatraEmbContainers::packageInfo(),
-			chatraEmbIo::packageInfo(),
+			emb::sys::packageInfo(),
+			emb::format::packageInfo(),
+			emb::regex::packageInfo(),
+			emb::containers::packageInfo(),
+			emb::io::packageInfo(),
 	};
 
 	for (auto& pi : packageList)
@@ -52,11 +56,11 @@ static void initialize() {
 	initialized = true;
 }
 
-namespace chatra {
 PackageInfo queryEmbeddedPackage(const std::string& packageName) {
 	if (!initialized)
 		initialize();
 	auto it = packages.find(packageName);
 	return it != packages.cend() ? it->second : PackageInfo{{}, {}, nullptr};
 }
+
 }  // namespace chatra

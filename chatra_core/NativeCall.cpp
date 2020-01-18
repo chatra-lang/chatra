@@ -34,12 +34,16 @@ NativeException::NativeException(const char* format, ...) {
 	va_end(args);
 }
 
-void NativeException::setMessage(const char *format, va_list args) {
-#if defined(__GNUC__)
+#if defined(__clang__)
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
+#if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Wformat-nonliteral"
 #endif
 
+void NativeException::setMessage(const char *format, va_list args) {
 	va_list args2;
 	va_copy(args2, args);
 	auto length = std::vsnprintf(nullptr, 0, format, args);
@@ -51,11 +55,14 @@ void NativeException::setMessage(const char *format, va_list args) {
 		message = std::string(buffer.data());
 	}
 	va_end(args2);
+}
 
-#if defined(__GNUC__)
+#if defined(__clang__)
+	#pragma clang diagnostic pop
+#endif
+#if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic pop
 #endif
-}
 
 NativeEventObjectImp::NativeEventObjectImp(RuntimeImp& runtime, unsigned waitingId) noexcept
 		: runtime(runtime), waitingId(waitingId) {

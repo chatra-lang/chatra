@@ -56,6 +56,10 @@
 #include <cstdio>
 #endif // !NDEBUG
 
+#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
+	#define CHATRA_MAYBE_GCC   __GNUC__
+#endif
+
 #ifndef CHATRA_WHEN
 	#define CHATRA_WHEN(...)  typename std::enable_if<__VA_ARGS__, std::nullptr_t>::type = nullptr
 #endif
@@ -67,7 +71,7 @@
 	#define CHATRA_FALLTHROUGH_DEFINED
 #endif
 
-#if defined(__GNUC__)
+#if defined(CHATRA_MAYBE_GCC)
 	#if __GNUC__ >= 7
 		#define CHATRA_FALLTHROUGH  [[gnu::fallthrough]]
 		#define CHATRA_FALLTHROUGH_DEFINED

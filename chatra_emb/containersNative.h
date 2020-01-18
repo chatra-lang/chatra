@@ -21,9 +21,10 @@
 #define CHATRA_CONTAINERSNATIVE_H
 
 #include "EmbInternal.h"
-using namespace chatraEmb;
 
-namespace chatraEmbContainers {
+namespace chatra {
+namespace emb {
+namespace containers {
 
 struct ByteArray {
 	SpinLock lock;
@@ -33,6 +34,8 @@ struct ByteArray {
 ByteArray& refByteArray(cha::Ref& ref);
 
 
-}  // namespace chatraEmbContainers
+}  // namespace containers
+}  // namespace emb
+}  // namespace chatra
 
 #endif //CHATRA_CONTAINERSNATIVE_H
