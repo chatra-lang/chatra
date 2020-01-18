@@ -19,7 +19,6 @@
  */
 
 #include "EmbInternal.h"
-using namespace chatraEmb;
 
 // note: <regex> in C++11 only supports char or wchar_t;
 // This specification does not have sufficient capabilities to support unicode string.
@@ -29,20 +28,31 @@ using namespace chatraEmb;
 // SRELL
 // http://www.akenotsuki.com/misc/srell/
 
-#if defined(__GNUC__)
+#if defined(__clang__)
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+	#pragma clang diagnostic ignored "-Wdocumentation"
+	#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+#endif
+#if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
-	#pragma GCC diagnostic ignored "-Wuninitialized"
+	#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
 #include "regexNative_srell.h"
 
-#if defined(__GNUC__)
+#if defined(__clang__)
+	#pragma GCC diagnostic pop
+#endif
+#if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic pop
 #endif
 
 
-namespace chatraEmbRegex {
+namespace chatra {
+namespace emb {
+namespace regex {
 
 static const char* script =
 #include "regex.cha"
@@ -155,7 +165,7 @@ struct RegexPackageInterface : public cha::IPackage {
 	}
 };
 
-static void processException(srell::regex_error& ex) {
+[[noreturn]] static void processException(srell::regex_error& ex) {
 	const char* message = "internal error";
 	switch (ex.code()) {
 	case srell::regex_constants::error_escape:
@@ -343,7 +353,7 @@ static void patternStr(cha::Ct& ct) {
 	ct.set(m->m.str(position));
 }
 
-cha::PackageInfo packageInfo() {
+PackageInfo packageInfo() {
 	return {{{"regex", script}}, {
 			{compile, "_native_compile"},
 			{search, "Pattern", "_native_search"},
@@ -356,4 +366,6 @@ cha::PackageInfo packageInfo() {
 	}, std::make_shared<RegexPackageInterface>()};
 }
 
-} // namespace chatraEmbRegex
+} // namespace regex
+} // namespace emb
+} // namespace chatra

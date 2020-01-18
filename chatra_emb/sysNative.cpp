@@ -20,14 +20,18 @@
 
 #include "chatra.h"
 
-namespace chatraEmbSys {
+namespace chatra {
+namespace emb {
+namespace sys {
 
 static const char* script =
 #include "sys.cha"
 ;
 
-cha::PackageInfo packageInfo() {
+PackageInfo packageInfo() {
 	return {{{"sys", script}}, {}, nullptr};
 }
 
-}  // namespace chatraEmbSys
+}  // namespace sys
+}  // namespace emb
+}  // namespace chatra
