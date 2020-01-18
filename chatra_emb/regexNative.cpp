@@ -37,7 +37,7 @@
 #if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic push
 	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
-	#pragma GCC diagnostic ignored "-Wuninitialized"
+	#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
 #include "regexNative_srell.h"
