@@ -190,7 +190,8 @@ static void byteArray_remove(cha::Ct& ct) {
 }
 
 PackageInfo packageInfo() {
-	return {{{"containers", script}}, {
+	std::vector<Script> scripts = {{"containers", script}};
+	std::vector<HandlerInfo> handlers = {
 			{byteArray_initInstance, "ByteArray", "_init_instance"},
 			{byteArray_size, "ByteArray", "size"},
 			{byteArray_resize, "ByteArray", "_native_resize"},
@@ -198,7 +199,8 @@ PackageInfo packageInfo() {
 			{byteArray_insert, "ByteArray", "_native_insert"},
 			{byteArray_at, "ByteArray", "_native_at"},
 			{byteArray_remove, "ByteArray", "remove"},
-	}, std::make_shared<ContainersPackageInterface>()};
+	};
+	return {scripts, handlers, std::make_shared<ContainersPackageInterface>()};
 }
 
 

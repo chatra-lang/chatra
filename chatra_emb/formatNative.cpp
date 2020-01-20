@@ -429,9 +429,11 @@ static void format(cha::Ct& ct) {
 }
 
 PackageInfo packageInfo() {
-	return {{{"format", script}}, {
+	std::vector<Script> scripts = {{"format", script}};
+	std::vector<HandlerInfo> handlers = {
 			{format, "_native_format"}
-	}, nullptr};
+	};
+	return {scripts, handlers, nullptr};
 }
 
 }  // namespace format

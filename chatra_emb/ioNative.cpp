@@ -152,7 +152,8 @@ static void writer_convertToUtf8(cha::Ct& ct) {
 }
 
 PackageInfo packageInfo() {
-	return {{{"io", script}}, {
+	std::vector<Script> scripts = {{"io", script}};
+	std::vector<HandlerInfo> handlers = {
 			{fileInputStream_initInstance, "FileInputStream", "_init_instance"},
 			{fileInputStream_close, "FileInputStream", "close"},
 			{fileInputStream_available, "FileInputStream", "available"},
@@ -167,7 +168,8 @@ PackageInfo packageInfo() {
 			{fileOutputStream_position, "FileOutputStream", "position"},
 			{reader_convertToString, "Reader", "_convertToString"},
 			{writer_convertToUtf8, "Writer", "_convertToUtf8"},
-	}, std::make_shared<IoPackageInterface>()};
+	};
+	return {scripts, handlers, std::make_shared<IoPackageInterface>()};
 }
 
 }  // namespace io

@@ -354,7 +354,8 @@ static void patternStr(cha::Ct& ct) {
 }
 
 PackageInfo packageInfo() {
-	return {{{"regex", script}}, {
+	std::vector<Script> scripts = {{"regex", script}};
+	std::vector<HandlerInfo> handlers = {
 			{compile, "_native_compile"},
 			{search, "Pattern", "_native_search"},
 			{match, "Pattern", "_native_match"},
@@ -363,7 +364,8 @@ PackageInfo packageInfo() {
 			{patternPosition, "Match", "_native_position"},
 			{patternLength, "Match", "_native_length"},
 			{patternStr, "Match", "_native_str"},
-	}, std::make_shared<RegexPackageInterface>()};
+	};
+	return {scripts, handlers, std::make_shared<RegexPackageInterface>()};
 }
 
 } // namespace regex
