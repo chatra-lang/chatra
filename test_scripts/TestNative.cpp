@@ -248,10 +248,12 @@ static void testCommand(cha::Ct& ct) {
 }
 
 cha::PackageInfo getTestNativePackage() {
-	return {{{packageName, script}}, {
-		{testCommand, "testCommand"},
-		{testCommand, "TestClass", "init"},
-		{testCommand, "TestClass", "init", "native"},
-		{testCommand, "TestClass", "method"}
-	}, std::make_shared<TestPackageInterface>()};
+	std::vector<cha::Script> scripts = {{packageName, script}};
+	std::vector<cha::HandlerInfo> handlers = {
+			{testCommand, "testCommand"},
+			{testCommand, "TestClass", "init"},
+			{testCommand, "TestClass", "init", "native"},
+			{testCommand, "TestClass", "method"}
+	};
+	return {scripts, handlers, std::make_shared<TestPackageInterface>()};
 }
