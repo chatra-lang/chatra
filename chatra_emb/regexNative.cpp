@@ -36,7 +36,9 @@
 #endif
 #if defined(CHATRA_MAYBE_GCC)
 	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+	#if __GNUC__ >= 7
+		#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+	#endif
 	#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
