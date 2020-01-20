@@ -13,7 +13,7 @@ set(CMAKE_CXX_FLAGS "-Wall -W \
 -Wno-c++98-compat-pedantic -Wno-sign-conversion -Wno-float-equal -Wno-padded \
 -Wno-shadow -Wno-shadow-field-in-constructor -Wno-shadow-uncaptured-local \
 -Wno-global-constructors -Wno-exit-time-destructors \
--Wno-switch-enum -Wno-weak-vtables")
+-Wno-switch-enum -Wno-weak-vtables -Wno-covered-switch-default")
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
