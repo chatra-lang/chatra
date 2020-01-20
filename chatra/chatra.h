@@ -307,6 +307,7 @@ struct PackageInfo {
 // This requires "chatra_emb" module.
 PackageInfo queryEmbeddedPackage(const std::string& packageName);
 
+
 enum class SeekOrigin {
 	Begin, End, Current
 };
@@ -330,9 +331,12 @@ namespace FileOpenFlags {
 	constexpr Type Append = 0x4U | Write;
 }
 
-// This requires "chatra_emb" module.
-std::unique_ptr<IFile> openStandardFile(const std::string& fileName, FileOpenFlags::Type flags,
-		const NativeReference& kwargs);
+// These require "chatra_emb" module.
+IFile* openStandardFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs);
+std::vector<uint8_t> saveStandardFile(IFile* file);
+IFile* restoreStandardFile(const std::vector<uint8_t>& stream);
+
+// TODO add IFileSystem (like IPackage)
 
 
 struct IHost {
@@ -345,10 +349,19 @@ struct IHost {
 		return {{}, {}, nullptr};  // or return queryEmbeddedPackage(packageName);
 	}
 
-	virtual std::unique_ptr<IFile> openFile(const std::string& fileName, FileOpenFlags::Type flags,
-			const NativeReference& kwargs) {
-		(void)fileName; (void)flags; (void)kwargs;
+	virtual IFile* openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) {
+		(void)fileName; (void)flags; (void)kwargs;  // or return openStandardFile(...)
 		return nullptr;
+	}
+
+	virtual std::vector<uint8_t> saveFile(IFile* file) {
+		(void)file;
+		throw UnsupportedOperationException();  // or return saveStandardFile(...)
+	}
+
+	virtual IFile* restoreFile(const std::vector<uint8_t>& stream) {
+		(void)stream;
+		throw UnsupportedOperationException();  // or return restoreStandardFile(...)
 	}
 };
 

@@ -99,7 +99,7 @@ static std::string convert(size_t specifierIndex, char* spec, size_t specSize, c
 	std::strcpy(spec + specSize, type);
 	auto length = std::snprintf(nullptr, 0, spec, value);
 	if (length < 0)
-		throw cha::IllegalArgumentException("failed to apply format specifier #%u",
+		throw IllegalArgumentException("failed to apply format specifier #%u",
 				static_cast<unsigned>(specifierIndex));
 	std::vector<char> buffer(length + 1);
 	std::snprintf(buffer.data(), buffer.size(), spec, value);
@@ -150,7 +150,7 @@ static void postProcess(std::string& valueString,
 	}
 }
 
-static void format(cha::Ct& ct) {
+static void format(Ct& ct) {
 	auto f = ct.at(0).get<std::string>();
 	auto& indexes = ct.at(1);
 	auto& values = ct.at(2);
@@ -188,14 +188,14 @@ static void format(cha::Ct& ct) {
 
 		// Find boundary of format specifier
 		if (i + 1 >= f.length())
-			throw cha::IllegalArgumentException("unterminated format specifier at end of text");
+			throw IllegalArgumentException("unterminated format specifier at end of text");
 
 		size_t i0, i1;
 		if (f[i + 1] == '{') {
 			i0 = i + 2;
 			i1 = findOffset(f, i0, f.length(), [](char c) { return c == '}'; });
 			if (i1 >= f.length())
-				throw cha::IllegalArgumentException(
+				throw IllegalArgumentException(
 						"unterminated format specifier #%u (started from offset %+u)",
 						static_cast<unsigned>(specifierIndex), static_cast<unsigned>(i));
 			i = i1;
@@ -204,7 +204,7 @@ static void format(cha::Ct& ct) {
 			i0 = i + 1;
 			i1 = findOffset(f, i0, f.length(), [](char c) { return isAlpha(c); });
 			if (i1 >= f.length())
-				throw cha::IllegalArgumentException(
+				throw IllegalArgumentException(
 						"unterminated format specifier #%u (started from offset %+u)",
 						static_cast<unsigned>(specifierIndex), static_cast<unsigned>(i));
 			i = i1++;
@@ -227,12 +227,12 @@ static void format(cha::Ct& ct) {
 				errno = 0;
 				auto index = std::strtol(f.data() + iSpec, nullptr, 10);
 				if (errno == ERANGE)
-					throw cha::IllegalArgumentException(
+					throw IllegalArgumentException(
 							"at format specifier #%u: index is out of range",
 							static_cast<unsigned>(specifierIndex));
 				valueIndex = static_cast<size_t>(index >= 0 ? index : arrayArgs + index);
 				if (valueIndex >= arrayArgs)
-					throw cha::IllegalArgumentException(
+					throw IllegalArgumentException(
 							"at format specifier #%u: specified index (%ld) is out of range",
 							static_cast<unsigned>(specifierIndex), index);
 			}
@@ -240,7 +240,7 @@ static void format(cha::Ct& ct) {
 				auto key = f.substr(iSpec, t0 - iSpec);
 				auto it = keyedIndexes.find(key);
 				if (it == keyedIndexes.cend())
-					throw cha::IllegalArgumentException(
+					throw IllegalArgumentException(
 							"at format specifier #%u: specified key (%s) is not present on arguments list",
 							static_cast<unsigned>(specifierIndex), key.data());
 				valueIndex = it->second;
@@ -269,7 +269,7 @@ static void format(cha::Ct& ct) {
 		if (isDigit(f[iSpec])) {
 			auto length = findOffset(f, iSpec, i1, [](char c) { return !isDigit(c); }) - iSpec;
 			if (length > 10)
-				throw cha::IllegalArgumentException(
+				throw IllegalArgumentException(
 						"at format specifier #%u: width field is out of range",
 						static_cast<unsigned>(specifierIndex));
 			std::strncpy(spec + specSize, f.data() + iSpec, length);
@@ -280,7 +280,7 @@ static void format(cha::Ct& ct) {
 		if (f[iSpec] == '.' && iSpec + 1 < i1 && isDigit(f[iSpec + 1])) {
 			auto length = findOffset(f, iSpec + 1, i1, [](char c) { return !isDigit(c); }) - iSpec;
 			if (length > 1 + 10)
-				throw cha::IllegalArgumentException(
+				throw IllegalArgumentException(
 						"at format specifier #%u: precision field is out of range",
 						static_cast<unsigned>(specifierIndex));
 			std::strncpy(spec + specSize, f.data() + iSpec, length);
@@ -297,7 +297,7 @@ static void format(cha::Ct& ct) {
 				auto last = findOffset(f, iSpec, i1, [](char c) { return c == ','; });
 				auto sep = findOffset(f, iSpec + 1, last, [](char c) { return c == '='; });
 				if (last == sep)
-					throw cha::IllegalArgumentException(
+					throw IllegalArgumentException(
 							"at format specifier #%u: option field requires 'key=value' form",
 							static_cast<unsigned>(specifierIndex));
 
@@ -314,7 +314,7 @@ static void format(cha::Ct& ct) {
 					requiresPostProcess = true;
 				}
 				else
-					throw cha::IllegalArgumentException(
+					throw IllegalArgumentException(
 							"at format specifier #%u: unknown option (%s)",
 							static_cast<unsigned>(specifierIndex), f.substr(iSpec, sep - iSpec).data());
 
@@ -396,13 +396,13 @@ static void format(cha::Ct& ct) {
 		}
 
 		default:
-			throw cha::IllegalArgumentException(
+			throw IllegalArgumentException(
 					"at format specifier #%u: unknown type name (%c)",
 					static_cast<unsigned>(specifierIndex), type);
 		}
 
 		if (typeMismatch) {
-			throw cha::IllegalArgumentException(
+			throw IllegalArgumentException(
 					"at format specifier #%u: type '%c' cannot be used with specified value",
 					static_cast<unsigned>(specifierIndex), type);
 		}

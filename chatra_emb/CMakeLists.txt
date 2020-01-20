@@ -14,6 +14,7 @@ add_library(chatra_emb
         containersNative.cpp
         io.cha
         ioNative.cpp
+        ioNativeStandardFile.cpp
         )
 
 target_link_libraries(chatra_emb INTERFACE chatra_core)

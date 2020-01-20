@@ -19,14 +19,9 @@
  */
 
 #include "EmbInternal.h"
-
 #include "containersNative.h"
-#include <cstdio>
 #include <algorithm>
-
-// note: This is not part of C++11 standard
-// This is because there is no canonical way in C++11 standard to get length of binary files.
-#include <sys/stat.h>
+#include <mutex>
 
 namespace chatra {
 namespace emb {
@@ -46,13 +41,17 @@ struct NativeData : public cha::INativePtr {
 };
 
 struct FileInputStreamData : public NativeData {
-	// TODO Exclusive access(mutex?)
+	std::mutex mt;
+	std::unique_ptr<IFile> file;
+
+
 
 
 	FileInputStreamData() : NativeData(Type::FileInputStream) {}
 };
 
 struct FileOutputStreamData : public NativeData {
+	std::mutex mt;
 
 
 	FileOutputStreamData() : NativeData(Type::FileOutputStream) {}
@@ -176,133 +175,3 @@ PackageInfo packageInfo() {
 }  // namespace emb
 }  // namespace chatra
 
-// TODO split file
-
-namespace chatra {
-
-struct StandardFileCommon : public IFile {
-	std::FILE* fp;
-	size_t length;
-	size_t current = 0;
-
-	explicit StandardFileCommon(std::FILE* fp, size_t length) : fp(fp), length(length) {}
-
-	~StandardFileCommon() override {
-		if (fp != nullptr)
-			std::fclose(fp);
-	}
-
-	void close() override {
-		if (fp != nullptr)
-			std::fclose(fp);
-		fp = nullptr;
-	}
-
-	void flush() override {
-		if (fp != nullptr)
-			std::fflush(fp);
-	}
-
-	size_t available() override {
-		return length - current;
-	}
-
-	size_t position() override {
-		return current;
-	}
-
-	void seek(ptrdiff_t offset, SeekOrigin origin) override {
-		if (fp == nullptr)
-			throw cha::UnsupportedOperationException();
-
-		size_t newPosition = 0;
-		switch (origin) {
-		case SeekOrigin::Begin:
-			newPosition = std::max(static_cast<ptrdiff_t>(0), offset);  break;
-		case SeekOrigin::End:
-			newPosition = length + std::min(static_cast<ptrdiff_t>(0), offset);  break;
-		case SeekOrigin::Current:
-			newPosition = std::max(static_cast<ptrdiff_t>(0), std::min(static_cast<ptrdiff_t>(length), offset));  break;
-		}
-
-		if (std::fseek(fp, static_cast<long>(newPosition), SEEK_SET)) {
-			close();
-			throw cha::NativeException();
-		}
-
-		current = newPosition;
-	}
-
-};
-
-struct ReadStandardFile : public StandardFileCommon {
-	using StandardFileCommon::StandardFileCommon;
-
-	size_t read(uint8_t* dest, size_t length) override {
-		if (fp == nullptr)
-			throw cha::UnsupportedOperationException();
-
-		length = std::min(length, available());
-		auto readBytes = std::fread(dest, 1, length, fp);
-		if (std::ferror(fp)) {
-			close();
-			throw cha::NativeException();
-		}
-		current += readBytes;
-		return readBytes;
-	}
-
-	size_t write(const uint8_t* src, size_t length) override {
-		(void)src;
-		(void)length;
-		throw cha::UnsupportedOperationException();
-	}
-
-};
-
-struct WriteStandardFile : public StandardFileCommon {
-	WriteStandardFile(std::FILE* fp, size_t length, bool append) : StandardFileCommon(fp, length) {
-		if (append)
-			current = length;
-	}
-
-	size_t available() override {
-		return 0;
-	}
-
-	size_t read(uint8_t* dest, size_t length) override {
-		(void)dest;
-		(void)length;
-		throw cha::UnsupportedOperationException();
-	}
-
-	size_t write(const uint8_t* src, size_t length) override {
-		if (fp == nullptr)
-			throw cha::UnsupportedOperationException();
-
-		auto wroteBytes = std::fwrite(src, 1, length, fp);
-		if (wroteBytes != length) {
-			close();
-			throw cha::NativeException();
-		}
-		current += wroteBytes;
-		this->length = std::max(this->length, current);
-
-		return wroteBytes;
-	}
-
-};
-
-std::unique_ptr<IFile> openStandardFile(const std::string& fileName, FileOpenFlags::Type flags,
-		const NativeReference& kwargs) {
-
-	(void)kwargs;
-
-	// TODO Do not use 'a' mode
-	(void)fileName;
-	(void)flags;
-
-	return nullptr;
-}
-
-}  // namespace chatra

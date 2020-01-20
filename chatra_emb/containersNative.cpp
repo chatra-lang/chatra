@@ -32,7 +32,7 @@ enum class Type {
 	ByteArray
 };
 
-struct NativeData : public cha::INativePtr {
+struct NativeData : public INativePtr {
 	Type type;
 	explicit NativeData(Type type) : type(type) {}
 };
@@ -40,12 +40,12 @@ struct NativeData : public cha::INativePtr {
 struct ByteArrayData : public NativeData, public ByteArray {
 	ByteArrayData() : NativeData(Type::ByteArray) {}
 
-	static uint8_t fetchValue(cha::Ct& ct, size_t position);
-	size_t fetchIndex(cha::Ct& ct, size_t position, bool allowBoundary);
+	static uint8_t fetchValue(Ct& ct, size_t position);
+	size_t fetchIndex(Ct& ct, size_t position, bool allowBoundary);
 };
 
-struct ContainersPackageInterface : public cha::IPackage {
-	std::vector<uint8_t> saveNativePtr(cha::PackageContext& pct, cha::INativePtr* ptr) override {
+struct ContainersPackageInterface : public IPackage {
+	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;
 
@@ -64,7 +64,7 @@ struct ContainersPackageInterface : public cha::IPackage {
 		return buffer;
 	}
 
-	cha::INativePtr* restoreNativePtr(cha::PackageContext& pct, const std::vector<uint8_t>& stream) override {
+	INativePtr* restoreNativePtr(PackageContext& pct, const std::vector<uint8_t>& stream) override {
 		(void)pct;
 		size_t offset = 0;
 
@@ -79,36 +79,36 @@ struct ContainersPackageInterface : public cha::IPackage {
 		}
 
 		default:
-			throw cha::NativeException();
+			throw NativeException();
 		}
 	}
 };
 
-uint8_t ByteArrayData::fetchValue(cha::Ct& ct, size_t position) {
+uint8_t ByteArrayData::fetchValue(Ct& ct, size_t position) {
 	auto value = ct.at(position).getInt();
 	if (value < 0 || value > 255)
-		throw cha::IllegalArgumentException("specified value is out of range");
+		throw IllegalArgumentException("specified value is out of range");
 	return static_cast<uint8_t>(value);
 }
 
-size_t ByteArrayData::fetchIndex(cha::Ct& ct, size_t position, bool allowBoundary) {
+size_t ByteArrayData::fetchIndex(Ct& ct, size_t position, bool allowBoundary) {
 	auto rawIndex = ct.at(position).get<ptrdiff_t>();
 	auto index = static_cast<size_t>(rawIndex >= 0 ? rawIndex : data.size() + rawIndex);
 	if (index >= data.size()) {
 		if (index == data.size() && allowBoundary)
 			return index;
-		throw cha::IllegalArgumentException(
+		throw IllegalArgumentException(
 				"specified position is out of range; size=%zu, specified = %lld",
 				data.size(), static_cast<long long>(position));
 	}
 	return index;
 }
 
-ByteArray& refByteArray(cha::Ref& ref) {
+ByteArray& refByteArray(Ref& ref) {
 	return *ref.native<ByteArrayData>();
 }
 
-static void byteArray_initInstance(cha::Ct& ct) {
+static void byteArray_initInstance(Ct& ct) {
 	auto* self = new ByteArrayData();
 	ct.setSelf(self);
 
@@ -126,32 +126,32 @@ static void byteArray_initInstance(cha::Ct& ct) {
 		for (size_t i = 0; i < size; i++) {
 			auto& ref = value.at(i);
 			if (!ref.isInt())
-				throw cha::IllegalArgumentException("specified Array contains a non-Int value");
+				throw IllegalArgumentException("specified Array contains a non-Int value");
 			auto t = ref.getInt();
 			if (t < 0 || t > 255)
-				throw cha::IllegalArgumentException("specified value is out of range");
+				throw IllegalArgumentException("specified value is out of range");
 			self->data.emplace_back(static_cast<uint8_t>(t));
 		}
 	}
 }
 
-static void byteArray_size(cha::Ct& ct) {
+static void byteArray_size(Ct& ct) {
 	auto* self = ct.self<ByteArrayData>();
 	std::lock_guard<SpinLock> lock(self->lock);
 	ct.set(self->data.size());
 }
 
-static void byteArray_resize(cha::Ct& ct) {
+static void byteArray_resize(Ct& ct) {
 	auto newSize = ct.at(0).getInt();
 	if (newSize < 0)
-		throw cha::IllegalArgumentException("invalid size");
+		throw IllegalArgumentException("invalid size");
 
 	auto* self = ct.self<ByteArrayData>();
 	std::lock_guard<SpinLock> lock(self->lock);
 	self->data.resize(static_cast<size_t>(newSize), static_cast<uint8_t>(0));
 }
 
-static void byteArray_add(cha::Ct& ct) {
+static void byteArray_add(Ct& ct) {
 	auto value = ByteArrayData::fetchValue(ct, 0);
 
 	auto* self = ct.self<ByteArrayData>();
@@ -159,7 +159,7 @@ static void byteArray_add(cha::Ct& ct) {
 	self->data.emplace_back(value);
 }
 
-static void byteArray_insert(cha::Ct& ct) {
+static void byteArray_insert(Ct& ct) {
 	auto value = ByteArrayData::fetchValue(ct, 1);
 
 	auto* self = ct.self<ByteArrayData>();
@@ -168,7 +168,7 @@ static void byteArray_insert(cha::Ct& ct) {
 	self->data.insert(self->data.cbegin() + position, value);
 }
 
-static void byteArray_at(cha::Ct& ct) {
+static void byteArray_at(Ct& ct) {
 	auto* self = ct.self<ByteArrayData>();
 	std::lock_guard<SpinLock> lock(self->lock);
 	auto position = self->fetchIndex(ct, 0, false);
@@ -181,7 +181,7 @@ static void byteArray_at(cha::Ct& ct) {
 	self->data[position] = ByteArrayData::fetchValue(ct, 1);
 }
 
-static void byteArray_remove(cha::Ct& ct) {
+static void byteArray_remove(Ct& ct) {
 	auto* self = ct.self<ByteArrayData>();
 	std::lock_guard<SpinLock> lock(self->lock);
 	auto position = self->fetchIndex(ct, 0, false);

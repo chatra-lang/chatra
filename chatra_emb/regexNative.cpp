@@ -68,7 +68,7 @@ enum class SearchType {
 	Search, Match
 };
 
-struct NativeData : public cha::INativePtr {
+struct NativeData : public INativePtr {
 	Type type;
 	explicit NativeData(Type type) : type(type) {}
 };
@@ -93,8 +93,8 @@ struct Match : public NativeData {
 	Match() : NativeData(Type::Match) {}
 };
 
-struct RegexPackageInterface : public cha::IPackage {
-	std::vector<uint8_t> saveNativePtr(cha::PackageContext& pct, cha::INativePtr* ptr) override {
+struct RegexPackageInterface : public IPackage {
+	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;
 
@@ -124,7 +124,7 @@ struct RegexPackageInterface : public cha::IPackage {
 		return buffer;
 	}
 
-	cha::INativePtr* restoreNativePtr(cha::PackageContext& pct, const std::vector<uint8_t>& stream) override {
+	INativePtr* restoreNativePtr(PackageContext& pct, const std::vector<uint8_t>& stream) override {
 		(void)pct;
 		size_t offset = 0;
 
@@ -162,7 +162,7 @@ struct RegexPackageInterface : public cha::IPackage {
 		}
 
 		default:
-			throw cha::NativeException();
+			throw NativeException();
 		}
 	}
 };
@@ -191,10 +191,10 @@ struct RegexPackageInterface : public cha::IPackage {
 	case srell::regex_constants::error_stack:
 		message = "There was insufficient memory to determine whether the regular expression could match the specified character sequence";  break;
 	}
-	throw cha::IllegalArgumentException(message);
+	throw IllegalArgumentException(message);
 }
 
-static void compile(cha::Ct& ct) {
+static void compile(Ct& ct) {
 	auto* p = new Pattern();
 	ct.at(0).setNative(p);
 
@@ -216,10 +216,10 @@ static void compile(cha::Ct& ct) {
 	}
 }
 
-static Pattern* derefSelfAsPattern(cha::Ct& ct) {
+static Pattern* derefSelfAsPattern(Ct& ct) {
 	auto* p = ct.self<Pattern>();
 	if (p == nullptr || !p->re)
-		throw cha::IllegalArgumentException("invalid Pattern object");
+		throw IllegalArgumentException("invalid Pattern object");
 	return p;
 }
 
@@ -239,7 +239,7 @@ static void parseCommonMatchFlags(srell::regex_constants::match_flag_type& mFlag
 }
 
 template <typename Pred>
-static void searchOrMatch(cha::Ct& ct, SearchType searchType, Pred pred) {
+static void searchOrMatch(Ct& ct, SearchType searchType, Pred pred) {
 	auto* p = derefSelfAsPattern(ct);
 	std::lock_guard<SpinLock> lock(p->lock);
 
@@ -263,19 +263,19 @@ static void searchOrMatch(cha::Ct& ct, SearchType searchType, Pred pred) {
 	}
 }
 
-static void search(cha::Ct& ct) {
+static void search(Ct& ct) {
 	searchOrMatch(ct, SearchType::Search, [](Pattern* p, Match* m) {
 		return srell::regex_search(m->str, m->m, *p->re, m->mFlags);
 	});
 }
 
-static void match(cha::Ct& ct) {
+static void match(Ct& ct) {
 	searchOrMatch(ct, SearchType::Match, [](Pattern* p, Match* m) {
 		return srell::regex_match(m->str, m->m, *p->re, m->mFlags);
 	});
 }
 
-static void replace(cha::Ct& ct) {
+static void replace(Ct& ct) {
 	auto* p = derefSelfAsPattern(ct);
 	std::lock_guard<SpinLock> lock(p->lock);
 
@@ -299,21 +299,21 @@ static void replace(cha::Ct& ct) {
 	}
 }
 
-static Match* derefSelfAsMatch(cha::Ct& ct) {
+static Match* derefSelfAsMatch(Ct& ct) {
 	auto* m = ct.self<Match>();
 	if (m == nullptr)
-		throw cha::IllegalArgumentException("invalid Match object");
+		throw IllegalArgumentException("invalid Match object");
 	return m;
 }
 
-static size_t getPositionOrThrow(cha::Ct& ct, Match* m) {
+static size_t getPositionOrThrow(Ct& ct, Match* m) {
 	auto position = ct.at(0).get<size_t>();
 	if (position >= m->m.size())
-		throw cha::IllegalArgumentException("position is out of range");
+		throw IllegalArgumentException("position is out of range");
 	return position;
 }
 
-static void patternSize(cha::Ct& ct) {
+static void patternSize(Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
 	std::lock_guard<SpinLock> lock(m->lock);
 
@@ -330,7 +330,7 @@ static size_t countChar(const std::string& str, size_t offset) {
 	return count;
 }
 
-static void patternPosition(cha::Ct& ct) {
+static void patternPosition(Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
 	std::lock_guard<SpinLock> lock(m->lock);
 
@@ -338,7 +338,7 @@ static void patternPosition(cha::Ct& ct) {
 	ct.set(countChar(m->str, m->m.position(position)));
 }
 
-static void patternLength(cha::Ct& ct) {
+static void patternLength(Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
 	std::lock_guard<SpinLock> lock(m->lock);
 
@@ -347,7 +347,7 @@ static void patternLength(cha::Ct& ct) {
 	ct.set(countChar(str, str.length()));
 }
 
-static void patternStr(cha::Ct& ct) {
+static void patternStr(Ct& ct) {
 	auto* m = derefSelfAsMatch(ct);
 	std::lock_guard<SpinLock> lock(m->lock);
 
