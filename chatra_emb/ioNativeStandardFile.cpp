@@ -29,23 +29,32 @@
 #include <sys/stat.h>
 
 namespace chatra {
+namespace emb {
+namespace io {
 
 struct StandardFileCommon : public IFile {
+	std::string fileName;
+	FileOpenFlags::Type flags;
 	std::FILE* fp;
 	size_t length;
 	size_t current = 0;
 
-	explicit StandardFileCommon(std::FILE* fp, size_t length) : fp(fp), length(length) {}
+	explicit StandardFileCommon(const std::string& fileName, FileOpenFlags::Type flags,
+			std::FILE* fp, size_t length) : fileName(fileName), flags(flags), fp(fp), length(length) {}
 
 	~StandardFileCommon() override {
 		if (fp != nullptr)
 			std::fclose(fp);
 	}
 
-	void close() override {
+	void doClose() {
 		if (fp != nullptr)
 			std::fclose(fp);
 		fp = nullptr;
+	}
+
+	void close() override {
+		doClose();
 	}
 
 	void flush() override {
@@ -74,7 +83,7 @@ struct StandardFileCommon : public IFile {
 		case SeekOrigin::Current:
 			newPosition = current + offset;  break;
 		}
-		if (newPosition < 0 || length < newPosition)
+		if (newPosition < 0 || length < static_cast<size_t>(newPosition))
 			throw IllegalArgumentException("specified offset is out of range");
 
 		if (std::fseek(fp, static_cast<long>(newPosition), SEEK_SET)) {
@@ -111,11 +120,12 @@ struct ReadStandardFile : public StandardFileCommon {
 };
 
 struct WriteStandardFile : public StandardFileCommon {
-	WriteStandardFile(std::FILE* fp, size_t length, bool append) : StandardFileCommon(fp, length) {
+	WriteStandardFile(const std::string& fileName, FileOpenFlags::Type flags,
+			std::FILE* fp, size_t length, bool append) : StandardFileCommon(fileName, flags, fp, length) {
 		if (append) {
 			current = length;
 			if (std::fseek(fp, static_cast<long>(length), SEEK_SET))
-				close();
+				doClose();
 		}
 	}
 
@@ -147,39 +157,81 @@ struct WriteStandardFile : public StandardFileCommon {
 static size_t getFileLengthOrClose(const std::string& fileName, FILE* fp) {
 	struct stat st = {};
 	if (0 != stat(fileName.data(), &st)) {
-		fclose(fp);
+		std::fclose(fp);
 		throw UnsupportedOperationException("failed to get length of specified file");
 	}
 	return static_cast<size_t>(st.st_size);
 }
 
-IFile* openStandardFile(const std::string& fileName, FileOpenFlags::Type flags,
-		const NativeReference& kwargs) {
+struct StandardFileSystem : public IFileSystem {
+	FileNameFilter filter;
+	StandardFileSystem(FileNameFilter filter) : filter(filter) {}
 
-	(void)kwargs;
+	StandardFileCommon *doOpenFile(const std::string& fileName, FileOpenFlags::Type flags) {
+		if ((flags & FileOpenFlags::Write) && (flags & FileOpenFlags::Append)) {
+			errno = 0;
+			auto fp = std::fopen(fileName.data(), "r+b");
+			if (fp == nullptr && errno == ENOENT)
+				fp = std::fopen(fileName.data(), "wb");
+			if (fp == nullptr)
+				throw IllegalArgumentException("cannot open file: %s", fileName.data());
 
-	if ((flags & FileOpenFlags::Write) && (flags & FileOpenFlags::Append)) {
-		errno = 0;
-		auto fp = std::fopen(fileName.data(), "r+b");
-		if (fp == nullptr && errno == ENOENT)
-			fp = std::fopen(fileName.data(), "wb");
-		if (fp == nullptr)
-			throw IllegalArgumentException("cannot open file");
+			size_t length = getFileLengthOrClose(fileName, fp);
+			return new WriteStandardFile(fileName, flags, fp, length, true);
+		}
+		else if (flags & FileOpenFlags::Write) {
+			auto fp = std::fopen(fileName.data(), "wb");
+			return new WriteStandardFile(fileName, flags, fp, 0, false);
+		}
+		else if (flags & FileOpenFlags::Read) {
+			auto fp = std::fopen(fileName.data(), "rb");
+			size_t length = getFileLengthOrClose(fileName, fp);
+			return new ReadStandardFile(fileName, flags, fp, length);
+		}
+		else
+			throw IllegalArgumentException();
+	}
 
-		size_t length = getFileLengthOrClose(fileName, fp);
-		return new WriteStandardFile(fp, length, true);
+	IFile *openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) override {
+		(void)kwargs;
+		return doOpenFile(fileName, flags);
 	}
-	else if (flags & FileOpenFlags::Write) {
-		auto fp = std::fopen(fileName.data(), "wb");
-		return new WriteStandardFile(fp, 0, false);
+
+	std::vector<uint8_t> saveFile(IFile* file) override {
+		auto* f = static_cast<StandardFileCommon*>(file);
+		std::vector<uint8_t> buffer;
+		writeString(buffer, f->fileName);
+		writeInt(buffer, f->flags);
+		writeInt(buffer, f->current);
+		return buffer;
 	}
-	else if (flags & FileOpenFlags::Read) {
-		auto fp = std::fopen(fileName.data(), "rb");
-		size_t length = getFileLengthOrClose(fileName, fp);
-		return new ReadStandardFile(fp, length);
+
+	IFile *restoreFile(const std::vector<uint8_t>& stream) override {
+		size_t offset = 0;
+		auto fileName = readString(stream, offset);
+		auto flags = readInt<FileOpenFlags::Type>(stream, offset);
+		auto* f = doOpenFile(fileName, flags);
+
+		auto current = readInt<size_t>(stream, offset);
+		try {
+			if (current > f->length)
+				throw IllegalArgumentException();
+			f->seek(current, IFile::SeekOrigin::Begin);
+		}
+		catch (NativeException&) {
+			delete f;
+			throw;
+		}
+
+		return f;
 	}
-	else
-		throw IllegalArgumentException();
+};
+
+}  // namespace io
+}  // namespace emb
+
+IFileSystem* getStandardFileSystem(FileNameFilter filter) {
+	return new emb::io::StandardFileSystem(filter);
 }
 
 }  // namespace chatra

@@ -308,11 +308,11 @@ struct PackageInfo {
 PackageInfo queryEmbeddedPackage(const std::string& packageName);
 
 
-enum class SeekOrigin {
-	Begin, End, Current
-};
-
 struct IFile {
+	enum class SeekOrigin {
+		Begin, End, Current
+	};
+
 	virtual ~IFile() = default;
 
 	virtual void close() = 0;
@@ -324,6 +324,7 @@ struct IFile {
 	virtual size_t write(const uint8_t* src, size_t length) = 0;
 };
 
+
 namespace FileOpenFlags {
 	using Type = unsigned;
 	constexpr Type Read = 0x1U;
@@ -331,12 +332,19 @@ namespace FileOpenFlags {
 	constexpr Type Append = 0x4U | Write;
 }
 
-// These require "chatra_emb" module.
-IFile* openStandardFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs);
-std::vector<uint8_t> saveStandardFile(IFile* file);
-IFile* restoreStandardFile(const std::vector<uint8_t>& stream);
+struct IFileSystem {
+	virtual ~IFileSystem() = default;
 
-// TODO add IFileSystem (like IPackage)
+	virtual IFile* openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) = 0;
+
+	virtual std::vector<uint8_t> saveFile(IFile* file) = 0;
+
+	virtual IFile* restoreFile(const std::vector<uint8_t>& stream) = 0;
+};
+
+// This requires "chatra_emb" module.
+using FileNameFilter = std::string (*)(const std::string& fileName);
+IFileSystem* getStandardFileSystem(FileNameFilter filter = nullptr);
 
 
 struct IHost {
@@ -349,19 +357,8 @@ struct IHost {
 		return {{}, {}, nullptr};  // or return queryEmbeddedPackage(packageName);
 	}
 
-	virtual IFile* openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) {
-		(void)fileName; (void)flags; (void)kwargs;  // or return openStandardFile(...)
-		return nullptr;
-	}
-
-	virtual std::vector<uint8_t> saveFile(IFile* file) {
-		(void)file;
-		throw UnsupportedOperationException();  // or return saveStandardFile(...)
-	}
-
-	virtual IFile* restoreFile(const std::vector<uint8_t>& stream) {
-		(void)stream;
-		throw UnsupportedOperationException();  // or return restoreStandardFile(...)
+	virtual IFileSystem* queryIFileSystem() {
+		return nullptr;  // or getStandardFileSystem()
 	}
 };
 
