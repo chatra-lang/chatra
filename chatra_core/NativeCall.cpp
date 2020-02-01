@@ -156,6 +156,10 @@ public:
 		return new NativeEventObjectImp(thread.runtime, thread.requestToPause());
 	}
 
+	IDriver *getDriver(DriverType driverType) const override {
+		return thread.runtime.getDriver(driverType);
+	}
+
 	void log(const std::string& message) override {
 		outputLog(thread, message);
 	}

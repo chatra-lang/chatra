@@ -79,6 +79,15 @@ struct INativePtr {
 };
 
 
+struct IDriver {
+	virtual ~IDriver() = default;
+};
+
+enum class DriverType {
+	FileSystem
+};
+
+
 /// aka "Ref"
 struct NativeReference {
 	virtual ~NativeReference() = default;
@@ -240,6 +249,8 @@ struct NativeCallContext {
 
 	virtual NativeEventObject* pause() = 0;
 
+	virtual IDriver* getDriver(DriverType driverType) const = 0;
+
 	virtual void log(const std::string& message) = 0;
 };
 
@@ -271,6 +282,8 @@ struct PackageContext {
 
 	virtual std::vector<uint8_t> saveEvent(NativeEventObject* event) const = 0;
 	virtual NativeEventObject* restoreEvent(const std::vector<uint8_t>& stream) const = 0;
+
+	virtual IDriver* getDriver(DriverType driverType) const = 0;
 };
 
 
@@ -324,7 +337,6 @@ struct IFile {
 	virtual size_t write(const uint8_t* src, size_t length) = 0;
 };
 
-
 namespace FileOpenFlags {
 	using Type = unsigned;
 	constexpr Type Read = 0x1U;
@@ -332,9 +344,7 @@ namespace FileOpenFlags {
 	constexpr Type Append = 0x4U | Write;
 }
 
-struct IFileSystem {
-	virtual ~IFileSystem() = default;
-
+struct IFileSystem : public IDriver {
 	virtual IFile* openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) = 0;
 
 	virtual std::vector<uint8_t> saveFile(IFile* file) = 0;
@@ -357,8 +367,9 @@ struct IHost {
 		return {{}, {}, nullptr};  // or return queryEmbeddedPackage(packageName);
 	}
 
-	virtual IFileSystem* queryIFileSystem() {
-		return nullptr;  // or getStandardFileSystem()
+	virtual IDriver* queryDriver(DriverType driverType) {
+		(void)driverType;
+		return nullptr;  // or getStandardFileSystem() etc.
 	}
 };
 
@@ -445,6 +456,7 @@ CHATRA_ENUM_HASH(chatra::RuntimeId)
 CHATRA_ENUM_HASH(chatra::PackageId)
 CHATRA_ENUM_HASH(chatra::InstanceId)
 CHATRA_ENUM_HASH(chatra::TimerId)
+CHATRA_ENUM_HASH(chatra::DriverType)
 
 
 #endif // CHATRA_H

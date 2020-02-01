@@ -944,6 +944,7 @@ public:
 	RuntimeId runtimeId() const override;
 	std::vector<uint8_t> saveEvent(NativeEventObject* event) const override;
 	NativeEventObject* restoreEvent(const std::vector<uint8_t>& stream) const override;
+	IDriver* getDriver(DriverType driverType) const override;
 
 	void saveScripts(Writer& w) const;
 	Package(RuntimeImp& runtime, Reader& r) noexcept;
@@ -1024,6 +1025,10 @@ public:
 
 	MethodTableCache methodTableCache;  // by restoreEntities() only
 
+	// Drivers
+	SpinLock lockDrivers;
+	std::unordered_map<DriverType, std::unique_ptr<IDriver>> drivers;
+
 private:
 	void launchStorage();
 	void launchFinalizerThread();
@@ -1062,6 +1067,8 @@ public:
 	void resume(unsigned waitingId);
 
 	void issueTimer(unsigned waitingId, Timer& timer, Time time);
+
+	IDriver* getDriver(DriverType driverType);
 
 	static std::string formatOrigin(const std::string& fileName, unsigned lineNo);
 	static std::string formatError(ErrorLevel level,

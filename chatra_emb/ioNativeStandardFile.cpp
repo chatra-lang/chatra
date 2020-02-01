@@ -39,8 +39,8 @@ struct StandardFileCommon : public IFile {
 	size_t length;
 	size_t current = 0;
 
-	explicit StandardFileCommon(const std::string& fileName, FileOpenFlags::Type flags,
-			std::FILE* fp, size_t length) : fileName(fileName), flags(flags), fp(fp), length(length) {}
+	explicit StandardFileCommon(std::string fileName, FileOpenFlags::Type flags,
+			std::FILE* fp, size_t length) : fileName(std::move(fileName)), flags(flags), fp(fp), length(length) {}
 
 	~StandardFileCommon() override {
 		if (fp != nullptr)
@@ -120,8 +120,8 @@ struct ReadStandardFile : public StandardFileCommon {
 };
 
 struct WriteStandardFile : public StandardFileCommon {
-	WriteStandardFile(const std::string& fileName, FileOpenFlags::Type flags,
-			std::FILE* fp, size_t length, bool append) : StandardFileCommon(fileName, flags, fp, length) {
+	WriteStandardFile(std::string fileName, FileOpenFlags::Type flags,
+			std::FILE* fp, size_t length, bool append) : StandardFileCommon(std::move(fileName), flags, fp, length) {
 		if (append) {
 			current = length;
 			if (std::fseek(fp, static_cast<long>(length), SEEK_SET))
@@ -165,9 +165,9 @@ static size_t getFileLengthOrClose(const std::string& fileName, FILE* fp) {
 
 struct StandardFileSystem : public IFileSystem {
 	FileNameFilter filter;
-	StandardFileSystem(FileNameFilter filter) : filter(filter) {}
+	explicit StandardFileSystem(FileNameFilter filter) : filter(filter) {}
 
-	StandardFileCommon *doOpenFile(const std::string& fileName, FileOpenFlags::Type flags) {
+	static StandardFileCommon *doOpenFile(std::string fileName, FileOpenFlags::Type flags) {
 		if ((flags & FileOpenFlags::Write) && (flags & FileOpenFlags::Append)) {
 			errno = 0;
 			auto fp = std::fopen(fileName.data(), "r+b");
@@ -177,16 +177,16 @@ struct StandardFileSystem : public IFileSystem {
 				throw IllegalArgumentException("cannot open file: %s", fileName.data());
 
 			size_t length = getFileLengthOrClose(fileName, fp);
-			return new WriteStandardFile(fileName, flags, fp, length, true);
+			return new WriteStandardFile(std::move(fileName), flags, fp, length, true);
 		}
 		else if (flags & FileOpenFlags::Write) {
 			auto fp = std::fopen(fileName.data(), "wb");
-			return new WriteStandardFile(fileName, flags, fp, 0, false);
+			return new WriteStandardFile(std::move(fileName), flags, fp, 0, false);
 		}
 		else if (flags & FileOpenFlags::Read) {
 			auto fp = std::fopen(fileName.data(), "rb");
 			size_t length = getFileLengthOrClose(fileName, fp);
-			return new ReadStandardFile(fileName, flags, fp, length);
+			return new ReadStandardFile(std::move(fileName), flags, fp, length);
 		}
 		else
 			throw IllegalArgumentException();
@@ -194,7 +194,7 @@ struct StandardFileSystem : public IFileSystem {
 
 	IFile *openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) override {
 		(void)kwargs;
-		return doOpenFile(fileName, flags);
+		return doOpenFile(filter == nullptr ? fileName : filter(fileName), flags);
 	}
 
 	std::vector<uint8_t> saveFile(IFile* file) override {

@@ -71,6 +71,13 @@ public:
 			return cha::queryEmbeddedPackage(packageName);
 		}
 	}
+
+	cha::IDriver* queryDriver(cha::DriverType driverType) override {
+		switch (driverType) {
+		case cha::DriverType::FileSystem:  return cha::getStandardFileSystem();
+		default:  return nullptr;
+		}
+	}
 };
 
 static constexpr const char* standardTests[] = {
@@ -91,6 +98,7 @@ static constexpr const char* standardTests[] = {
 		"emb_format",
 		"emb_regex",
 		"emb_containers",
+		"emb_io",
 };
 
 static constexpr const char* multiThreadTests[] = {
@@ -115,6 +123,7 @@ static constexpr const char* serializeTests[] = {
 		"emb_format",
 		"emb_regex",
 		"emb_containers",
+		"emb_io",
 };
 
 static void runTest(std::shared_ptr<cha::Runtime>& runtime, const char* fileName) {

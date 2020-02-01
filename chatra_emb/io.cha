@@ -89,12 +89,12 @@ class FileInputStream extends InputStream, RandomAccessStream
 
 
 class FileOutputStream extends OuputStream, RandomAccessStream
-	def _init_instance(fileName, kwargs) as native
+	def _init_instance(fileName, append, kwargs) as native
 
 	def init(fileName: String; append: false, kwargs...)
 		super()
 		kwargs['append'] = append
-		_init_instance(fileName, kwargs)
+		_init_instance(fileName, append, kwargs)
 
 	def close() as native
 
@@ -172,14 +172,11 @@ def Writer extends Stream
 	def write(line: String; lineFeed: false)
 		if lineFeed
 			line += '\n'
-
-		if _buffer.size() < line.length() * 4
-			_buffer.resize((line.length() + 32) * 4)
 		length: _convertToUtf8(_buffer, line)
 		_stream.write(_buffer, 0, length)
 
 	def writeLine(line: String)
-		write(line, lineFeed: true)
+		write(line, lineFeed: (line.size() == 0 or line[-1] != 0x0A))
 
 	def writeLines(lines)
 		for line in lines

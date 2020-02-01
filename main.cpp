@@ -120,6 +120,13 @@ public:
 		}
 		return cha::queryEmbeddedPackage(packageName);
 	}
+
+	cha::IDriver* queryDriver(cha::DriverType driverType) override {
+		switch (driverType) {
+		case cha::DriverType::FileSystem:  return cha::getStandardFileSystem();
+		default:  return nullptr;
+		}
+	}
 };
 
 int main(int argc, char* argv[]) {

@@ -289,6 +289,10 @@ NativeEventObject* Package::restoreEvent(const std::vector<uint8_t>& stream) con
 	return new NativeEventObjectImp(runtime, static_cast<unsigned>(t));
 }
 
+IDriver* Package::getDriver(DriverType driverType) const {
+	return runtime.getDriver(driverType);
+}
+
 void Package::saveScripts(Writer& w) const {
 	w.out(initialized.load());
 	w.out(fromHost);
@@ -1023,6 +1027,19 @@ void RuntimeImp::issueTimer(unsigned waitingId, Timer& timer, Time time) {
 
 		runtime->resume(waitingId);
 	});
+}
+
+IDriver* RuntimeImp::getDriver(DriverType driverType) {
+	std::lock_guard<SpinLock> lock(lockDrivers);
+	auto it = drivers.find(driverType);
+	IDriver* driver = nullptr;
+	if (it == drivers.cend())
+		driver = drivers.emplace(driverType, host->queryDriver(driverType)).first->second.get();
+	else
+		driver = it->second.get();
+	if (driver == nullptr)
+		throw UnsupportedOperationException();
+	return driver;
 }
 
 std::string RuntimeImp::formatOrigin(const std::string& fileName, unsigned lineNo) {
