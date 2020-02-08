@@ -136,6 +136,7 @@ int main(int argc, char* argv[]) {
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "exceptions: 5 4 14 97 15 28"};
 	//const char* args_test[] = {"chatra", "samples_in_docs/readme_first_sample.cha"};
 	//const char* args_test[] = {"chatra", "--help"};
+	//const char* args_test[] = {"chatra", "--language-test", "--parse", "chatra_emb/containers.cha"};
 	argc = sizeof(args_test) / sizeof(args_test[0]);
 	argv = const_cast<char**>(args_test);
 #endif

@@ -18,6 +18,84 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
+import containers
+
+def testByteArray()
+	log('[testByteArray]')
+
+	v = ByteArray()
+	v.add(32)
+	_check('constructor call and add()', v.size() == 1 and v[0] == 32)
+	v.add(33)
+	_check('add an element', v.size() == 2 and v[0] == 32 and v[1] == 33)
+	v.add(34)
+	_check('element access', v[0] == 32 and v[1] == 33 and v[2] == 34 and
+			v[-1] == 34 and v[-2] == 33 and v[-3] == 32)
+
+	do
+		v.add(256)
+		_check('adding invalid value', false)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
+	do
+		v.add(-1)
+		_check('adding invalid value', false)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
+	do
+		v.add(true)
+		_check('adding invalid value', false)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
+	do
+		v.add(1.0)
+		_check('adding invalid value', false)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
+	do
+		v.add('abc')
+		_check('adding invalid value', false)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
+
+	do
+		v[3]
+		_check('element access (outside boundary)', false)
+		catch IllegalArgumentException
+			_check('element access (outside boundary)', true)
+	do
+		v[-4]
+		_check('element access (outside boundary)', false)
+		catch IllegalArgumentException
+			_check('element access (outside boundary)', true)
+
+	// TODO
+	_check('has', v.has(32) and v.has(33) and v.has(34) and !v.has(0))
+
+	v = ByteArray().add(12, 23, 34)
+	_check('add array', v.size() == 3 and v[0] == 12 and v[1] == 23 and v[2] == 34)
+
+	v = ByteArray{123, 234, 34}
+	a = v.remove(1)
+	_check('remove an element', v.size() == 2 and v[0] == 123 and v[1] == 34 and a == 234)
+	a = v.remove(-1)
+	_check('remove an element', v.size() == 1 and v[0] == 123 and a == 34)
+	a = v.remove(0)
+	_check('remove an element', v.size() == 0 and a == 123)
+	do
+		v.remove(0)
+		_check('remove (invalid index)', false)
+		catch IllegalArgumentException
+			_check('remove (invalid index)', true)
+
+
+
 // TODO
+v = ByteArray().add(32, 33, 34)
+_check('has', v.has(32) and v.has(33) and v.has(34) and !v.has(0))
+
+
+
+//testByteArray()
 
 _checkCmd('finished')

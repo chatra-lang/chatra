@@ -85,6 +85,8 @@ struct ContainersPackageInterface : public IPackage {
 };
 
 uint8_t ByteArrayData::fetchValue(Ct& ct, size_t position) {
+	if (!ct.at(position).isInt())
+		throw IllegalArgumentException("specified value is not integer");
 	auto value = ct.at(position).getInt();
 	if (value < 0 || value > 255)
 		throw IllegalArgumentException("specified value is out of range");

@@ -19,7 +19,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-def ByteArray extends VariableLengthSequence
+class ByteArray extends VariableLengthSequence
 	def _init_instance() as native
 	def _init_instance(value) as native
 
