@@ -47,7 +47,7 @@ class ByteArray extends VariableLengthSequence
 		t0 = size()
 		t1 = 0
 		while t1 < t0
-			if _native_at(t1++) == a0
+			if _native_at(t1++) == value
 				return true
 		return false
 

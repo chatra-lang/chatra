@@ -69,7 +69,6 @@ def testByteArray()
 		catch IllegalArgumentException
 			_check('element access (outside boundary)', true)
 
-	// TODO
 	_check('has', v.has(32) and v.has(33) and v.has(34) and !v.has(0))
 
 	v = ByteArray().add(12, 23, 34)
@@ -87,15 +86,10 @@ def testByteArray()
 		_check('remove (invalid index)', false)
 		catch IllegalArgumentException
 			_check('remove (invalid index)', true)
+			
+	// TODO
 
 
-
-// TODO
-v = ByteArray().add(32, 33, 34)
-_check('has', v.has(32) and v.has(33) and v.has(34) and !v.has(0))
-
-
-
-//testByteArray()
+testByteArray()
 
 _checkCmd('finished')

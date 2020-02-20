@@ -2198,10 +2198,12 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 				break;
 			}
 
-			std::shared_ptr<Node> subNode = extractStatementPiece(ct, it, n->tokens.cend(), e);
+			auto subNode = extractStatementPiece(ct, it, n->tokens.cend(), e);
 			if (subNode) {
-				if (e.subNodeIndex != SIZE_MAX)
+				if (e.subNodeIndex != SIZE_MAX) {
+					assert(e.subNodeIndex < n->subNodes.size() && !n->subNodes[e.subNodeIndex]);
 					n->subNodes[e.subNodeIndex] = std::move(subNode);
+				}
 			}
 			else if (e.required) {
 				hasError = true;
@@ -2249,8 +2251,10 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 		outNodes.push_back(n);
 
 		if (!recursive) {
-			if (n->type == NodeType::Sync || n->type == NodeType::IfGroup)
+			if (n->type == NodeType::Sync || n->type == NodeType::IfGroup) {
 				parseInnerNode(ws, errorReceiver, sTable, n.get(), false);
+				n->blockNodesState = NodeState::Parsed;
+			}
 		}
 	}
 
@@ -2282,7 +2286,7 @@ void errorAtNode(IErrorReceiver& errorReceiver, ErrorLevel level, Node* node,
 	}
 
 	assert(!node->tokens.empty());
-	auto firstToken = *node->tokens[0];
+	auto& firstToken = *node->tokens[0];
 	auto firstLine = firstToken.line.lock();
 	assert(firstLine);
 
