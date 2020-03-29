@@ -74,17 +74,17 @@ def testByteArray()
 	v = ByteArray().add(12, 23, 34)
 	_check('add array', v.size() == 3 and v[0] == 12 and v[1] == 23 and v[2] == 34)
 
-    do
-    	v = ByteArray().add(1, 256, 3)
+	do
+		v = ByteArray().add(1, 256, 3)
 		_check('adding invalid value', false)
-    	catch IllegalArgumentException
-    		_check('adding invalid value', true)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
 
-    do
-    	v = ByteArray().add(1, -1, 3)
+	do
+		v = ByteArray().add(1, -1, 3)
 		_check('adding invalid value', false)
-    	catch IllegalArgumentException
-    		_check('adding invalid value', true)
+		catch IllegalArgumentException
+			_check('adding invalid value', true)
 
 	v = ByteArray{123, 234, 34}
 	a = v.remove(1)

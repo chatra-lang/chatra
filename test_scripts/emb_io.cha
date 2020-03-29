@@ -18,28 +18,52 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-//import io
+import io
+import containers
 
 def testFileInputStream()
 	log('[testFileInputStream]')
 
 	s = open('test_scripts/emb_io_test0.bin', stream: true)
-    _check('open file', s != null)
+	_check('open file', s != null)
 
+	_check('available', s.available() == 20)
 
-    s.close()
-    _check('close (first time)', true)
-    s.close()
-    _check('close (second time)', true)
+	b0 = ByteArray().resize(12)
+	length = s.read(b0, 0, 4)
+	_check('read', length == 4 and b0[0] == 1 and b0[1] == 2 and b0[2] == 3 and b0[3] == 4)
+	_check('position', s.position() == 4)
+	_check('available', s.available() == 16)
+
+	s.skip(12)
+	_check('position after skip', s.position() == 16)
+	_check('available', s.available() == 4)
+
+	length = s.read(b0, 4, 8)
+	_check('read', length == 4 and b0[4] == 0x89 and b0[5] == 0xAB and b0[6] == 0xCD and b0[7] == 0xEF)
+	_check('position', s.position() == 20)
+	_check('available', s.available() == 0)
+
+	s.seek(-3)
+	length = s.read(b0, 0, 1)
+	_check('seek from current', length == 1 and b0[0] == 0xAB and s.position() == 18 and s.available() == 2)
+
+	s.seek(10, begin: true)
+	length = s.read(b0, 0, 1)
+	_check('seek from begin', length == 1 and b0[0] == 0x12 and s.position() == 11 and s.available() == 9)
+
+	s.seek(-5, end: true)
+	length = s.read(b0, 0, 1)
+	_check('seek from end', length == 1 and b0[0] == 0x17 and s.position() == 16 and s.available() == 4)
+
+	s.close()
+	_check('close (first time)', true)
+	s.close()
+	_check('close (second time)', true)
 
 
 // TODO
 
-def hoge(a: -1)
-    log('a = ' + a)
-
-hoge()
-
-//testInputStream()
+testFileInputStream()
 
 _checkCmd('finished')

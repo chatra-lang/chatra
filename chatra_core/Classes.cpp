@@ -502,11 +502,11 @@ static std::pair<StringId, const Class*> findArgumentClass(IClassFinder& classFi
 }
 
 static std::pair<StringId, const Class*> findArgumentClassAsPrimitive(IClassFinder& classFinder, Node* nValue) {
-    if (nValue->type != NodeType::Literal) {
-        assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
-        nValue = nValue->subNodes[0].get();
-        assert(nValue->type == NodeType::Literal);
-    }
+	if (nValue->type != NodeType::Literal) {
+		assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
+		nValue = nValue->subNodes[0].get();
+		assert(nValue->type == NodeType::Literal);
+	}
 
 	switch (nValue->literalValue->type) {
 	case LiteralType::Bool:  return std::make_pair(StringId::Bool, Bool::getClassStatic());
@@ -549,7 +549,7 @@ ArgumentDef nodeToArgument(IErrorReceiver& errorReceiver,
 		if (c.first != StringId::Invalid)
 			arg.defaultOp = nullptr;
 		else if (nValue->type == NodeType::Literal
-		        || nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus)
+				|| nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus)
 			c = findArgumentClassAsPrimitive(classFinder, nValue);
 		else {
 			assert(nValue->op == Operator::Call);

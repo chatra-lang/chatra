@@ -64,7 +64,8 @@ class FileInputStream extends InputStream, RandomAccessStream
 	def _init_instance(fileName, kwargs) as native
 
 	def init(fileName: String; kwargs...)
-		super()
+		super.InputStream()
+		super.RandomAccessStream()
 		_init_instance(fileName, kwargs)
 
 	def close() as native
@@ -77,7 +78,11 @@ class FileInputStream extends InputStream, RandomAccessStream
 		return _native_read(buffer, offset, length)
 
 	def skip(length: Int)
-		return _native_read(null, -1, length)
+	    if length < 0
+	        throw IllegalArgumentException
+	    a0 = position()
+	    seek(length, current: true)
+		return position() - a0
 
 	def _native_seek(offset, origin) as native
 
@@ -88,7 +93,7 @@ class FileInputStream extends InputStream, RandomAccessStream
 	def position() as native
 
 
-class FileOutputStream extends OuputStream, RandomAccessStream
+class FileOutputStream extends OutputStream, RandomAccessStream
 	def _init_instance(fileName, append, kwargs) as native
 
 	def init(fileName: String; append: false, kwargs...)
