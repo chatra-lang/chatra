@@ -1503,7 +1503,10 @@ static bool checkAsClass(const std::shared_ptr<Node>& node) {
 }
 
 static bool checkAsClassOrLiteral(const std::shared_ptr<Node>& node) {
-	return node->type == NodeType::Literal || checkAsClass(node);
+	return node->type == NodeType::Literal
+	        || ((isOperator(node, Operator::UnaryMinus) || isOperator(node, Operator::UnaryPlus))
+	                && node->subNodes[0]->type == NodeType::Literal)
+	        || checkAsClass(node);
 }
 
 static bool checkAsParameterList(ParserContext &ct, const std::shared_ptr<Node>& node) {
