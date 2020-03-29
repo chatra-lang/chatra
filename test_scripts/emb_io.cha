@@ -18,6 +18,28 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
+//import io
+
+def testFileInputStream()
+	log('[testFileInputStream]')
+
+	s = open('test_scripts/emb_io_test0.bin', stream: true)
+    _check('open file', s != null)
+
+
+    s.close()
+    _check('close (first time)', true)
+    s.close()
+    _check('close (second time)', true)
+
+
 // TODO
+
+def hoge(a: -1)
+    log('a = ' + a)
+
+hoge()
+
+//testInputStream()
 
 _checkCmd('finished')

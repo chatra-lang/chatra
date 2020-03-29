@@ -64,6 +64,13 @@ class ByteArray extends VariableLengthSequence
 		_native_add(a0)
 		return self
 
+	def append(a0)
+		if a0 == null
+			return self
+		for t0 in a0
+			add(t0)
+		return self
+
 	def _native_insert(a0, a1) as native
 
 	def insert(position: Int, a0...;)
