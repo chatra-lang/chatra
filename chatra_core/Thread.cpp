@@ -864,7 +864,8 @@ void Thread::importMethodArguments(const Method* method, TemporaryObject* argsVa
 
 #define CHATRA_CATCH_NATIVE_EXCEPTION(name)  \
 	catch (name& ex) {  \
-		errorAtNode(*this, ErrorLevel::Error, method->node, ex.message, {});  \
+		errorAtNode(*this, ErrorLevel::Error, method->node,  \
+				!ex.message.empty() ? ex.message : #name " from native method", {});  \
 		throw RuntimeException(StringId::name);  \
 	}
 

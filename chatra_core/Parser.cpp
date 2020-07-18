@@ -2283,6 +2283,8 @@ void initializeParser() {
 void errorAtNode(IErrorReceiver& errorReceiver, ErrorLevel level, Node* node,
 		const std::string& message, const std::vector<std::string>& args) {
 
+	assert(!message.empty());
+
 	if (node == nullptr) {
 		errorReceiver.error(level, "", UnknownLine, "", SIZE_MAX, SIZE_MAX, message, args);
 		return;
