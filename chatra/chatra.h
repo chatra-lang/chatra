@@ -341,7 +341,7 @@ namespace FileOpenFlags {
 	using Type = unsigned;
 	constexpr Type Read = 0x1U;
 	constexpr Type Write = 0x2U;
-	constexpr Type Append = 0x4U | Write;
+	constexpr Type Append = 0x4U;
 }
 
 struct IFileSystem : public IDriver {

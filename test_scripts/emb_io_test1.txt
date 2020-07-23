@@ -1,0 +1,6 @@
+first line
+second line
+
+fourth line
+日本語の文字列
+\r\n

@@ -64,6 +64,8 @@ class FileInputStream extends InputStream, RandomAccessStream
 	def _init_instance(fileName, kwargs) as native
 
 	def init(fileName: String; kwargs...)
+		if fileName == null
+			throw IllegalArgumentException()
 		super.InputStream()
 		super.RandomAccessStream()
 		_init_instance(fileName, kwargs)
@@ -75,6 +77,8 @@ class FileInputStream extends InputStream, RandomAccessStream
 	def _native_read(buffer, offset, length) as native
 
 	def read(buffer: ByteArray, offset: 0, length: -1)
+		if buffer == null
+			throw IllegalArgumentException()
 		return _native_read(buffer, offset, length)
 
 	def skip(length: Int)
@@ -97,7 +101,10 @@ class FileOutputStream extends OutputStream, RandomAccessStream
 	def _init_instance(fileName, append, kwargs) as native
 
 	def init(fileName: String; append: false, kwargs...)
-		super()
+		if fileName == null
+			throw IllegalArgumentException()
+		super.OutputStream()
+		super.RandomAccessStream()
 		kwargs['append'] = append
 		_init_instance(fileName, append, kwargs)
 
@@ -108,6 +115,8 @@ class FileOutputStream extends OutputStream, RandomAccessStream
 	def _native_write(buffer, offset, length) as native
 
 	def write(buffer: ByteArray, offset: 0, length: -1)
+		if buffer == null
+			throw IllegalArgumentException()
 		return _native_write(buffer, offset, length)
 
 	def _native_seek(offset, origin) as native
@@ -127,6 +136,9 @@ class Reader extends Stream
 		var _offset: 0
 
 	def init(stream: InputStream; bufferSize: 1024)
+		if stream == null
+			throw IllegalArgumentException()
+		super()
 		_stream = stream
 		_buffer = ByteArray().resize(bufferSize)
 		_available = _stream.read(_buffer)
@@ -137,8 +149,10 @@ class Reader extends Stream
 	def _convertToString(buffer) as native
 
 	def readLine()
+		if _offset >= _available
+			return null
 		out: ByteArray()
-		readLoop: while True
+		readLoop: while true
 			while _offset < _available
 				c: _buffer[_offset++]
 				if c == 0x0A
@@ -149,7 +163,7 @@ class Reader extends Stream
 			if _available == 0
 				break
 			_offset = 0
-		return out.size() == 0 ? null : _convertToString(out)
+		return _convertToString(out)
 
 	def readLines()
 		lines: {}
@@ -164,6 +178,9 @@ class Writer extends Stream
 		var _buffer: ByteArray()
 
 	def init(stream: OutputStream)
+		if stream == null
+			throw IllegalArgumentException()
+		super()
 		_stream = stream
 
 	def close()
@@ -175,22 +192,32 @@ class Writer extends Stream
 	def _convertToUtf8(buffer, line) as native
 
 	def write(line: String; lineFeed: false)
+		if line == null
+			throw IllegalArgumentException()
 		if lineFeed
 			line += '\n'
 		length: _convertToUtf8(_buffer, line)
 		_stream.write(_buffer, 0, length)
 
 	def writeLine(line: String)
+		if line == null
+			throw IllegalArgumentException()
 		write(line, lineFeed: (line.size() == 0 or line[-1] != 0x0A))
 
 	def writeLines(lines)
+		if lines == null
+			throw IllegalArgumentException()
 		for line in lines
 			writeLine(line)
 
 
 def open(fileName: String; read: false, write: false, stream: false, kwargs...)  // default is read
+	if fileName == null
+		throw IllegalArgumentException()
 	if read and write
 		throw UnsupportedOperationException()
+	if kwargs.has('append') and kwargs['append'] and !write
+		throw IllegalArgumentException()
 
 	if write
 		s: FileOutputStream(fileName, *kwargs)

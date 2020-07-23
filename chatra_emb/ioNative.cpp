@@ -208,7 +208,7 @@ static void fileOutputStream_initInstance(Ct& ct) {
 	auto* fs = static_cast<IFileSystem*>(ct.getDriver(DriverType::FileSystem));
 
 	auto* file = fs->openFile(ct.at(0).getString(),
-			ct.at(1).getBool() ? FileOpenFlags::Append : FileOpenFlags::Write, ct.at(2));
+			(ct.at(1).getBool() ? FileOpenFlags::Append : 0) | FileOpenFlags::Write, ct.at(2));
 	if (file == nullptr)
 		throw NativeException();
 
@@ -265,7 +265,7 @@ static void fileOutputStream_position(Ct& ct) {
 static void reader_convertToString(Ct& ct) {
 	auto& buffer = containers::refByteArray(ct.at(0));
 	std::lock_guard<SpinLock> lock(buffer.lock);
-	ct.set(reinterpret_cast<char*>(buffer.data.data()));
+	ct.set(std::string(reinterpret_cast<char*>(buffer.data.data()), buffer.data.size()));
 }
 
 static void writer_convertToUtf8(Ct& ct) {
