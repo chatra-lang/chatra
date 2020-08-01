@@ -364,10 +364,24 @@ static void format(Ct& ct) {
 			char typeString[4] = {'l', 'l', type, '\0'};
 			if (value.isNull())
 				valueString = convert(specifierIndex, spec, specSize, "d", 0);
-			else if (value.isInt())
-				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getInt()));
-			else if (value.isFloat())
-				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getFloat()));
+			else if (value.isInt()) {
+				if (value.getInt() >= 0)
+					valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getInt()));
+				else {
+					char subSpec[3] = {'%', type, '\0'};
+					auto sub = convert(specifierIndex, subSpec, 2, "", static_cast<long long>(-value.getInt()));
+					valueString = convert(specifierIndex, spec, specSize, "s", ("-" + sub).data());
+				}
+			}
+			else if (value.isFloat()) {
+				if (!std::signbit(value.getFloat()))
+					valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getFloat()));
+				else {
+					char subSpec[3] = {'%', type, '\0'};
+					auto sub = convert(specifierIndex, subSpec, 2, "", static_cast<long long>(-value.getFloat()));
+					valueString = convert(specifierIndex, spec, specSize, "s", ("-" + sub).data());
+				}
+			}
 			else if (value.isBool())
 				valueString = convert(specifierIndex, spec, specSize, "d", value.getBool() ? 1 : 0);
 			else
@@ -390,6 +404,8 @@ static void format(Ct& ct) {
 				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<double>(value.getInt()));
 			else if (value.isFloat())
 				valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<double>(value.getFloat()));
+			else if (value.isBool())
+				valueString = convert(specifierIndex, spec, specSize, typeString, value.getBool() ? 1.0 : 0.0);
 			else
 				typeMismatch = true;
 			break;
