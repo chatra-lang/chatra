@@ -18,18 +18,45 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-import regex
+import re: regex
 
-/*p = compile(r"abc""def", DotAll)
-m = p.search('0123abc"def')
-log(m != null ? 'true' : 'false')
+def testRegex()
+	log('[testRegex]')
 
-log(p.replace('0123abc"defghij_2345ABabc"defGHI', 'HOGE', Global))
+	p0: re.compile(r'aaa')
+	m0_0: p0.search('0123aaa456')
+	_check('simple search', m0_0 != null and m0_0.size() == 1 and m0_0[0].position == 4)
+	m0_1: p0.match('aaa')
+	_check('simple match', m0_1 != null and m0_1.size() == 1 and m0_1[0].position == 0)
+	r0: p0.replace('0123aaa456', 'abcdef')
+	_check('simple replace', r0 == '0123abcdef456')
 
-p = compile(r"日本語", DotAll)
-m = p.search('あいうえお日本語を含む文字列')
-log(m.toString()) */
+	p1: re.compile(r'日本語')
+	m1_0: p1.search('これは日本語の文字列です')
+	_check('simple search with non-ASCII characters', m1_0 != null and m1_0.size() == 1 and m1_0[0].position == 3)
+	m1_1: p1.match('日本語')
+	_check('simple match with non-ASCII characters', m1_1 != null and m1_1.size() == 1 and m1_1[0].position == 0)
+	r1: p1.replace('これは日本語の文字列です', '江戸弁')
+	_check('simple replace with non-ASCII characters', r1 == 'これは江戸弁の文字列です')
 
-// TODO
+	p2: re.compile(r'(ab((\d+)(cd(\d+))))')
+	m2: p2.search('0123ab456cd78ef')
+	_check('search groups', m2 != null and m2.size() == 6)
+	if m2 != null
+		_check('search groups[0]', m2[0].str == 'ab456cd78')
+		_check('search groups[1]', m2[1].str == 'ab456cd78')
+		_check('search groups[2]', m2[2].str == '456cd78')
+		_check('search groups[3]', m2[3].str == '456')
+		_check('search groups[4]', m2[4].str == 'cd78')
+		_check('search groups[5]', m2[5].str == '78')
+
+	m3: re.search('abc\n012def', '^012', re.M)
+	_check('flags for compilation time', m3 != null and m3[0].str == '012')
+
+	m4: re.search('abc\n012def', '^abc', re.NotBoL)
+	_check('flags for search()/match()', m4 == null)
+
+
+testRegex()
 
 _checkCmd('finished')
