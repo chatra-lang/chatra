@@ -42,6 +42,8 @@ def format(format: String, a0...; a1...)
 	return _native_format(format, indexes, values, a0.size())
 
 def operator(a0: String % a1)
-	return format(a0, *a1)
+	if a1 is Sequence or a1 is Dict
+		return format(a0, *a1)
+	return format(a0, a1)
 
 CHATRA_IGNORE_THIS_LINE )***"

@@ -38,7 +38,7 @@ var Global: 0x200  // for replace() only
 var G: 0x200  // for replace() only
 var NoCopy: 0x400  // for replace() only
 
-def _native_compile(p: Pattern, pattern: String, flags: 0) as native
+def _native_compile(p: Pattern, pattern: String, flags: Int) as native
 
 def compile(pattern: String, flags: 0)
 	p = Pattern()
@@ -46,9 +46,9 @@ def compile(pattern: String, flags: 0)
 	return p
 
 class Pattern
-	def _native_search(m: Match, str: String, flags: 0) as native
-	def _native_match(m: Match, str: String, flags: 0) as native
-	def _native_replace(str: String, format: String, flags: 0) as native
+	def _native_search(m: Match, str: String, flags: Int) as native
+	def _native_match(m: Match, str: String, flags: Int) as native
+	def _native_replace(str: String, format: String, flags: Int) as native
 
 	def search(str: String, flags: 0)
 		m = Match()

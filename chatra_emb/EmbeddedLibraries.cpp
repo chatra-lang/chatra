@@ -31,6 +31,7 @@ namespace format { cha::PackageInfo packageInfo(); }
 namespace regex { cha::PackageInfo packageInfo(); }
 namespace containers { cha::PackageInfo packageInfo(); }
 namespace io { cha::PackageInfo packageInfo(); }
+namespace random { cha::PackageInfo packageInfo(); }
 }  // namespace emb
 
 static std::atomic<bool> initialized = {false};
@@ -48,6 +49,7 @@ static void initialize() {
 			emb::regex::packageInfo(),
 			emb::containers::packageInfo(),
 			emb::io::packageInfo(),
+			emb::random::packageInfo(),
 	};
 
 	for (auto& pi : packageList)

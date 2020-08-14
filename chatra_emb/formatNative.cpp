@@ -113,6 +113,33 @@ static std::string convert(size_t specifierIndex, char* spec, size_t specSize, c
 	#pragma GCC diagnostic pop
 #endif
 
+static std::string toNegative(const std::string& valueString) {
+	auto it = std::find_if(valueString.cbegin(), valueString.cend(), [](char c) {
+		return isDigit(c) || c == '+';
+	});
+	assert(it != valueString.cend());
+
+	auto offset = static_cast<size_t>(std::distance(valueString.cbegin(), it));
+	auto ret = valueString;
+
+	if (*it == '+') {
+		ret[offset] = '-';
+		return std::move(ret);
+	}
+
+	if (offset != 0) {
+		ret[offset - 1] = '-';
+		return std::move(ret);
+	}
+
+	if (*it == '0' && valueString.length() != 1) {
+		ret[0] = '-';
+		return std::move(ret);
+	}
+
+	return '-' + valueString;
+}
+
 template <typename IsDigitPred>
 static void postProcess(std::string& valueString,
 		const std::string& dMarker, const std::string& dsInt, const std::string& dsFrac,
@@ -368,18 +395,16 @@ static void format(Ct& ct) {
 				if (value.getInt() >= 0)
 					valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getInt()));
 				else {
-					char subSpec[3] = {'%', type, '\0'};
-					auto sub = convert(specifierIndex, subSpec, 2, "", static_cast<long long>(-value.getInt()));
-					valueString = convert(specifierIndex, spec, specSize, "s", ("-" + sub).data());
+					valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(-value.getInt()));
+					valueString = toNegative(valueString);
 				}
 			}
 			else if (value.isFloat()) {
 				if (!std::signbit(value.getFloat()))
 					valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(value.getFloat()));
 				else {
-					char subSpec[3] = {'%', type, '\0'};
-					auto sub = convert(specifierIndex, subSpec, 2, "", static_cast<long long>(-value.getFloat()));
-					valueString = convert(specifierIndex, spec, specSize, "s", ("-" + sub).data());
+					valueString = convert(specifierIndex, spec, specSize, typeString, static_cast<long long>(-value.getFloat()));
+					valueString = toNegative(valueString);
 				}
 			}
 			else if (value.isBool())
