@@ -17,6 +17,8 @@ add_library(chatra_emb
         ioNativeStandardFile.cpp
         random.cha
         randomNative.cpp
+        math.cha
+        mathNative.cpp
         )
 
 target_link_libraries(chatra_emb INTERFACE chatra_core)

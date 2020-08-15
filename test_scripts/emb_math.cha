@@ -1,8 +1,7 @@
-CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +18,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-def chatraVersion()
-	return '0.1.0 develop'
-
-var intMax: 0x7FFF_FFFF_FFFF_FFFF
-var intMin: -0x8000_0000_0000_0000
-
-var floatMax: 1.79769313486231570815e+308
-var floatMin: 2.22507385850720138309e-308
-var floatEpsilon: 2.22044604925031308085e-16
+import math
 
 
-CHATRA_IGNORE_THIS_LINE )***"
+_checkCmd('finished')

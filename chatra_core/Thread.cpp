@@ -2891,7 +2891,7 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return divisionFloor(v0, v1);
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return std::floor(v0 / v1); });
 			break;
 
 		case Operator::DivisionCeiling:
@@ -2902,7 +2902,7 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return divisionCeiling(v0, v1);
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return std::ceil(v0 / v1); });
 			break;
 
 		case Operator::Modulus:
@@ -2924,7 +2924,7 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return v0 - divisionFloor(v0, v1) * v1;
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return v0 - std::floor(v0 / v1) * v1; });
 			break;
 
 		case Operator::ModulusCeiling:
@@ -2935,14 +2935,14 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return v0 - divisionCeiling(v0, v1) * v1;
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return v0 - std::ceil(v0 / v1) * v1; });
 			break;
 
 		case Operator::Exponent:
 			shouldContinue = standardBinaryOperator(
 					[](bool v0, bool v1) -> bool { (void)v0; (void)v1; throw OperatorNotSupportedException(); },
 					[](int64_t v0, int64_t v1) {
-						if (v1 < 0)
+						if (v1 < 0 || v1 > 256)
 							throw OperatorNotSupportedException();
 						if (v1 == 0)
 							return static_cast<int64_t>(1);
