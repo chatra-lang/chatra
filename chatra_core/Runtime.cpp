@@ -118,13 +118,16 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 	return scriptNode;
 }
 
-bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node) {
+bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
+		bool warnIfDuplicates) {
 	assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 	if (imports.count(sid) != 0) {
-		errorAtNode(errorReceiver, ErrorLevel::Warning, node->subNodes[SubNode::Import_Package].get(),
-				"duplicated imports; ignored", {});
+		if (warnIfDuplicates) {
+			errorAtNode(errorReceiver, ErrorLevel::Warning, node->subNodes[SubNode::Import_Package].get(),
+					"duplicated imports; ignored", {});
+		}
 		return false;
 	}
 
@@ -696,7 +699,7 @@ void RuntimeImp::restoreEntities(Reader& r, PackageId packageId, Node* node) {
 				auto* hostPackage = package;
 				if (hostPackageId != packageId)
 					hostPackage = packageIds.ref(hostPackageId);
-				if (!hostPackage->requiresProcessImport(*this, primarySTable.get(), n.get()))
+				if (!hostPackage->requiresProcessImport(*this, primarySTable.get(), n.get(), false))
 					continue;
 
 				targetPackages.emplace_back(n.get(), hostPackageId, targetPackageId);

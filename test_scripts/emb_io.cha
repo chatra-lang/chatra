@@ -135,7 +135,7 @@ def testFileOutputStream()
 	v = ByteArray().resize(8)
 	_check('verify read size', s.read(v) == 8)
 	_check('verify contents', v[0] == 0x01 and v[1] == 0x02 and v[2] == 0x03 and v[3] == 0x06
-			 and v[4] == 0x07 and v[5] == 0x08 and v[6] == 0x09 and v[7] == 0x0A)
+			and v[4] == 0x07 and v[5] == 0x08 and v[6] == 0x09 and v[7] == 0x0A)
 
 
 def testFileWriter()

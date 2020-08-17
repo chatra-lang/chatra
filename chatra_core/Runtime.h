@@ -928,7 +928,8 @@ public:
 
 	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
 
-	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node);
+	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
+			bool warnIfDuplicates = true);
 	Package& import(Node* node, PackageId targetPackageId);
 	void build(IErrorReceiver& errorReceiver, const StringTable* sTable);
 	void allocatePackageObject();
