@@ -210,6 +210,9 @@ struct StandardFileSystem : public IFileSystem {
 		size_t offset = 0;
 		auto fileName = readString(stream, offset);
 		auto flags = readInt<FileOpenFlags::Type>(stream, offset);
+		if (flags & FileOpenFlags::Write)
+			flags |= FileOpenFlags::Append;  // avoiding re-creation
+
 		auto* f = doOpenFile(fileName, flags);
 
 		auto current = readInt<size_t>(stream, offset);
