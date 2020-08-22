@@ -203,6 +203,7 @@ struct StandardFileSystem : public IFileSystem {
 		writeString(buffer, f->fileName);
 		writeInt(buffer, f->flags);
 		writeInt(buffer, f->current);
+		f->close();
 		return buffer;
 	}
 
