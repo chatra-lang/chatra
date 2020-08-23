@@ -200,15 +200,24 @@ struct StandardFileSystem : public IFileSystem {
 	std::vector<uint8_t> saveFile(IFile* file) override {
 		auto* f = static_cast<StandardFileCommon*>(file);
 		std::vector<uint8_t> buffer;
-		writeString(buffer, f->fileName);
-		writeInt(buffer, f->flags);
-		writeInt(buffer, f->current);
-		f->close();
+		//std::printf("saveFile %s, flags = %u, current = %zu, length = %zu, fp = %s\n", f->fileName.data(),
+		//		static_cast<unsigned>(f->flags), f->current, f->length, f->fp != nullptr ? "non-null" : "null");
+		writeInt(buffer, f->fp == nullptr ? 0 : 1);
+		if (f->fp != nullptr) {
+			writeString(buffer, f->fileName);
+			writeInt(buffer, f->flags);
+			writeInt(buffer, f->current);
+			f->close();
+		}
 		return buffer;
 	}
 
 	IFile *restoreFile(const std::vector<uint8_t>& stream) override {
 		size_t offset = 0;
+
+		if (readInt<int>(stream, offset) == 0)
+			return new ReadStandardFile("", static_cast<FileOpenFlags::Type>(0), nullptr, 0);
+
 		auto fileName = readString(stream, offset);
 		auto flags = readInt<FileOpenFlags::Type>(stream, offset);
 		if (flags & FileOpenFlags::Write)
@@ -217,6 +226,8 @@ struct StandardFileSystem : public IFileSystem {
 		auto* f = doOpenFile(fileName, flags);
 
 		auto current = readInt<size_t>(stream, offset);
+		//std::printf("restoreFile %s, flags = %u, current = %zu, length = %zu, fp = %s\n", fileName.data(),
+		//		static_cast<unsigned>(flags), current, f->length, f->fp != nullptr ? "non-null" : "null");
 		try {
 			if (current > f->length)
 				throw IllegalArgumentException();
