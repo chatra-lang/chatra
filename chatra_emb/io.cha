@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,212 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-// TODO
+import containers
+
+class Stream
+	def close()
+
+
+class InputStream extends Stream
+	def init()
+		super()
+
+	def available()
+		return 0
+
+	def read(buffer: ByteArray, offset: 0, length: -1)
+		throw UnsupportedOperationException()
+
+	def skip(length: Int)
+		return read(ByteArray().resize(length))
+
+
+class OutputStream extends Stream
+	def init()
+		super()
+
+	def flush()
+
+	def write(buffer: ByteArray, offset: 0, length: -1)
+		throw UnsupportedOperationException()
+
+
+class RandomAccessStream extends Stream
+	def init()
+		super()
+
+	def seek(offset: Int; begin: false, end: false, current: false)  // default is current
+		throw UnsupportedOperationException()
+
+	def position()
+		throw UnsupportedOperationException()
+
+
+class FileInputStream extends InputStream, RandomAccessStream
+	def _init_instance(fileName, kwargs) as native
+
+	def init(fileName: String; kwargs...)
+		if fileName == null
+			throw IllegalArgumentException()
+		super.InputStream()
+		super.RandomAccessStream()
+		_init_instance(fileName, kwargs)
+
+	def close() as native
+
+	def available() as native
+
+	def _native_read(buffer, offset, length) as native
+
+	def read(buffer: ByteArray, offset: 0, length: -1)
+		if buffer == null
+			throw IllegalArgumentException()
+		return _native_read(buffer, offset, length)
+
+	def skip(length: Int)
+	    if length < 0
+	        throw IllegalArgumentException
+	    a0 = position()
+	    seek(length, current: true)
+		return position() - a0
+
+	def _native_seek(offset, origin) as native
+
+	def seek(offset: Int; begin: false, end: false, current: false)
+		_native_seek(offset, begin ? 0 : end ? 1 : 2)
+		return self
+
+	def position() as native
+
+
+class FileOutputStream extends OutputStream, RandomAccessStream
+	def _init_instance(fileName, append, kwargs) as native
+
+	def init(fileName: String; append: false, kwargs...)
+		if fileName == null
+			throw IllegalArgumentException()
+		super.OutputStream()
+		super.RandomAccessStream()
+		kwargs['append'] = append
+		_init_instance(fileName, append, kwargs)
+
+	def close() as native
+
+	def flush() as native
+
+	def _native_write(buffer, offset, length) as native
+
+	def write(buffer: ByteArray, offset: 0, length: -1)
+		if buffer == null
+			throw IllegalArgumentException()
+		return _native_write(buffer, offset, length)
+
+	def _native_seek(offset, origin) as native
+
+	def seek(offset: Int; begin: false, end: false, current: false)
+		_native_seek(offset, begin ? 0 : end ? 1 : 2)
+		return self
+
+	def position() as native
+
+
+class Reader extends Stream
+	sync
+		var _stream
+		var _buffer
+		var _available
+		var _offset: 0
+
+	def init(stream: InputStream; bufferSize: 1024)
+		if stream == null
+			throw IllegalArgumentException()
+		super()
+		_stream = stream
+		_buffer = ByteArray().resize(bufferSize)
+		_available = _stream.read(_buffer)
+
+	def close()
+		_stream.close()
+
+	def _convertToString(buffer) as native
+
+	def readLine()
+		if _offset >= _available
+			return null
+		out: ByteArray()
+		readLoop: while true
+			while _offset < _available
+				c: _buffer[_offset++]
+				if c == 0x0A
+					break readLoop
+				out.add(c)
+
+			_available = _stream.read(_buffer)
+			if _available == 0
+				break
+			_offset = 0
+		return _convertToString(out)
+
+	def readLines()
+		lines: {}
+		while (line: readLine()) != null
+			lines.add(line)
+		return lines
+
+
+class Writer extends Stream
+	sync
+		var _stream
+		var _buffer: ByteArray()
+
+	def init(stream: OutputStream)
+		if stream == null
+			throw IllegalArgumentException()
+		super()
+		_stream = stream
+
+	def close()
+		_stream.close()
+
+	def flush()
+		_stream.flush()
+
+	def _convertToUtf8(buffer, line) as native
+
+	def write(line: String; lineFeed: false)
+		if line == null
+			throw IllegalArgumentException()
+		if lineFeed
+			line += '\n'
+		length: _convertToUtf8(_buffer, line)
+		_stream.write(_buffer, 0, length)
+
+	def writeLine(line: String)
+		if line == null
+			throw IllegalArgumentException()
+		write(line, lineFeed: (line.size() == 0 or line[-1] != 0x0A))
+
+	def writeLines(lines)
+		if lines == null
+			throw IllegalArgumentException()
+		for line in lines
+			writeLine(line)
+
+
+def open(fileName: String; read: false, write: false, stream: false, kwargs...)  // default is read
+	if fileName == null
+		throw IllegalArgumentException()
+	if read and write
+		throw UnsupportedOperationException()
+	if kwargs.has('append') and kwargs['append'] and !write
+		throw IllegalArgumentException()
+
+	if write
+		s: FileOutputStream(fileName, *kwargs)
+		return stream ? s : Writer(s)
+	else
+		s: FileInputStream(fileName, *kwargs)
+		return stream ? s : Reader(s)
+
 
 CHATRA_IGNORE_THIS_LINE )***"

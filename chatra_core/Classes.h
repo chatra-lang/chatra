@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -176,14 +176,15 @@ public:
 struct NativeMethod {
 	using Signature = void (*)(NativeCallHandler handler, Thread& thread, ObjectBase* object,
 			StringId name, StringId subName, Tuple& args, Reference ret);
+
+	StringId name;
+	StringId subName;
 	Signature method;
 	NativeCallHandler handler;
 
 public:
-	explicit NativeMethod(Signature method, NativeCallHandler handler = nullptr) noexcept
-			: method(method), handler(handler) {}
-
-	bool isNull() const { return method == nullptr; }
+	NativeMethod(StringId name, StringId subName, Signature method, NativeCallHandler handler = nullptr) noexcept
+			: name(name), subName(subName), method(method), handler(handler) {}
 };
 
 
@@ -204,7 +205,9 @@ private:
 	size_t size = 0;
 	size_t baseSize = 0;
 	std::unordered_map<Node*, size_t> syncMap;
-	std::unordered_map<std::pair<StringId, StringId>, NativeMethod, HashPairStringId> nativeMethods;
+
+	std::forward_list<NativeMethod> nativeMethods;
+	std::unordered_map<std::pair<StringId, StringId>, const NativeMethod*, HashPairStringId> nativeByName;
 
 public:
 	struct ForEmbeddedMethods {};
@@ -237,9 +240,7 @@ public:
 	void add(Node* node, const Class* cl, StringId name, StringId subName,
 			std::vector<ArgumentDef> args, std::vector<ArgumentDef> subArgs) noexcept;
 
-	void add(StringId name, StringId subName, NativeMethod method) noexcept {
-		nativeMethods.emplace(std::make_pair(name, subName), method);
-	}
+	void add(const NativeMethod& method) noexcept;
 
 	// Add all methods in r except native methods; Some Method instances are copied.
 	void inherit(const MethodTable& r, const Class* cl);
@@ -249,9 +250,9 @@ public:
 
 	std::vector<const Method*> findByName(StringId name, StringId subName) const;
 
-	NativeMethod findNativeMethod(StringId name, StringId subName) const {
-		auto it = nativeMethods.find(std::make_pair(name, subName));
-		return it == nativeMethods.cend() ? NativeMethod(nullptr) : it->second;
+	const NativeMethod* findNativeMethod(StringId name, StringId subName) const {
+		auto it = nativeByName.find(std::make_pair(name, subName));
+		return it == nativeByName.cend() ? nullptr : it->second;
 	}
 
 	std::vector<size_t> getPrimaryIndexes() const;
@@ -394,13 +395,13 @@ public:
 	// Constructor itself does only allocating memory and
 	Class(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
 			Package* package, Node* node,
-			ObjectBuilder objectBuilder, std::vector<std::tuple<StringId, StringId, NativeMethod>> nativeMethods) noexcept;
+			ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) noexcept;
 
 	// Constructor for compound types (two-step initialization)
 	Class(Package* package, Node* node) noexcept;
 
 	void initialize(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
-			ObjectBuilder objectBuilder, std::vector<std::tuple<StringId, StringId, NativeMethod>> nativeMethods);
+			ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods);
 
 	Package* getPackage() const {
 		return package;

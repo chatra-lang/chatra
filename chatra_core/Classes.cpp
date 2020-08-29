@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -173,6 +173,11 @@ void MethodTable::add(Node* node, const Class* cl, StringId name, StringId subNa
 		std::vector<ArgumentDef> args, std::vector<ArgumentDef> subArgs) noexcept {
 	methods.emplace_front(node, cl, name, subName, std::move(args), std::move(subArgs));
 	byName[name].emplace_back(&methods.front());
+}
+
+void MethodTable::add(const NativeMethod& method) noexcept {
+	nativeMethods.emplace_front(method);
+	nativeByName.emplace(std::make_pair(method.name, method.subName), &nativeMethods.front());
 }
 
 void MethodTable::inherit(const MethodTable& r, const Class* cl) {
@@ -393,11 +398,11 @@ void Class::addConvertingConstructor(const Class* sourceCl) {
 
 Class::Class(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
 		Package* package, Node* node,
-		ObjectBuilder objectBuilder, std::vector<std::tuple<StringId, StringId, NativeMethod>> nativeMethods) noexcept
+		ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) noexcept
 		: Class(package, node, node->sid, nullptr) {
 
 	try {
-		initialize(errorReceiver, sTable, classFinder, objectBuilder, std::move(nativeMethods));
+		initialize(errorReceiver, sTable, classFinder, objectBuilder, nativeMethods);
 	}
 	catch (...) {
 		// do nothing
@@ -408,7 +413,7 @@ Class::Class(Package* package, Node* node) noexcept : Class(package, node, node-
 }
 
 void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
-		ObjectBuilder objectBuilder, std::vector<std::tuple<StringId, StringId, NativeMethod>> nativeMethods) {
+		ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) {
 	this->objectBuilder = objectBuilder;
 
 	assert(node->blockNodesState == NodeState::Parsed);
@@ -465,14 +470,11 @@ void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable,
 	if (!hasConstructor)
 		constructors.add(nullptr, this, StringId::Init, StringId::Invalid, {}, {});
 
-	for (auto& e : nativeMethods) {
-		StringId name = std::get<0>(e);
-		StringId subName = std::get<1>(e);
-		NativeMethod nativeMethod = std::get<2>(e);
-		if (name == StringId::Init)
-			constructors.add(name, subName, nativeMethod);
+	for (auto& method : nativeMethods) {
+		if (method.name == StringId::Init)
+			constructors.add(method);
 		else
-			methods.add(name, StringId::Invalid, nativeMethod);
+			methods.add(method);
 	}
 }
 
@@ -500,6 +502,12 @@ static std::pair<StringId, const Class*> findArgumentClass(IClassFinder& classFi
 }
 
 static std::pair<StringId, const Class*> findArgumentClassAsPrimitive(IClassFinder& classFinder, Node* nValue) {
+	if (nValue->type != NodeType::Literal) {
+		assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
+		nValue = nValue->subNodes[0].get();
+		assert(nValue->type == NodeType::Literal);
+	}
+
 	switch (nValue->literalValue->type) {
 	case LiteralType::Bool:  return std::make_pair(StringId::Bool, Bool::getClassStatic());
 	case LiteralType::Int:  return std::make_pair(StringId::Int, Int::getClassStatic());
@@ -540,7 +548,8 @@ ArgumentDef nodeToArgument(IErrorReceiver& errorReceiver,
 		auto c = findArgumentClass(classFinder, nValue);
 		if (c.first != StringId::Invalid)
 			arg.defaultOp = nullptr;
-		else if (nValue->type == NodeType::Literal)
+		else if (nValue->type == NodeType::Literal
+				|| nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus)
 			c = findArgumentClassAsPrimitive(classFinder, nValue);
 		else {
 			assert(nValue->op == Operator::Call);

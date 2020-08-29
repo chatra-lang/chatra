@@ -808,31 +808,35 @@ def testFloat()
 
 	_check('division', 1000.0 / 26.0, 38.461538461538462)
 	_check('division', 1000.0 / -26.0, -38.461538461538462)
-	do
-		a = 1.0 /- 0.3
-		_check('division with rounding down', false)
-		catch UnsupportedOperationException
-			_check('division with rounding down', true)
-	do
-		a = 1.0 /+ 0.3
-		_check('division with rounding up', false)
-		catch UnsupportedOperationException
-			_check('division with rounding up', true)
+
+	_check('division with rounding down', 1.0 /- 0.25 == 4.0)
+	_check('division with rounding down', 1.0 /- -0.25 == -4.0)
+	_check('division with rounding down (plus / plus)', 1.0 /- 0.3 == 3.0)
+	_check('division with rounding down (minus / plus)', -1.0 /- 0.3 == -4.0)
+	_check('division with rounding down (plus / minus)', 1.0 /- -0.3 == -4.0)
+	_check('division with rounding down (minus / minus)', -1.0 /- -0.3 == 3.0)
+
+	_check('division with rounding up', 1.0 /+ 0.25 == 4.0)
+	_check('division with rounding up', 1.0 /+ -0.25 == -4.0)
+	_check('division with rounding up (plus / plus)', 1.0 /+ 0.3 == 4.0)
+	_check('division with rounding up (minus / plus)', -1.0 /+ 0.3 == -3.0)
+	_check('division with rounding up (plus / minus)', 1.0 /+ -0.3 == -3.0)
+	_check('division with rounding up (minus / minus)', -1.0 /+ -0.3 == 4.0)
 
 	_check('modulus (plus % plus)', 100.0 % 2.6, 1.2)
 	_check('modulus (minus % plus)', -100.0 % 2.6, -1.2)
 	_check('modulus (plus % minus)', 100.0 % -2.6, 1.2)
 	_check('modulus (minus % minus)', -100.0 % -2.6, -1.2)
-	do
-		a = 1.0 %- 0.3
-		_check('modulus with rounding down', false)
-		catch UnsupportedOperationException
-			_check('modulus with rounding down', true)
-	do
-		a = 1.0 %+ 0.3
-		_check('modulus with rounding up', false)
-		catch UnsupportedOperationException
-			_check('modulus with rounding up', true)
+
+	_check('modulus with rounding down (plus / plus)', 1.0 %- 0.3, 0.1)
+	_check('modulus with rounding down (minus / plus)', -1.0 %- 0.3, 0.2)
+	_check('modulus with rounding down (plus / minus)', 1.0 %- -0.3, -0.2)
+	_check('modulus with rounding down (minus / minus)', -1.0 %- -0.3, -0.1)
+
+	_check('modulus with rounding up (plus / plus)', 1.0 %+ 0.3, -0.2)
+	_check('modulus with rounding up (minus / plus)', -1.0 %+ 0.3, -0.1)
+	_check('modulus with rounding up (plus / minus)', 1.0 %+ -0.3, 0.1)
+	_check('modulus with rounding up (minus / minus)', -1.0 %+ -0.3, 0.2)
 
 	_check('exponent', 3.0 ** 19.0, 1162261467.0)
 	_check('exponent', -3.0 ** 19.0, -1162261467.0)
@@ -942,31 +946,21 @@ def testFloat()
 	a = 100.0
 	a /= 2.5
 	_check('division and assignment', a, 40.0)
-	do
-		a /-= 1.0
-		_check('division with rounding down and assignment', false)
-		catch UnsupportedOperationException
-			_check('division with rounding down and assignment', true)
-	do
-		a /+= 1.0
-		_check('division with rounding up and assignment', false)
-		catch UnsupportedOperationException
-			_check('division with rounding up and assignment', true)
-
+	a = 1.0
+	a /-= 0.3
+	_check('division with rounding down and assignment', a == 3.0)
+	a = 1.0
+	a /+= 0.3
+	_check('division with rounding up and assignment', a == 4.0)
 	a = 100.0
 	a %= 2.6
 	_check('modulus and assignment', a, 1.2)
-	do
-		a %-= 1.0
-		_check('modulus with rounding down and assignment', false)
-		catch UnsupportedOperationException
-			_check('modulus with rounding down and assignment', true)
-	do
-		a %+= 1.0
-		_check('modulus with rounding up and assignment', false)
-		catch UnsupportedOperationException
-			_check('modulus with rounding up and assignment', true)
-
+	a = 1.0
+	a %-= 0.3
+	_check('modulus with rounding down and assignment', a, 0.1)
+	a = 1.0
+	a %+= 0.3
+	_check('modulus with rounding up and assignment', a, -0.2)
 	a = 3.0
 	a **= 19.0
 	_check('exponent and assignment', a, 1162261467.0)

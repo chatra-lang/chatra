@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
 
 namespace chatra {
 
-constexpr unsigned currentVersion = 100;  // major(XX).minor(XX).revision(XX)
+constexpr unsigned currentVersion = 200;  // major(XX).minor(XX).revision(XX)
 
 static std::atomic<size_t> lastRuntimeId = {0};
 
@@ -118,13 +118,16 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 	return scriptNode;
 }
 
-bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node) {
+bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
+		bool warnIfDuplicates) {
 	assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 	if (imports.count(sid) != 0) {
-		errorAtNode(errorReceiver, ErrorLevel::Warning, node->subNodes[SubNode::Import_Package].get(),
-				"duplicated imports; ignored", {});
+		if (warnIfDuplicates) {
+			errorAtNode(errorReceiver, ErrorLevel::Warning, node->subNodes[SubNode::Import_Package].get(),
+					"duplicated imports; ignored", {});
+		}
 		return false;
 	}
 
@@ -171,15 +174,15 @@ static StringId getStringIdOrThrow(const StringTable* sTable, const std::string&
 	return sid;
 }
 
-static std::vector<std::tuple<StringId, StringId, NativeMethod>> filterNativeMethods(
+static std::vector<NativeMethod> filterNativeMethods(
 		const StringTable* sTable, const std::vector<NativeCallHandlerInfo>& handlers, StringId sidClass = StringId::Invalid) {
 
-	std::vector<std::tuple<StringId, StringId, NativeMethod>> ret;
+	std::vector<NativeMethod> ret;
 	for (auto& e : handlers) {
 		try {
 			if (sidClass == getStringIdOrThrow(sTable, e.className)) {
 				ret.emplace_back(getStringIdOrThrow(sTable, e.name), getStringIdOrThrow(sTable, e.subName),
-						NativeMethod(nativeCall, e.handler));
+						nativeCall, e.handler);
 			}
 		}
 		catch (RuntimeException&) {
@@ -192,11 +195,8 @@ static std::vector<std::tuple<StringId, StringId, NativeMethod>> filterNativeMet
 void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	assert(node->blockNodesState == NodeState::Parsed);
 
-	// Register variables, classes and operator overrides
-	assert(!clPackage);
-	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
-
-	// Performs two-path initialization to allow cross references in constructor arguments
+	// Performs two-path initialization to allow cross references in
+	// constructor arguments or package-global defs
 	std::unordered_map<StringId, Node*> classNames;
 	std::vector<Class*> classList;
 	for (auto& n : node->symbols) {
@@ -213,6 +213,11 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 
 		classList.push_back(classes.emplace(this, n.get()));
 	}
+
+	// Register variables, classes and operator overrides
+	assert(!clPackage);
+	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
+
 	for (auto* cl : classList)
 		cl->initialize(errorReceiver, sTable, *this, nullptr, filterNativeMethods(sTable, handlers, cl->getName()));
 
@@ -285,6 +290,10 @@ NativeEventObject* Package::restoreEvent(const std::vector<uint8_t>& stream) con
 		throw IllegalArgumentException();
 	auto t = *reinterpret_cast<const uint64_t*>(stream.data());
 	return new NativeEventObjectImp(runtime, static_cast<unsigned>(t));
+}
+
+IDriver* Package::getDriver(DriverType driverType) const {
+	return runtime.getDriver(driverType);
 }
 
 void Package::saveScripts(Writer& w) const {
@@ -364,6 +373,7 @@ void RuntimeImp::launchStorage() {
 	// Register pseudo package for finalizer
 	auto _finalizerPackageId = loadPackage({std::string("(finalizer)"), ""});
 	assert(_finalizerPackageId == finalizerPackageId);
+    (void)_finalizerPackageId;
 
 	auto* finalizerPackage = packageIds.ref(finalizerPackageId);
 	finalizerPackage->initialized = true;
@@ -380,6 +390,7 @@ void RuntimeImp::launchStorage() {
 void RuntimeImp::launchFinalizerThread() {
 	auto _finalizerInstanceId = run(finalizerPackageId);  // global scope will be restored later
 	assert(_finalizerInstanceId == finalizerInstanceId);
+    (void)_finalizerInstanceId;
 
 	finalizerThread = instanceIds.ref(finalizerInstanceId)->threads.begin()->second.get();
 	assert(finalizerThread->getId() == finalizerThreadId);
@@ -397,7 +408,7 @@ void RuntimeImp::launchFinalizerThread() {
 void RuntimeImp::launchSystem(unsigned initialThreadCount) {
 	timers.emplace("", newSystemTimer());
 
-	multiThread = (initialThreadCount != UINT_MAX);
+	multiThread = (initialThreadCount != std::numeric_limits<unsigned>::max());
 	if (multiThread)
 		setWorkers(initialThreadCount);
 }
@@ -688,7 +699,7 @@ void RuntimeImp::restoreEntities(Reader& r, PackageId packageId, Node* node) {
 				auto* hostPackage = package;
 				if (hostPackageId != packageId)
 					hostPackage = packageIds.ref(hostPackageId);
-				if (!hostPackage->requiresProcessImport(*this, primarySTable.get(), n.get()))
+				if (!hostPackage->requiresProcessImport(*this, primarySTable.get(), n.get(), false))
 					continue;
 
 				targetPackages.emplace_back(n.get(), hostPackageId, targetPackageId);
@@ -947,7 +958,7 @@ void RuntimeImp::enqueue(Thread* thread) {
 
 	/*{
 		static unsigned count = 0;
-		static constexpr unsigned breakCount = UINT_MAX;  // UINT_MAX
+		static constexpr unsigned breakCount = std::numeric_limits<unsigned>::max();  // std::numeric_limits<unsigned>::max()
 		std::unique_lock<std::mutex> lock(mtQueue);
 		count++;
 		if (count == breakCount)
@@ -1019,6 +1030,19 @@ void RuntimeImp::issueTimer(unsigned waitingId, Timer& timer, Time time) {
 
 		runtime->resume(waitingId);
 	});
+}
+
+IDriver* RuntimeImp::getDriver(DriverType driverType) {
+	std::lock_guard<SpinLock> lock(lockDrivers);
+	auto it = drivers.find(driverType);
+	IDriver* driver = nullptr;
+	if (it == drivers.cend())
+		driver = drivers.emplace(driverType, host->queryDriver(driverType)).first->second.get();
+	else
+		driver = it->second.get();
+	if (driver == nullptr)
+		throw UnsupportedOperationException();
+	return driver;
 }
 
 std::string RuntimeImp::formatOrigin(const std::string& fileName, unsigned lineNo) {
@@ -1102,7 +1126,7 @@ void RuntimeImp::initialize(unsigned initialThreadCount) {
 }
 
 void RuntimeImp::initialize(unsigned initialThreadCount, const std::vector<uint8_t>& savedState) {
-	multiThread = (initialThreadCount != UINT_MAX);
+	multiThread = (initialThreadCount != std::numeric_limits<unsigned>::max());
 
 	registerEmbeddedClasses(classes);
 	registerEmbeddedFunctions(methods, operators);
@@ -1241,7 +1265,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 	}
 
 	for (; workerThreads.size() < threadCount; nextId++) {
-		workerThreads.emplace(nextId, new std::thread([&, this](unsigned wsId) {
+		workerThreads.emplace(nextId, std::unique_ptr<std::thread>(new std::thread([&, this](unsigned wsId) {
 			for (;;) {
 				Thread* thread;
 				{
@@ -1267,7 +1291,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 					outputError("fatal: uncaught exception raised\n");
 				}
 			}
-		}, nextId));
+		}, nextId)));
 	}
 	cvQueue.notify_all();
 }

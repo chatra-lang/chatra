@@ -71,6 +71,13 @@ public:
 			return cha::queryEmbeddedPackage(packageName);
 		}
 	}
+
+	cha::IDriver* queryDriver(cha::DriverType driverType) override {
+		switch (driverType) {
+		case cha::DriverType::FileSystem:  return cha::getStandardFileSystem();
+		default:  return nullptr;
+		}
+	}
 };
 
 static constexpr const char* standardTests[] = {
@@ -87,7 +94,13 @@ static constexpr const char* standardTests[] = {
 		"exceptions",
 		"embedded_containers",
 		"syntax_sugar",
-		"emb_sys"
+		"emb_sys",
+		"emb_format",
+		"emb_regex",
+		"emb_containers",
+		"emb_io",
+		"emb_random",
+		"emb_math",
 };
 
 static constexpr const char* multiThreadTests[] = {
@@ -108,7 +121,13 @@ static constexpr const char* serializeTests[] = {
 		"exceptions",
 		"embedded_containers",
 		"syntax_sugar",
-		"emb_sys"
+		"emb_sys",
+		"emb_format",
+		"emb_regex",
+		"emb_containers",
+		"emb_io",
+		"emb_random",
+		"emb_math",
 };
 
 static void runTest(std::shared_ptr<cha::Runtime>& runtime, const char* fileName) {
@@ -221,6 +240,10 @@ static void runSerializeTest(const std::shared_ptr<cha::IHost>& host,
 	runtime->loop();
 
 	cha::endCheckScript();
+
+	runtime->shutdown();
+	if (!cha::showResults())
+		throw TestFailedException();
 }
 
 static void runSerializeTest(unsigned tryCount) {
@@ -257,10 +280,10 @@ static void runSerializeTest(unsigned tryCount) {
 		auto index = std::uniform_int_distribution<size_t>(0, measured.size() - 1)(random);
 		auto& e = measured[index];
 
-		std::vector<unsigned> step;
 		auto divCount = std::uniform_int_distribution<unsigned>(1, 7)(random);
+		std::vector<unsigned> step(divCount);
 		for (unsigned i = 0; i < divCount; i++)
-			step.emplace_back(std::uniform_int_distribution<unsigned>(1, std::get<1>(e) - 1)(random));
+			step[i] = std::uniform_int_distribution<unsigned>(1, std::get<1>(e) - 1)(random);
 		std::sort(step.begin(), step.end());
 		step.emplace_back(std::get<1>(e) * 11 / 10);
 		for (unsigned i = divCount; i-- > 0; )
@@ -368,6 +391,8 @@ int runLanguageTests(int argc, char* argv[]) {
 					throw OptionError();
 				optParseFile = argv[++i];
 			}
+			else if (opt == "-diag")  // What's this?  This is observed only under CTest.
+				continue;
 			else
 				throw OptionError();
 		}

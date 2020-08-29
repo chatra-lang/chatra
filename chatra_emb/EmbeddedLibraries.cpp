@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,17 @@
 #include <atomic>
 #include <mutex>
 
-cha::PackageInfo chatra_emb_sysPackageInfo();
+namespace chatra {
+
+namespace emb {
+namespace sys { cha::PackageInfo packageInfo(); }
+namespace format { cha::PackageInfo packageInfo(); }
+namespace regex { cha::PackageInfo packageInfo(); }
+namespace containers { cha::PackageInfo packageInfo(); }
+namespace io { cha::PackageInfo packageInfo(); }
+namespace random { cha::PackageInfo packageInfo(); }
+namespace math { cha::PackageInfo packageInfo(); }
+}  // namespace emb
 
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
@@ -35,7 +45,13 @@ static void initialize() {
 		return;
 
 	std::vector<cha::PackageInfo> packageList = {
-			chatra_emb_sysPackageInfo()
+			emb::sys::packageInfo(),
+			emb::format::packageInfo(),
+			emb::regex::packageInfo(),
+			emb::containers::packageInfo(),
+			emb::io::packageInfo(),
+			emb::random::packageInfo(),
+			emb::math::packageInfo(),
 	};
 
 	for (auto& pi : packageList)
@@ -44,11 +60,11 @@ static void initialize() {
 	initialized = true;
 }
 
-namespace chatra {
 PackageInfo queryEmbeddedPackage(const std::string& packageName) {
 	if (!initialized)
 		initialize();
 	auto it = packages.find(packageName);
 	return it != packages.cend() ? it->second : PackageInfo{{}, {}, nullptr};
 }
+
 }  // namespace chatra

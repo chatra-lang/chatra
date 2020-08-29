@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,8 +62,8 @@ struct Line {
 	std::vector<Token> tokens;
 };
 
-constexpr unsigned WholeFile = UINT_MAX - 1;
-constexpr unsigned UnknownLine = UINT_MAX;
+constexpr unsigned WholeFile = std::numeric_limits<unsigned>::max() - 1;
+constexpr unsigned UnknownLine = std::numeric_limits<unsigned>::max();
 
 std::vector<std::shared_ptr<Line>> parseLines(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, const std::string& fileName, unsigned lineNo, std::string source);

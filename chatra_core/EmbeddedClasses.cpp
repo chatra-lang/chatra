@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -221,25 +221,27 @@ class DictKeyedIterator extends KeyedIterator
 		return m0.remove(m1[m2 - 1])
 )***";
 
+static const char* initSequence = R"***(
+class Sequence
+)***";
+
+static const char* initVariableLengthSequence = R"***(
+class VariableLengthSequence extends Sequence
+	def init()
+		super()
+)***";
+
 static const char* initArrayView = R"***(
-class ArrayView
+class ArrayView extends Sequence
 	var m0, m1
 
 	def init(a0, a1: IndexSet)
+		super()
 		m0 = a0
 		m1 = a1
 
 	def size()
 		return m1.size()
-
-	def add(a0...)
-		throw UnsupportedOperationException()
-
-	def insert(a0...)
-		throw UnsupportedOperationException()
-
-	def append(a0...)
-		throw UnsupportedOperationException()
 
 	def (a0: Int)
 		return m0[m1[a0]]
@@ -247,17 +249,11 @@ class ArrayView
 	def (a0: Int).set(r)
 		return m0[m1[a0]] = r
 
-	def remove(a0...)
-		throw UnsupportedOperationException()
-
-	def clear(a0...)
-		throw UnsupportedOperationException()
-
 	def clone()
 		return ArrayView(m0, m1)
 
 	def equals(a0)
-		if a0 == null or !(a0 is Array or a0 is ArrayView)
+		if a0 == null or !(a0 is Sequence)
 			return false
 		if size != a0.size
 			return false
@@ -313,7 +309,7 @@ void EventObject::activateWatcher(void* tag) {
 			activated.emplace(tag, watcher);
 			return;
 		}
-		if (count != UINT_MAX) {
+		if (count != std::numeric_limits<unsigned>::max()) {
 			count--;
 			shouldRestore = true;
 		}
@@ -333,7 +329,7 @@ void EventObject::notifyOne() {
 		EventWatcher watcher;
 		{
 			std::lock_guard<SpinLock> lock(lockWatchers);
-			assert(count != UINT_MAX);
+			assert(count != std::numeric_limits<unsigned>::max());
 			if (activated.empty()) {
 				count++;
 				return;
@@ -352,7 +348,7 @@ void EventObject::notifyAll() {
 	std::unordered_map<void*, EventWatcher>  watchersCopy;
 	{
 		std::lock_guard<SpinLock> lock(lockWatchers);
-		count = UINT_MAX;
+		count = std::numeric_limits<unsigned>::max();
 		std::swap(activated, watchersCopy);
 	}
 	for (auto& e : watchersCopy)
@@ -514,7 +510,7 @@ bool String::restore(chatra::Reader& r) {
 }
 
 static const char* initString = R"***(
-class String
+class String extends VariableLengthSequence
 	def init()
 
 	def init.fromString(a0: String) as native
@@ -882,7 +878,7 @@ bool Array::restore(Reader& r) {
 }
 
 static const char* initArray = R"***(
-class Array
+class Array extends VariableLengthSequence
 	def init()
 
 	def size() as native
@@ -959,7 +955,7 @@ class Array
 		return Array().append(self)
 
 	def equals(a0)
-		if a0 == null or !(a0 is Array or a0 is ArrayView)
+		if a0 == null or !(a0 is Sequence)
 			return false
 		if size != a0.size
 			return false
@@ -1321,7 +1317,7 @@ static void registerException_Derived() {
 
 static std::unique_ptr<Class> createEmbeddedClass(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, IClassFinder& classFinder, std::string script,
-		ObjectBuilder nativeConstructor, std::vector<std::tuple<StringId, StringId, NativeMethod>> nativeMethods) {
+		ObjectBuilder nativeConstructor, const std::vector<NativeMethod>& nativeMethods) {
 
 	auto lines = parseLines(errorReceiver, sTable, "(internal-classes)", 1, std::move(script));
 	auto node = groupScript(errorReceiver, sTable, lines);
@@ -1332,7 +1328,7 @@ static std::unique_ptr<Class> createEmbeddedClass(ParserWorkingSet& ws, IErrorRe
 	nodeMap.emplace(node->blockNodes[0]->sid, node.get());
 
 	std::unique_ptr<Class> cl(new Class(errorReceiver, sTable.get(), classFinder, nullptr, node->blockNodes[0].get(),
-			nativeConstructor, std::move(nativeMethods)));
+			nativeConstructor, nativeMethods));
 	embeddedClasses.add(cl.get());
 	embeddedClassesNode.emplace_front(std::move(node));
 	return cl;
@@ -1393,6 +1389,8 @@ void initializeEmbeddedClasses() {
 	addClass(initArrayKeyedIterator);
 	addClass(initDictIterator);
 	addClass(initDictKeyedIterator);
+	addClass(initSequence);
+	addClass(initVariableLengthSequence);
 	addClass(initArrayView);
 
 	/*embeddedClassesPtr.emplace_front(
@@ -1402,40 +1400,40 @@ void initializeEmbeddedClasses() {
 			*/
 
 	clAsync = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initAsync, createAsync, {
-			{StringId::_native_updated, StringId::Invalid, NativeMethod(&Async::native_updated)},
+			{StringId::_native_updated, StringId::Invalid, &Async::native_updated},
 	});
 
 	clString = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initString, createString, {
-			{StringId::Init, StringId::fromString, NativeMethod(&String::native_initFromString)},
-			{StringId::Init, StringId::fromChar, NativeMethod(&String::native_initFromChar)},
-			{StringId::size, StringId::Invalid, NativeMethod(&String::native_size)},
-			{StringId::Set, StringId::Invalid, NativeMethod(&String::native_set)},
-			{StringId::_native_add, StringId::Invalid, NativeMethod(&String::native_add)},
-			{StringId::_native_insert, StringId::Invalid, NativeMethod(&String::native_insert)},
-			{StringId::_native_append, StringId::Invalid, NativeMethod(&String::native_append)},
-			{StringId::_native_at, StringId::Invalid, NativeMethod(&String::native_at)},
-			{StringId::remove, StringId::Invalid, NativeMethod(&String::native_remove)},
-			{StringId::clone, StringId::Invalid, NativeMethod(&String::native_clone)},
-			{StringId::equals, StringId::Invalid, NativeMethod(&String::native_equals)},
-			{StringId::_native_sub, StringId::Invalid, NativeMethod(&String::native_sub)}
+			{StringId::Init, StringId::fromString, &String::native_initFromString},
+			{StringId::Init, StringId::fromChar, &String::native_initFromChar},
+			{StringId::size, StringId::Invalid, &String::native_size},
+			{StringId::Set, StringId::Invalid, &String::native_set},
+			{StringId::_native_add, StringId::Invalid, &String::native_add},
+			{StringId::_native_insert, StringId::Invalid, &String::native_insert},
+			{StringId::_native_append, StringId::Invalid, &String::native_append},
+			{StringId::_native_at, StringId::Invalid, &String::native_at},
+			{StringId::remove, StringId::Invalid, &String::native_remove},
+			{StringId::clone, StringId::Invalid, &String::native_clone},
+			{StringId::equals, StringId::Invalid, &String::native_equals},
+			{StringId::_native_sub, StringId::Invalid, &String::native_sub}
 	});
 
 	clArray = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initArray, createArray, {
-			{StringId::size, StringId::Invalid, NativeMethod(&Array::native_size)},
-			{StringId::_native_add, StringId::Invalid, NativeMethod(&Array::native_add)},
-			{StringId::_native_insert, StringId::Invalid, NativeMethod(&Array::native_insert)},
-			{StringId::remove, StringId::Invalid, NativeMethod(&Array::native_remove)},
-			{StringId::_native_at, StringId::Invalid, NativeMethod(&Array::native_at)}
+			{StringId::size, StringId::Invalid, &Array::native_size},
+			{StringId::_native_add, StringId::Invalid, &Array::native_add},
+			{StringId::_native_insert, StringId::Invalid, &Array::native_insert},
+			{StringId::remove, StringId::Invalid, &Array::native_remove},
+			{StringId::_native_at, StringId::Invalid, &Array::native_at}
 	});
 
 	clDict = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initDict, createDict, {
-			{StringId::size, StringId::Invalid, NativeMethod(&Dict::native_size)},
-			{StringId::has, StringId::Invalid, NativeMethod(&Dict::native_has)},
-			{StringId::_native_add, StringId::Invalid, NativeMethod(&Dict::native_add)},
-			{StringId::_native_at, StringId::Invalid, NativeMethod(&Dict::native_at)},
-			{StringId::remove, StringId::Invalid, NativeMethod(&Dict::native_remove)},
-			{StringId::keys, StringId::Invalid, NativeMethod(&Dict::native_keys)},
-			{StringId::values, StringId::Invalid, NativeMethod(&Dict::native_values)}
+			{StringId::size, StringId::Invalid, &Dict::native_size},
+			{StringId::has, StringId::Invalid, &Dict::native_has},
+			{StringId::_native_add, StringId::Invalid, &Dict::native_add},
+			{StringId::_native_at, StringId::Invalid, &Dict::native_at},
+			{StringId::remove, StringId::Invalid, &Dict::native_remove},
+			{StringId::keys, StringId::Invalid, &Dict::native_keys},
+			{StringId::values, StringId::Invalid, &Dict::native_values}
 	});
 
 	// Add embedded conversions

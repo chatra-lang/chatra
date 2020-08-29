@@ -19,12 +19,50 @@
  */
 
 #include "Runtime.h"
+#include <cstdio>
+#include <cstdarg>
 
 namespace chatra {
 
 class NativeReferenceImp;
 class NativeCallContextImp;
 
+NativeException::NativeException(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	setMessage(format, args);
+	va_end(args);
+}
+
+#if defined(__clang__)
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
+
+void NativeException::setMessage(const char *format, va_list args) {
+	va_list args2;
+	va_copy(args2, args);
+	auto length = std::vsnprintf(nullptr, 0, format, args);
+	if (length < 0)
+		message = "(error)";
+	else {
+		std::vector<char> buffer(length + 1);
+		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
+		message = std::string(buffer.data());
+	}
+	va_end(args2);
+}
+
+#if defined(__clang__)
+	#pragma clang diagnostic pop
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic pop
+#endif
 
 NativeEventObjectImp::NativeEventObjectImp(RuntimeImp& runtime, unsigned waitingId) noexcept
 		: runtime(runtime), waitingId(waitingId) {
@@ -116,6 +154,10 @@ public:
 
 	NativeEventObject* pause() override {
 		return new NativeEventObjectImp(thread.runtime, thread.requestToPause());
+	}
+
+	IDriver *getDriver(DriverType driverType) const override {
+		return thread.runtime.getDriver(driverType);
 	}
 
 	void log(const std::string& message) override {

@@ -1503,7 +1503,10 @@ static bool checkAsClass(const std::shared_ptr<Node>& node) {
 }
 
 static bool checkAsClassOrLiteral(const std::shared_ptr<Node>& node) {
-	return node->type == NodeType::Literal || checkAsClass(node);
+	return node->type == NodeType::Literal
+			|| ((isOperator(node, Operator::UnaryMinus) || isOperator(node, Operator::UnaryPlus))
+					&& node->subNodes[0]->type == NodeType::Literal)
+			|| checkAsClass(node);
 }
 
 static bool checkAsParameterList(ParserContext &ct, const std::shared_ptr<Node>& node) {
@@ -2198,10 +2201,12 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 				break;
 			}
 
-			std::shared_ptr<Node> subNode = extractStatementPiece(ct, it, n->tokens.cend(), e);
+			auto subNode = extractStatementPiece(ct, it, n->tokens.cend(), e);
 			if (subNode) {
-				if (e.subNodeIndex != SIZE_MAX)
+				if (e.subNodeIndex != SIZE_MAX) {
+					assert(e.subNodeIndex < n->subNodes.size() && !n->subNodes[e.subNodeIndex]);
 					n->subNodes[e.subNodeIndex] = std::move(subNode);
+				}
 			}
 			else if (e.required) {
 				hasError = true;
@@ -2249,8 +2254,10 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 		outNodes.push_back(n);
 
 		if (!recursive) {
-			if (n->type == NodeType::Sync || n->type == NodeType::IfGroup)
+			if (n->type == NodeType::Sync || n->type == NodeType::IfGroup) {
 				parseInnerNode(ws, errorReceiver, sTable, n.get(), false);
+				n->blockNodesState = NodeState::Parsed;
+			}
 		}
 	}
 
@@ -2276,13 +2283,15 @@ void initializeParser() {
 void errorAtNode(IErrorReceiver& errorReceiver, ErrorLevel level, Node* node,
 		const std::string& message, const std::vector<std::string>& args) {
 
+	assert(!message.empty());
+
 	if (node == nullptr) {
 		errorReceiver.error(level, "", UnknownLine, "", SIZE_MAX, SIZE_MAX, message, args);
 		return;
 	}
 
 	assert(!node->tokens.empty());
-	auto firstToken = *node->tokens[0];
+	auto& firstToken = *node->tokens[0];
 	auto firstLine = firstToken.line.lock();
 	assert(firstLine);
 

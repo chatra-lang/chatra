@@ -56,7 +56,6 @@ static std::string loadScript(const char* fileName) {
 	std::fseek(fp, 0, SEEK_SET);
 	auto size = std::fread(buffer.data(), 1, buffer.size(), fp);
 	std::fclose(fp);
-	buffer.push_back('\0');
 	return std::string(buffer.cbegin(), buffer.cbegin() + size);
 }
 
@@ -71,7 +70,6 @@ static std::string loadStdin() {
 				break;
 		}
 	}
-	buffer.push_back('\0');
 	return std::string(buffer.cbegin(), buffer.cend());
 }
 
@@ -122,15 +120,23 @@ public:
 		}
 		return cha::queryEmbeddedPackage(packageName);
 	}
+
+	cha::IDriver* queryDriver(cha::DriverType driverType) override {
+		switch (driverType) {
+		case cha::DriverType::FileSystem:  return cha::getStandardFileSystem();
+		default:  return nullptr;
+		}
+	}
 };
 
 int main(int argc, char* argv[]) {
 #if 0
-	//const char* args_test[] = {"chatra", "--language-test", "--baseline"};
+	const char* args_test[] = {"chatra", "--language-test", "--baseline"};
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize", "1000"};
-	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "exceptions: 5 4 14 97 15 28"};
+	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "emb_format: 226 1956 197 787 479 54 709"};
 	//const char* args_test[] = {"chatra", "samples_in_docs/readme_first_sample.cha"};
 	//const char* args_test[] = {"chatra", "--help"};
+	//const char* args_test[] = {"chatra", "--language-test", "--parse", "chatra_emb/containers.cha"};
 	argc = sizeof(args_test) / sizeof(args_test[0]);
 	argv = const_cast<char**>(args_test);
 #endif

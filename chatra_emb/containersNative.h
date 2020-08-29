@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,25 @@
  *
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
+#ifndef CHATRA_CONTAINERSNATIVE_H
+#define CHATRA_CONTAINERSNATIVE_H
 
-#include "chatra.h"
+#include "EmbInternal.h"
 
 namespace chatra {
 namespace emb {
-namespace sys {
+namespace containers {
 
-static const char* script =
-#include "sys.cha"
-;
+struct ByteArray {
+	SpinLock lock;
+	std::vector<uint8_t> data;
+};
 
-PackageInfo packageInfo() {
-	return {{{"sys", script}}, {}, nullptr};
-}
+ByteArray& refByteArray(cha::Ref& ref);
 
-}  // namespace sys
+
+}  // namespace containers
 }  // namespace emb
 }  // namespace chatra
+
+#endif //CHATRA_CONTAINERSNATIVE_H

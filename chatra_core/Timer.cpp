@@ -24,15 +24,26 @@ namespace chatra {
 
 Time Timer::getNextTime() {
 	std::lock_guard<SpinLock> lock(lockMap);
-	return map.empty() ? Time::max() : map.cbegin()->first;
+	return timeQueue.empty() ? Time::max() : timeQueue.front();
 }
 
-void Timer::popAndInvokeHandlers() {
+void Timer::popAndInvokeHandlers(Time currentTime) {
 	std::unordered_map<unsigned, TimerHandler> handlers;
 	{
 		std::lock_guard<SpinLock> lock(lockMap);
-		handlers = std::move(map.begin()->second.handlers);
-		map.erase(map.begin());
+		if (timeQueue.empty())
+		    return;
+
+		auto tm = timeQueue.front();
+		if (tm > currentTime)
+		    return;
+
+		timeQueue.pop_front();
+
+		auto it = map.find(tm);
+		assert(it != map.cend());
+		handlers = std::move(it->second.handlers);
+		map.erase(it);
 		for (auto& e : handlers) {
 			idToTime.erase(e.first);
 			recycledIds.emplace_back(e.first);
@@ -69,6 +80,14 @@ unsigned Timer::submitHandler(Time tm, TimerHandler handler) {
 			map[tm].handlers.emplace(id, std::move(handler));
 			if (map.cbegin()->first == tm)
 				handlerInserted = true;
+
+			if (timeQueue.empty())
+			    timeQueue.emplace_back(tm);
+			else {
+                timeQueue.insert(std::partition_point(timeQueue.cbegin(), timeQueue.cend(), [&](Time _tm) {
+                    return _tm < tm;
+                }), tm);
+            }
 		}
 		else
 			it->second.handlers.emplace(id, std::move(handler));
@@ -92,6 +111,7 @@ bool Timer::cancel(unsigned id) {
 
 void Timer::cancelAll() {
 	std::lock_guard<SpinLock> lock0(lockMap);
+	timeQueue.clear();
 	map.clear();
 	idToTime.clear();
 	recycledIds.clear();
@@ -109,14 +129,15 @@ private:
 private:
 	void run() {
 		for (;;) {
+		    Time nextTime;
 			{
 				std::unique_lock<std::mutex> lock0(mt);
-				auto nextTime = getNextTime();
+				nextTime = getNextTime();
 				auto nextPoint = (nextTime == Time::max() ? Clock::time_point::max() : Clock::time_point(nextTime));
 				if (cv.wait_until(lock0, nextPoint, [&]() { return stop; }))
 					return;
 			}
-			popAndInvokeHandlers();
+			popAndInvokeHandlers(nextTime);
 		}
 	}
 
@@ -154,7 +175,7 @@ protected:
 	void onHandlerInserted() override {
 		auto currentTime = getTime();
 		while (getNextTime() <= currentTime)
-			popAndInvokeHandlers();
+			popAndInvokeHandlers(currentTime);
 	}
 
 public:
@@ -173,7 +194,7 @@ public:
 			currentTime = (time += step);
 		}
 		while (getNextTime() <= currentTime)
-			popAndInvokeHandlers();
+			popAndInvokeHandlers(currentTime);
 	}
 };
 

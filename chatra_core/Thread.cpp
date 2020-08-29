@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -688,7 +688,7 @@ void Thread::methodCall(bool hasSetArg) {
 		throw RuntimeException(StringId::UnsupportedOperationException);
 	}
 
-	if (!methodValue->getNativeMethod().isNull()) {
+	if (methodValue->getNativeMethod() != nullptr) {
 		auto isNative = invokeNativeMethod(callerFrame,
 				methodValue->hasSource() ? &methodValue->getSourceRef().deref<ObjectBase>() : nullptr,
 				methodValue, argsValue, [&]() { f.pop(valueIndex + 1, f.values.size() - 1); });
@@ -862,12 +862,19 @@ void Thread::importMethodArguments(const Method* method, TemporaryObject* argsVa
 	}
 }
 
+#define CHATRA_CATCH_NATIVE_EXCEPTION(name)  \
+	catch (name& ex) {  \
+		errorAtNode(*this, ErrorLevel::Error, method->node,  \
+				!ex.message.empty() ? ex.message : #name " from native method", {});  \
+		throw RuntimeException(StringId::name);  \
+	}
+
 template <typename PostProcess>
 bool Thread::invokeNativeMethod(size_t callerFrame, ObjectBase* object,
 		TemporaryObject* methodValue, TemporaryObject* argsValue, PostProcess postProcess) {
 
-	auto nativeMethod = methodValue->getNativeMethod();
-	if (nativeMethod.isNull())
+	auto* nativeMethod = methodValue->getNativeMethod();
+	if (nativeMethod == nullptr)
 		return false;
 
 	// This is required for avoiding conflicts with resuming this thread and postProcess()
@@ -881,13 +888,17 @@ bool Thread::invokeNativeMethod(size_t callerFrame, ObjectBase* object,
 	pauseRequested = false;
 	try {
 		auto& emptyTuple = *this->emptyTuple;
-		(*nativeMethod.method)(nativeMethod.handler, *this, object, method->name, method->subName,
+		(*nativeMethod->method)(nativeMethod->handler, *this, object, method->name, method->subName,
 				argsValue == nullptr ? emptyTuple : argsValue->getRef().deref<Tuple>(), ret);
 	}
 	catch (RuntimeException&) {
 		errorAtNode(*this, ErrorLevel::Error, method->node, "exception raised from native method", {});
 		throw;
 	}
+	CHATRA_CATCH_NATIVE_EXCEPTION(PackageNotFoundException)
+	CHATRA_CATCH_NATIVE_EXCEPTION(IllegalArgumentException)
+	CHATRA_CATCH_NATIVE_EXCEPTION(UnsupportedOperationException)
+	CHATRA_CATCH_NATIVE_EXCEPTION(NativeException)
 	catch (...) {
 		errorAtNode(*this, ErrorLevel::Error, method->node, "exception raised from native method", {});
 		throw RuntimeException(StringId::NativeException);
@@ -2880,7 +2891,7 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return divisionFloor(v0, v1);
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return std::floor(v0 / v1); });
 			break;
 
 		case Operator::DivisionCeiling:
@@ -2891,7 +2902,7 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return divisionCeiling(v0, v1);
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return std::ceil(v0 / v1); });
 			break;
 
 		case Operator::Modulus:
@@ -2913,7 +2924,7 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return v0 - divisionFloor(v0, v1) * v1;
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return v0 - std::floor(v0 / v1) * v1; });
 			break;
 
 		case Operator::ModulusCeiling:
@@ -2924,14 +2935,14 @@ bool Thread::resumeExpression() {
 							throw RuntimeException(StringId::DivideByZeroException);
 						return v0 - divisionCeiling(v0, v1) * v1;
 					},
-					[](double v0, double v1) -> double { (void)v0; (void)v1; throw OperatorNotSupportedException(); });
+					[](double v0, double v1) { return v0 - std::ceil(v0 / v1) * v1; });
 			break;
 
 		case Operator::Exponent:
 			shouldContinue = standardBinaryOperator(
 					[](bool v0, bool v1) -> bool { (void)v0; (void)v1; throw OperatorNotSupportedException(); },
 					[](int64_t v0, int64_t v1) {
-						if (v1 < 0)
+						if (v1 < 0 || v1 > 256)
 							throw OperatorNotSupportedException();
 						if (v1 == 0)
 							return static_cast<int64_t>(1);
@@ -3310,7 +3321,7 @@ bool Thread::processSwitchCase() {
 		}
 		auto ref0 = v0->getRef();
 		if (ref0.valueType() == ReferenceValueType::Bool) {
-			if (f.node->subNodes[0]->type == NodeType::Literal) {
+			if (f.node->subNodes[0]->type == NodeType::Literal && f.phase == Phase::Case_Check0) {
 				errorAtNode(*this, ErrorLevel::Warning, f.node->subNodes[0].get(),
 						"case statement with Bool constant always produces same result", {});
 			}
@@ -3892,6 +3903,17 @@ void Thread::restore(Reader& r) {
 		auto count = r.read<size_t>();
 		errors.emplace_back(std::make_tuple(std::move(fileName), lineNo, std::move(message), count));
 	});
+
+	IErrorReceiverBridge errorReceiverBridge(*this);
+	for (auto& f : frames) {
+		if (!f.hasMethods)
+			continue;
+		assert(f.node != nullptr && f.node->blockNodesState == NodeState::Parsed);
+		assert(f.methods == nullptr);
+		f.methods = methodTableCache.scanInnerFunctions(&errorReceiverBridge, sTable, f.package, f.node);
+	}
+	if (errorReceiverBridge.hasError())
+		throw IllegalArgumentException();
 }
 
 void Thread::postInitialize(Reader& r) {

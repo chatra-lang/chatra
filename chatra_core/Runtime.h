@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,10 +136,7 @@ private:
 	const Method* method0 = nullptr;
 	const Method* method1 = nullptr;
 	bool methodHasArgs = false;
-
-	NativeMethod nativeMethod = NativeMethod(nullptr);
-	StringId nativeMethodName = StringId::Invalid;
-	StringId nativeMethodSubName = StringId::Invalid;
+	const NativeMethod* nativeMethod = nullptr;
 
 	// Restrictions
 	bool hasName = false;
@@ -294,7 +291,7 @@ public:
 	const Method* getRefMethod() const;
 	const Method* getSetMethod() const;
 	bool methodHasArguments() const;
-	NativeMethod getNativeMethod() const;
+	const NativeMethod* getNativeMethod() const;
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS_WITH_THREAD(TemporaryObject);
 	CHATRA_DECLARE_SERIALIZE_OBJECT_REFS_METHODS;
@@ -449,7 +446,7 @@ public:
 #ifdef CHATRA_DEBUG_LOCK
 	Thread* thread = nullptr;
 	size_t frameIndex = SIZE_MAX;
-	unsigned id = UINT_MAX;
+	unsigned id = std::numeric_limits<unsigned>::max();
 	std::unordered_set<Reference> suspendedRefs;
 	mutable bool saved = false;
 
@@ -931,7 +928,8 @@ public:
 
 	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
 
-	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node);
+	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
+			bool warnIfDuplicates = true);
 	Package& import(Node* node, PackageId targetPackageId);
 	void build(IErrorReceiver& errorReceiver, const StringTable* sTable);
 	void allocatePackageObject();
@@ -947,6 +945,7 @@ public:
 	RuntimeId runtimeId() const override;
 	std::vector<uint8_t> saveEvent(NativeEventObject* event) const override;
 	NativeEventObject* restoreEvent(const std::vector<uint8_t>& stream) const override;
+	IDriver* getDriver(DriverType driverType) const override;
 
 	void saveScripts(Writer& w) const;
 	Package(RuntimeImp& runtime, Reader& r) noexcept;
@@ -1027,6 +1026,10 @@ public:
 
 	MethodTableCache methodTableCache;  // by restoreEntities() only
 
+	// Drivers
+	SpinLock lockDrivers;
+	std::unordered_map<DriverType, std::unique_ptr<IDriver>> drivers;
+
 private:
 	void launchStorage();
 	void launchFinalizerThread();
@@ -1065,6 +1068,8 @@ public:
 	void resume(unsigned waitingId);
 
 	void issueTimer(unsigned waitingId, Timer& timer, Time time);
+
+	IDriver* getDriver(DriverType driverType);
 
 	static std::string formatOrigin(const std::string& fileName, unsigned lineNo);
 	static std::string formatError(ErrorLevel level,

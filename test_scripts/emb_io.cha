@@ -1,0 +1,196 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2020 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+import io
+import containers
+
+def testFileInputStream()
+	log('[testFileInputStream]')
+
+	s = open('test_scripts/emb_io_test0.bin', stream: true)
+	_check('open file', s != null)
+
+	_check('available', s.available() == 20)
+
+	b0 = ByteArray().resize(12)
+	length = s.read(b0, 0, 4)
+	_check('read', length == 4 and b0[0] == 1 and b0[1] == 2 and b0[2] == 3 and b0[3] == 4)
+	_check('position', s.position() == 4)
+	_check('available', s.available() == 16)
+
+	do
+		s.read(b0, -13)
+		_check('negative offset', false)
+		catch IllegalArgumentException
+			_check('negative offset', true)
+
+	do
+		s.read(b0, 0, 13)
+		_check('illegal length', false)
+		catch IllegalArgumentException
+			_check('illegal length', true)
+
+	s.skip(12)
+	_check('position after skip', s.position() == 16)
+	_check('available', s.available() == 4)
+
+	length = s.read(b0, 4, 8)
+	_check('read', length == 4 and b0[4] == 0x89 and b0[5] == 0xAB and b0[6] == 0xCD and b0[7] == 0xEF)
+	_check('position', s.position() == 20)
+	_check('available', s.available() == 0)
+
+	s.seek(-4)
+	length = s.read(b0, -5, 5)
+	_check('read', length == 4 and b0[7] == 0x89 and b0[8] == 0xAB and b0[9] == 0xCD and b0[10] == 0xEF)
+
+	s.seek(-3)
+	length = s.read(b0, 0, 1)
+	_check('seek from current', length == 1 and b0[0] == 0xAB and s.position() == 18 and s.available() == 2)
+
+	s.seek(10, begin: true)
+	length = s.read(b0, 0, 1)
+	_check('seek from begin', length == 1 and b0[0] == 0x12 and s.position() == 11 and s.available() == 9)
+
+	s.seek(-5, end: true)
+	length = s.read(b0, 0, 1)
+	_check('seek from end', length == 1 and b0[0] == 0x17 and s.position() == 16 and s.available() == 4)
+
+	s.close()
+	_check('close (first time)', true)
+	s.close()
+	_check('close (second time)', true)
+
+
+def testFileReader()
+	log('[testFileReader]')
+
+	r = open('test_scripts/emb_io_test1.txt')
+	_check('open file', r != null)
+
+	line0 = r.readLine()
+	_check('readLine', line0 == 'first line')
+
+	lines = r.readLines()
+	_check('readLines (number of lines)', lines.size() == 5)
+	_check('readLines (2nd line)', lines[0] == 'second line')
+	_check('readLines (3rd line)', lines[1] == '')
+	_check('readLines (4th line)', lines[2] == 'fourth line')
+	_check('readLines (5th line)', lines[3] == '日本語の文字列')
+	_check('readLines (6th line)', lines[4] == '\\r\\n')
+
+
+def testFileOutputStream()
+	log('[testFileOutputStream]')
+
+	for in Range(2)
+		s = open('test_scripts/emb_io_test2.bin', write: true, stream: true)
+		_check('open file (overwrite)', s != null)
+
+		s.write(ByteArray{0x01, 0x02, 0x03, 0x04, 0x05})
+		s.seek(-2)
+		s.write(ByteArray{0x06, 0x07, 0x08})
+		_check('write some sequences', true)
+
+		s.flush()
+		_check('flush', true)
+		s.close()
+		_check('close (first time)', true)
+		s.close()
+		_check('close (second time)', true)
+
+	do
+		s = open('test_scripts/emb_io_test2.bin', append: true, stream: true)
+		_check('append without write', false)
+		catch IllegalArgumentException
+			_check('append without write', true)
+
+	s = open('test_scripts/emb_io_test2.bin', write: true, append: true, stream: true)
+	_check('open file (append)', s != null)
+	s.write(ByteArray{0x09, 0x0A})
+	s.close()
+	_check('append some sequences', true)
+
+	// verify
+	s = open('test_scripts/emb_io_test2.bin', stream: true)
+	_check('open file (verify)', s != null)
+	_check('verify file size', s.available() == 8)
+
+	v = ByteArray().resize(8)
+	_check('verify read size', s.read(v) == 8)
+	_check('verify contents', v[0] == 0x01 and v[1] == 0x02 and v[2] == 0x03 and v[3] == 0x06
+			and v[4] == 0x07 and v[5] == 0x08 and v[6] == 0x09 and v[7] == 0x0A)
+
+
+def testFileWriter()
+	log('[testFileWriter]')
+
+	w0 = open('test_scripts/emb_io_test3.txt', write: true)
+	_check('open file1', w0 != null)
+
+	w1 = open('test_scripts/emb_io_test4.txt', write: true)
+	_check('open file2', w1 != null)
+
+	do
+		w0.write(null, lineFeed: true)
+		_check('write null', false)
+		catch IllegalArgumentException
+			_check('write null', true)
+
+	w0.write('string0')
+	w0.write('string1', lineFeed: true)
+	w0.writeLine('string2')
+	w0.writeLine('string3\nstring4\n')
+	_check('write some sequences', true)
+
+	w1.write('string5')
+	_check('write some sequences', true)
+
+	w0.flush()
+	_check('flush', true)
+	w0.close()
+	_check('close (first time)', true)
+	w0.close()
+	_check('close (second time)', true)
+
+	w1.close()
+	_check('close without flush', true)
+	
+	// verify
+	r0 = open('test_scripts/emb_io_test3.txt')
+	r1 = open('test_scripts/emb_io_test4.txt')
+	
+	lines = r0.readLines()
+	_check('readLines (number of lines)', lines.size() == 4)
+	_check('readLines (1st line)', lines[0] == 'string0string1')
+	_check('readLines (2nd line)', lines[1] == 'string2')
+	_check('readLines (3rd line)', lines[2] == 'string3')
+	_check('readLines (4th line)', lines[3] == 'string4')
+
+	lines = r1.readLines()
+	_check('readLines (number of lines)', lines.size() == 1)
+	_check('readLines (1st line)', lines[0] == 'string5')
+
+
+testFileInputStream()
+testFileReader()
+testFileOutputStream()
+testFileWriter()
+
+_checkCmd('finished')
