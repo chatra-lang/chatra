@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,31 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-def chatraVersion()
-	return '0.1.0 develop'
+def _native_format(format, indexes, values, arrayArgs) as native
 
-var intMax: 0x7FFF_FFFF_FFFF_FFFF
-var intMin: -0x8000_0000_0000_0000
+def format(format: String, a0...; a1...)
+	indexes = a{}
+	values = a{}
 
-var floatMax: 1.79769313486231570815e+308
-var floatMin: 2.22507385850720138309e-308
-var floatEpsilon: 2.22044604925031308085e-16
+	for i, v in a0
+		indexes.add(i)
+		if v == null or (v is String or v is Bool or v is Int or v is Float)
+			values.add(v)
+		else
+			values.add(v.toString())
 
+	for k, v in a1
+		indexes.add(k)
+		if v == null or (v is String or v is Bool or v is Int or v is Float)
+			values.add(v)
+		else
+			values.add(v.toString())
+
+	return _native_format(format, indexes, values, a0.size())
+
+def operator(a0: String % a1)
+	if a1 is Sequence or a1 is Dict
+		return format(a0, *a1)
+	return format(a0, a1)
 
 CHATRA_IGNORE_THIS_LINE )***"

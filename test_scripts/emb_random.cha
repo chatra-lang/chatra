@@ -1,0 +1,76 @@
+/*
+ * Programming language 'Chatra' reference implementation
+ *
+ * Copyright(C) 2020 Chatra Project Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
+ */
+
+import random
+import format
+
+def testRandom()
+	log('[testRandom]')
+
+	r = random(1234)
+
+	seq0 = {
+			"5d47f5d7cd0d0032",
+			"-1d35459e1b1f357",
+			"-3f0557139c9c1fa3",
+			"-20570987722f4c98",
+			"-64cbdcccb0d034ea"
+			}
+
+	for i in Range(5)
+    	v = r.nextU64()
+    	_check('seq0[%d]' % i, '%016x' % v == seq0[i])
+    	if i + 1 != 5
+			for in Range(83)
+				r.nextU64()
+
+	r = random({0x1, 0x234, 0x56789A, 0xBCDEF012})
+
+	seq1 = {
+			"368c1b63f6aa39c0",
+			"-555f7e7f069624fa",
+			"-35f1dccaf258b777",
+			"45315d53c73ae079",
+			"1c630f8f4cce2d38"
+			}
+
+	for i in Range(5)
+    	v = r.nextU64()
+    	_check('seq1[%d]' % i, '%016x' % v == seq1[i])
+    	if i + 1 != 5
+			for in Range(83)
+				r.nextU64()
+
+	seq2 = {
+			"0.32870830668593065127",
+			"0.62223586939453334743",
+			"0.12875040071215160253",
+			"0.13580582707593380487",
+			"0.71211645290399760988"
+			}
+
+	for i in Range(5)
+		v = r.nextFloat()
+    	_check('seq2[%d]' % i, '%.20f' % v == seq2[i])
+
+
+testRandom()
+
+_checkCmd('finished')

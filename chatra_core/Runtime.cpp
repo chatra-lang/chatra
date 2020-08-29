@@ -118,13 +118,16 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 	return scriptNode;
 }
 
-bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node) {
+bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
+		bool warnIfDuplicates) {
 	assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 	if (imports.count(sid) != 0) {
-		errorAtNode(errorReceiver, ErrorLevel::Warning, node->subNodes[SubNode::Import_Package].get(),
-				"duplicated imports; ignored", {});
+		if (warnIfDuplicates) {
+			errorAtNode(errorReceiver, ErrorLevel::Warning, node->subNodes[SubNode::Import_Package].get(),
+					"duplicated imports; ignored", {});
+		}
 		return false;
 	}
 
@@ -287,6 +290,10 @@ NativeEventObject* Package::restoreEvent(const std::vector<uint8_t>& stream) con
 		throw IllegalArgumentException();
 	auto t = *reinterpret_cast<const uint64_t*>(stream.data());
 	return new NativeEventObjectImp(runtime, static_cast<unsigned>(t));
+}
+
+IDriver* Package::getDriver(DriverType driverType) const {
+	return runtime.getDriver(driverType);
 }
 
 void Package::saveScripts(Writer& w) const {
@@ -692,7 +699,7 @@ void RuntimeImp::restoreEntities(Reader& r, PackageId packageId, Node* node) {
 				auto* hostPackage = package;
 				if (hostPackageId != packageId)
 					hostPackage = packageIds.ref(hostPackageId);
-				if (!hostPackage->requiresProcessImport(*this, primarySTable.get(), n.get()))
+				if (!hostPackage->requiresProcessImport(*this, primarySTable.get(), n.get(), false))
 					continue;
 
 				targetPackages.emplace_back(n.get(), hostPackageId, targetPackageId);
@@ -1023,6 +1030,19 @@ void RuntimeImp::issueTimer(unsigned waitingId, Timer& timer, Time time) {
 
 		runtime->resume(waitingId);
 	});
+}
+
+IDriver* RuntimeImp::getDriver(DriverType driverType) {
+	std::lock_guard<SpinLock> lock(lockDrivers);
+	auto it = drivers.find(driverType);
+	IDriver* driver = nullptr;
+	if (it == drivers.cend())
+		driver = drivers.emplace(driverType, host->queryDriver(driverType)).first->second.get();
+	else
+		driver = it->second.get();
+	if (driver == nullptr)
+		throw UnsupportedOperationException();
+	return driver;
 }
 
 std::string RuntimeImp::formatOrigin(const std::string& fileName, unsigned lineNo) {

@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,255 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-// TODO
+def _native_comply(first, last, value) as native
+def _native_convert(first, last, value) as native
+def _native_systemRandom() as native
+
+class RandomGenerator
+	def init()
+		return
+
+	def nextU64()
+		throw UnsupportedOperationException()
+
+	def nextInt(first: Int, last: Int)
+		if first >= last
+			throw IllegalArgumentException()
+		value: 0
+		while true
+			value = nextU64()
+			if _native_comply(first, last, value)
+				break
+		return _native_convert(first, last, value)
+
+	def nextInt(last: Int)
+		return nextInt(0, last)
+
+	def nextFloat()
+		return Float(nextU64() >>> 11) * (1.0 / 9007199254740992.0)
+
+
+// The SFMT implementation based on original C implementation of
+// SIMD-oriented Fast Mersenne Twister (SFMT)
+// see http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/SFMT/index-jp.html
+
+var SFMT_MEXP: 19937
+
+var SFMT_POS1: 122
+var SFMT_SL1: 18
+var SFMT_SL2: 1
+var SFMT_SR1: 11
+var SFMT_SR2: 1
+var SFMT_MSK1: 0xdfffffef
+var SFMT_MSK2: 0xddfecb7f
+var SFMT_MSK3: 0xbffaffff
+var SFMT_MSK4: 0xbffffff6
+var SFMT_PARITY1: 0x00000001
+var SFMT_PARITY2: 0x00000000
+var SFMT_PARITY3: 0x00000000
+var SFMT_PARITY4: 0x13c9e684
+
+var SFMT_N: SFMT_MEXP / 128 + 1
+var SFMT_N32: SFMT_N * 4
+
+class SfmtW128
+	var u: {0, 0, 0, 0}
+
+class Sfmt extends RandomGenerator
+	var state: {for in Range(SFMT_N): SfmtW128()}
+	var idx: 0
+
+	def rshift128(out: SfmtW128, in: SfmtW128, shift: Int)
+		th: in.u[3] << 32 | in.u[2]
+		tl: in.u[1] << 32 | in.u[0]
+	
+		oh: th >>> shift * 8
+		ol: tl >>> shift * 8
+		ol |= th << 64 - shift * 8
+		out.u[1] = ol >> 32 & 0xFFFFFFFF
+		out.u[0] = ol & 0xFFFFFFFF
+		out.u[3] = oh >> 32 & 0xFFFFFFFF
+		out.u[2] = oh & 0xFFFFFFFF
+	
+	def lshift128(out: SfmtW128, in: SfmtW128, shift: Int)
+		th: in.u[3] << 32 | in.u[2]
+		tl: in.u[1] << 32 | in.u[0]
+	
+		oh: th << shift * 8
+		ol: tl << shift * 8
+		oh |= tl >>> 64 - shift * 8
+		out.u[1] = ol >> 32 & 0xFFFFFFFF
+		out.u[0] = ol & 0xFFFFFFFF
+		out.u[3] = oh >> 32 & 0xFFFFFFFF
+		out.u[2] = oh & 0xFFFFFFFF
+	
+	def doRecursion(r: SfmtW128, a: SfmtW128, b: SfmtW128, c: SfmtW128, d: SfmtW128)
+		x: SfmtW128()
+		y: SfmtW128()
+	
+		lshift128(x, a, SFMT_SL2)
+		rshift128(y, c, SFMT_SR2)
+		r.u[0] = (a.u[0] ^ x.u[0] ^ (b.u[0] >> SFMT_SR1 & SFMT_MSK1)
+				^ y.u[0] ^ (d.u[0] << SFMT_SL1)) & 0xFFFFFFFF
+		r.u[1] = (a.u[1] ^ x.u[1] ^ (b.u[1] >> SFMT_SR1 & SFMT_MSK2)
+				^ y.u[1] ^ (d.u[1] << SFMT_SL1)) & 0xFFFFFFFF
+		r.u[2] = (a.u[2] ^ x.u[2] ^ (b.u[2] >> SFMT_SR1 & SFMT_MSK3)
+				^ y.u[2] ^ (d.u[2] << SFMT_SL1)) & 0xFFFFFFFF
+		r.u[3] = (a.u[3] ^ x.u[3] ^ (b.u[3] >> SFMT_SR1 & SFMT_MSK4)
+				^ y.u[3] ^ (d.u[3] << SFMT_SL1)) & 0xFFFFFFFF
+	
+	def func1(x: Int)
+		return ((x ^ (x >> 27)) &* 1664525) & 0xFFFFFFFF
+	
+	def func2(x: Int)
+		return ((x ^ (x >> 27)) &* 1566083941) & 0xFFFFFFFF
+	
+	def periodCertification()
+		inner: 0
+		psfmt32: state[0]
+		parity: {SFMT_PARITY1, SFMT_PARITY2, SFMT_PARITY3, SFMT_PARITY4}
+	
+		for i in Range(4)
+			inner ^= psfmt32.u[i] & parity[i]
+		i: 16
+		while i > 0
+			inner ^= inner >> i
+			i >>= 1
+		inner &= 1
+		
+		if inner == 1
+			return
+		for i in Range(4)
+			work: 1
+			for j in Range(32)
+				if work & parity[i] != 0
+					psfmt32.u[i] ^= work
+					return
+				work <<= 1
+	
+	def genRandAll()
+		r1: state[SFMT_N - 2]
+		r2: state[SFMT_N - 1]
+		for i in Range(SFMT_N - SFMT_POS1)
+			doRecursion(state[i], state[i], state[i + SFMT_POS1], r1, r2)
+			r1 = r2
+			r2 = state[i]
+		for i in Range(SFMT_N - SFMT_POS1, SFMT_N)
+			doRecursion(state[i], state[i], state[i + SFMT_POS1 - SFMT_N], r1, r2)
+			r1 = r2
+			r2 = state[i]
+	
+	def initGenRand(seed: Int)
+		state[0].u[0] = seed
+		for i in Range(1, SFMT_N32)
+			prev: state[(i - 1) / 4].u[(i - 1) % 4]
+			state[i / 4].u[i % 4] = (1812433253 * (prev ^ (prev >> 30)) + i) & 0xFFFFFFFF
+	
+		idx = SFMT_N32
+		periodCertification()
+		
+	def _psfmt32(index)
+		return state[index / 4].u[index % 4]
+	
+	def _psfmt32(index).set(r)
+		state[index / 4].u[index % 4] = r
+
+	def _psfmt32_add(index, r)
+		state[index / 4].u[index % 4] = state[index / 4].u[index % 4] + r & 0xFFFFFFFF
+
+	def initByArray(seeds: Sequence)
+		if !(seeds is Array)
+			seeds = Array(seeds)
+
+		size: SFMT_N * 4
+
+		lag: 3
+		if size >= 623
+			lag = 11
+		else if size >= 68
+			lag = 7
+		else if size >= 39
+			lag = 5
+		mid: (size - lag) / 2
+
+		for i in Range(SFMT_N)
+			for j in Range(4)
+				state[i].u[j] = 0x8b8b8b8b
+		
+		count: SFMT_N32
+		keyLength = seeds.size()
+		if keyLength + 1 > SFMT_N32
+			count = keyLength + 1
+			
+		r: func1(_psfmt32[0] ^ _psfmt32[mid] ^ _psfmt32[SFMT_N32 - 1])
+		_psfmt32_add(mid, r)
+		r = r + keyLength & 0xFFFFFFFF
+		_psfmt32_add(mid + lag, r)
+		_psfmt32[0] = r;
+
+		count--
+		i = 1
+
+		jLimit = (count < keyLength ? count : keyLength)
+		for j in Range(jLimit)
+			r = func1(_psfmt32[i] ^ _psfmt32[(i + mid) % SFMT_N32]
+					^ _psfmt32[(i + SFMT_N32 - 1) % SFMT_N32])
+			_psfmt32_add((i + mid) % SFMT_N32, r)
+			r = r + seeds[j] + i & 0xFFFFFFFF
+			_psfmt32_add((i + mid + lag) % SFMT_N32, r)
+			_psfmt32[i] = r
+			i = (i + 1) % SFMT_N32
+
+		for j in Range(jLimit, count)
+			r = func1(_psfmt32[i] ^ _psfmt32[(i + mid) % SFMT_N32]
+					^ _psfmt32[(i + SFMT_N32 - 1) % SFMT_N32])
+			_psfmt32_add((i + mid) % SFMT_N32, r)
+			r = r + i & 0xFFFFFFFF
+			_psfmt32_add((i + mid + lag) % SFMT_N32, r)
+			_psfmt32[i] = r
+			i = (i + 1) % SFMT_N32
+
+		for j in Range(SFMT_N32)
+			r = func2(_psfmt32[i] + _psfmt32[(i + mid) % SFMT_N32]
+					+ _psfmt32[(i + SFMT_N32 - 1) % SFMT_N32] & 0xFFFFFFFF)
+			_psfmt32[(i + mid) % SFMT_N32] ^= r
+			r = r - i & 0xFFFFFFFF
+			_psfmt32[(i + mid + lag) % SFMT_N32] ^= r
+			_psfmt32[i] = r
+			i = (i + 1) % SFMT_N32
+
+		idx = SFMT_N32;
+		periodCertification()
+
+	def nextU64()
+		if idx >= SFMT_N32
+			genRandAll()
+			idx = 0
+
+		r0: state[(idx + 0) / 4].u[(idx + 0) % 4]
+		r1: state[(idx + 1) / 4].u[(idx + 1) % 4]
+		r: r1 << 32 | r0
+		idx += 2
+		return r
+
+	def init(seed: Int)
+		super()
+		initGenRand(seed)
+
+	def init(seeds: Sequence)
+		super()
+		initByArray(seeds)
+
+def random()
+	return Sfmt({for in Range(4): systemRandom()})
+
+def random(seed: Int)
+	return Sfmt(seed)
+
+def random(seeds: Sequence)
+	return Sfmt(seeds)
+
+def systemRandom()
+	return _native_systemRandom()
 
 CHATRA_IGNORE_THIS_LINE )***"

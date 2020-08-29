@@ -26,6 +26,7 @@
 #include <memory>
 #include <type_traits>
 #include <limits>
+#include <cstdarg>
 #include <cstddef>
 
 #define CHATRA_IGNORE_THIS_LINE
@@ -40,10 +41,26 @@ enum class InstanceId : size_t {};
 enum class TimerId : size_t {};
 
 
-struct NativeException : public std::exception {};
-struct IllegalArgumentException : public NativeException {};
-struct PackageNotFoundException : public IllegalArgumentException {};
-struct UnsupportedOperationException : public NativeException {};
+struct NativeException : public std::exception {
+	std::string message;
+	NativeException() = default;
+	explicit NativeException(const char* format, ...);
+protected:
+	void setMessage(const char* format, va_list args);
+};
+
+// note: inherit constructors with variadic arguments may not work correctly on some compilers.
+#define CHATRA_DEFINE_EXCEPTION(name, baseName)  \
+	struct name : public baseName {  \
+		name() = default;  \
+		explicit name(const char* format, ...) : baseName() {  \
+			va_list args;  va_start(args, format);  setMessage(format, args);  va_end(args);  \
+		}  \
+	}
+
+CHATRA_DEFINE_EXCEPTION(IllegalArgumentException, NativeException);
+CHATRA_DEFINE_EXCEPTION(PackageNotFoundException, IllegalArgumentException);
+CHATRA_DEFINE_EXCEPTION(UnsupportedOperationException, NativeException);
 
 
 struct Script {
@@ -59,6 +76,15 @@ public:
 
 struct INativePtr {
 	virtual ~INativePtr() = default;
+};
+
+
+struct IDriver {
+	virtual ~IDriver() = default;
+};
+
+enum class DriverType {
+	FileSystem
 };
 
 
@@ -223,6 +249,8 @@ struct NativeCallContext {
 
 	virtual NativeEventObject* pause() = 0;
 
+	virtual IDriver* getDriver(DriverType driverType) const = 0;
+
 	virtual void log(const std::string& message) = 0;
 };
 
@@ -254,6 +282,8 @@ struct PackageContext {
 
 	virtual std::vector<uint8_t> saveEvent(NativeEventObject* event) const = 0;
 	virtual NativeEventObject* restoreEvent(const std::vector<uint8_t>& stream) const = 0;
+
+	virtual IDriver* getDriver(DriverType driverType) const = 0;
 };
 
 
@@ -290,6 +320,43 @@ struct PackageInfo {
 // This requires "chatra_emb" module.
 PackageInfo queryEmbeddedPackage(const std::string& packageName);
 
+
+struct IFile {
+	enum class SeekOrigin {
+		Begin, End, Current
+	};
+
+	virtual ~IFile() = default;
+
+	virtual void close() = 0;
+	virtual void flush() = 0;
+	virtual size_t available() = 0;
+	virtual size_t position() = 0;
+	virtual void seek(ptrdiff_t offset, SeekOrigin origin) = 0;
+	virtual size_t read(uint8_t* dest, size_t length) = 0;
+	virtual size_t write(const uint8_t* src, size_t length) = 0;
+};
+
+namespace FileOpenFlags {
+	using Type = unsigned;
+	constexpr Type Read = 0x1U;
+	constexpr Type Write = 0x2U;
+	constexpr Type Append = 0x4U;
+}
+
+struct IFileSystem : public IDriver {
+	virtual IFile* openFile(const std::string& fileName, FileOpenFlags::Type flags, const NativeReference& kwargs) = 0;
+
+	virtual std::vector<uint8_t> saveFile(IFile* file) = 0;
+
+	virtual IFile* restoreFile(const std::vector<uint8_t>& stream) = 0;
+};
+
+// This requires "chatra_emb" module.
+using FileNameFilter = std::string (*)(const std::string& fileName);
+IFileSystem* getStandardFileSystem(FileNameFilter filter = nullptr);
+
+
 struct IHost {
 	virtual ~IHost() = default;
 
@@ -298,6 +365,11 @@ struct IHost {
 	virtual PackageInfo queryPackage(const std::string& packageName) {
 		(void)packageName;
 		return {{}, {}, nullptr};  // or return queryEmbeddedPackage(packageName);
+	}
+
+	virtual IDriver* queryDriver(DriverType driverType) {
+		(void)driverType;
+		return nullptr;  // or getStandardFileSystem() etc.
 	}
 };
 
@@ -384,6 +456,7 @@ CHATRA_ENUM_HASH(chatra::RuntimeId)
 CHATRA_ENUM_HASH(chatra::PackageId)
 CHATRA_ENUM_HASH(chatra::InstanceId)
 CHATRA_ENUM_HASH(chatra::TimerId)
+CHATRA_ENUM_HASH(chatra::DriverType)
 
 
 #endif // CHATRA_H

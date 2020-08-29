@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,73 @@ CHATRA_IGNORE_THIS_LINE R"***(
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-// TODO
+def sin(v) as native
+def cos(v) as native
+def tan(v) as native
+def asin(v) as native
+def acos(v) as native
+def atan(v) as native
+def atan2(y, x) as native
+
+def sinh(v) as native
+def cosh(v) as native
+def tanh(v) as native
+def asinh(v) as native
+def acosh(v) as native
+def atanh(v) as native
+
+def exp(v) as native
+def exp2(v) as native
+def expm1(v) as native
+def logn(v) as native
+def log10(v) as native
+def log1p(v) as native
+def log2(v) as native
+
+def ldexp(v, exp) as native
+
+def _native_frexp_fraction(v) as native
+def _native_frexp_exponent(v) as native
+def frexp(v)
+	return _native_frexp_fraction(v), _native_frexp_exponent(v)
+
+def ilogb(v) as native
+def logb(v) as native
+
+def _native_modf_integral(v) as native
+def _native_modf_fractional(v) as native
+def modf(v)
+	return _native_modf_integral(v), _native_modf_fractional(v)
+
+def scalbn(v, exp)
+	return ldexp(v, exp)
+
+def pow(x, y) as native
+def sqrt(v) as native
+def cbrt(v) as native
+def hypot(x, y) as native
+def abs(v) as native
+
+def erf(v) as native
+def erfc(v) as native
+def tgamma(v) as native
+def lgamma(v) as native
+
+def ceil(v) as native
+def floor(v) as native
+def trunc(v) as native
+def round(v) as native
+
+def mod(x, y) as native
+def remainder(x, y) as native
+
+def nextafter(x, y) as native
+
+def isfinite(v) as native
+def isinf(v) as native
+def isnan(v) as native
+def isnormal(v) as native
+def signbit(v) as native
+
 
 CHATRA_IGNORE_THIS_LINE )***"
