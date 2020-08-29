@@ -115,7 +115,7 @@ static void math_abs(Ct& ct) {
 	else if (ct[0].isFloat())
 		ct.setFloat(std::abs(ct[0].getFloat()));
 	else
-		throw IllegalArgumentException("passing argument #%zu has non-numeric value", index);
+		throw IllegalArgumentException("passing argument has non-numeric value");
 }
 
 static void math_erf(Ct& ct) { ct.setFloat(std::erf(getDouble(ct))); }

@@ -23,6 +23,7 @@
 #include "chatra.h"
 #include <atomic>
 #include <mutex>
+#include <cassert>
 
 #if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
 	#define CHATRA_MAYBE_GCC   __GNUC__

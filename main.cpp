@@ -130,10 +130,10 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-#if 1
+#if 0
 	const char* args_test[] = {"chatra", "--language-test", "--baseline"};
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize", "1000"};
-	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "exceptions: 5 4 14 97 15 28"};
+	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "emb_format: 226 1956 197 787 479 54 709"};
 	//const char* args_test[] = {"chatra", "samples_in_docs/readme_first_sample.cha"};
 	//const char* args_test[] = {"chatra", "--help"};
 	//const char* args_test[] = {"chatra", "--language-test", "--parse", "chatra_emb/containers.cha"};

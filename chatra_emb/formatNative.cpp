@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
+#include <cmath>
 
 namespace chatra {
 namespace emb {
@@ -124,17 +125,17 @@ static std::string toNegative(const std::string& valueString) {
 
 	if (*it == '+') {
 		ret[offset] = '-';
-		return std::move(ret);
+		return ret;
 	}
 
 	if (offset != 0) {
 		ret[offset - 1] = '-';
-		return std::move(ret);
+		return ret;
 	}
 
 	if (*it == '0' && valueString.length() != 1) {
 		ret[0] = '-';
-		return std::move(ret);
+		return ret;
 	}
 
 	return '-' + valueString;
