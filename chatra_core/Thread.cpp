@@ -3903,6 +3903,17 @@ void Thread::restore(Reader& r) {
 		auto count = r.read<size_t>();
 		errors.emplace_back(std::make_tuple(std::move(fileName), lineNo, std::move(message), count));
 	});
+
+	IErrorReceiverBridge errorReceiverBridge(*this);
+	for (auto& f : frames) {
+		if (!f.hasMethods)
+			continue;
+		assert(f.node != nullptr && f.node->blockNodesState == NodeState::Parsed);
+		assert(f.methods == nullptr);
+		f.methods = methodTableCache.scanInnerFunctions(&errorReceiverBridge, sTable, f.package, f.node);
+	}
+	if (errorReceiverBridge.hasError())
+		throw IllegalArgumentException();
 }
 
 void Thread::postInitialize(Reader& r) {

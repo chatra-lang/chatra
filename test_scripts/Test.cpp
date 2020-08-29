@@ -240,6 +240,10 @@ static void runSerializeTest(const std::shared_ptr<cha::IHost>& host,
 	runtime->loop();
 
 	cha::endCheckScript();
+
+	runtime->shutdown();
+	if (!cha::showResults())
+		throw TestFailedException();
 }
 
 static void runSerializeTest(unsigned tryCount) {
