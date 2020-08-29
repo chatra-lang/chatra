@@ -113,10 +113,10 @@ def testFormat()
 	_check('format specifier "0.prec"', format('%08.4f', -1.23) == '-01.2300')
 
 	_check('with bracket', format('abc%{}f', 'def') == 'abcdeff')
-	_check('with bracket and key', format('abc%{value1:}f%{value0:d}g',
+	_check('with bracket and key1', format('abc%{value1:}f%{value0:d}g',
 			value0: 123, value1: 'def') == 'abcdeff123g')
-	_check('with bracket and key', format('0%s1%{value1:s}2%s3%{value0:s}4',
-			'a', value0: 'b', value1: 'c') == '0a1c2b3b4')
+	_check('with bracket and key2', format('0%s1%{value1:s}2%s3%{value0:s}4',
+			'a', 'd', value0: 'b', value1: 'c') == '0a1c2d3b4')
 
 	_check('options "m"', format('%{f;m=@}', 123.456) == '123@456000')
 	_check('options "i"', format('%{f;i=#}', -123456.789) == '-123#456.789000')

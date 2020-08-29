@@ -187,7 +187,7 @@ static void format(Ct& ct) {
 	if (indexes.size() != 0 && indexes.at(indexes.size() - 1).isString()) {
 		for (size_t  i = 0; i < indexes.size(); i++) {
 			auto& index = indexes.at(i);
-			if (index.is<std::string>())
+			if (index.isString())
 				keyedIndexes.emplace(index.get<std::string>(), i);
 		}
 	}
@@ -200,6 +200,7 @@ static void format(Ct& ct) {
 	std::string dMarker, dsInt, dsFrac;
 
 	size_t specifierIndex = 0;
+	size_t arrayValueIndex = 0;
 	for (size_t i = 0; i < f.length(); i++) {
 		if (f[i] != '%') {
 			out += f[i];
@@ -211,7 +212,8 @@ static void format(Ct& ct) {
 			continue;
 		}
 
-		size_t valueIndex = specifierIndex++;
+		specifierIndex++;
+		size_t valueIndex = std::numeric_limits<size_t>::max();
 
 		// Find boundary of format specifier
 		if (i + 1 >= f.length())
@@ -273,6 +275,14 @@ static void format(Ct& ct) {
 				valueIndex = it->second;
 			}
 			iSpec = t0 + 1;
+		}
+
+		if (valueIndex == std::numeric_limits<size_t>::max()) {
+			valueIndex = arrayValueIndex++;
+			if (valueIndex >= arrayArgs)
+				throw IllegalArgumentException(
+						"at format specifier #%u: specified index (%ld) is out of range",
+						static_cast<unsigned>(specifierIndex), valueIndex);
 		}
 
 		if (f[iSpec] == '<') {
