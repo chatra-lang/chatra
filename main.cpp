@@ -164,6 +164,8 @@ int main(int argc, char* argv[]) {
 			}
 			else if (arg == "-t" || arg == "--thread")
 				optThreads = consume<unsigned>(arg, args);
+			else if (arg == "-I")
+				optPaths.emplace_back(consume<std::string>(arg, args));
 			else
 				optFiles.emplace_back(std::move(arg));
 		}
