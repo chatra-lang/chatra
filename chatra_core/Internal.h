@@ -448,10 +448,6 @@ inline size_t extractChar(char32_t c, char* dest) {
 	return 0;
 }
 
-inline constexpr bool isSpace(char c) {
-	return c == ' ' || c == '\t';
-}
-
 
 }  // namespace chatra
 

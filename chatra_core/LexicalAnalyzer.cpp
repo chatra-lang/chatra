@@ -19,6 +19,7 @@
  */
 
 #include "LexicalAnalyzer.h"
+#include "CharacterClass.h"
 
 namespace chatra {
 
@@ -81,38 +82,6 @@ public:
 				message, args);
 	}
 };
-
-inline constexpr bool isBeginningOfNumber(char c) {
-	return '0' <= c && c <= '9';
-}
-
-inline constexpr bool isPartOfNumber(char c) {
-	return ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F') || c == 'x' || c == '_'
-			|| c == '.' || c == '+' || c == '-';  // +/- are used for exponent (e.g. 1e-5 = 0.00001)
-}
-
-inline constexpr bool isBeginningOfOperator(char c) {
-	return c == '!' || c == '%' || c == '^' || c == '&' || c == '*' || c == '-' || c == '+' || c == '=' || c == '|'
-			|| c == '~' || c == ':' || c == ';' || c == ',' || c == '.' || c == '<' || c == '>' || c == '?' || c == '/';
-}
-
-inline constexpr bool isPartOfOperator(char c) {
-	return c == '!' || c == '%' || c == '^' || c == '&' || c == '*' || c == '-' || c == '+' || c == '=' || c == '|'
-			|| c == '~' || c == '.' || c == '<' || c == '>' || c == '?' || c == '/';
-}
-
-inline constexpr bool isSpecialCharacters(char c) {
-	return isBeginningOfOperator(c) || c == '@' || c == '#' || c == '$' || c == '\\' || c == '`' || c == '\'' || c == '"'
-			|| c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}';
-}
-
-inline constexpr bool isBeginningOfName(char c) {
-	return !isSpace(c) && !isBeginningOfNumber(c) && !isSpecialCharacters(c);
-}
-
-inline constexpr bool isPartOfName(char c) {
-	return !isSpace(c) && !isSpecialCharacters(c);
-}
 
 template <typename BeginningPredicate, typename Predicate>
 static size_t matches(const std::string& str, size_t index, BeginningPredicate beginningPred, Predicate pred) {
