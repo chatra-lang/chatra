@@ -52,7 +52,7 @@ class NativeReferenceImp;
 struct HashPairStringId {
 	size_t operator()(const std::pair<StringId, StringId>& x) const noexcept {
 		return std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.first))
-		        ^ std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.second) + 1);
+				^ std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.second) + 1);
 	}
 };
 
@@ -276,7 +276,7 @@ private:
 	std::forward_list<OperatorMethod> methods;
 	std::unordered_map<const Class*, const OperatorMethod*> byOp1[NumberOfOperators];
 	std::unordered_map<std::pair<const Class*, const Class*>, const OperatorMethod*, HashPairClassPtr>
-	        byOp2[NumberOfOperators];
+			byOp2[NumberOfOperators];
 
 private:
 	void addOp1(const OperatorMethod* method) {

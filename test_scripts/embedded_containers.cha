@@ -341,8 +341,6 @@ def testDict()
 			v1.size() == 3 and v1['bcd'] == 234 and v1['efg'] == 'EFG' and v1['ghi'] == false)
 
 	v1 = v0.clone()
-	log(v0.toString())
-	log(v1.toString())
 	_check('clone', v1.size() == 3 and v1['abc'] == 123 and v1['cde'] == 345 and v1['fgh'] == null)
 
 	v1.clear()

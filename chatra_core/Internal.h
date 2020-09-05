@@ -90,6 +90,7 @@ struct remove_pointer_cv {
 };
 
 enum class ErrorLevel {
+	Info,
 	Warning,
 	Error,
 };

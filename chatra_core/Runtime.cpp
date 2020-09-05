@@ -373,7 +373,7 @@ void RuntimeImp::launchStorage() {
 	// Register pseudo package for finalizer
 	auto _finalizerPackageId = loadPackage({std::string("(finalizer)"), ""});
 	assert(_finalizerPackageId == finalizerPackageId);
-    (void)_finalizerPackageId;
+	(void)_finalizerPackageId;
 
 	auto* finalizerPackage = packageIds.ref(finalizerPackageId);
 	finalizerPackage->initialized = true;
@@ -390,7 +390,7 @@ void RuntimeImp::launchStorage() {
 void RuntimeImp::launchFinalizerThread() {
 	auto _finalizerInstanceId = run(finalizerPackageId);  // global scope will be restored later
 	assert(_finalizerInstanceId == finalizerInstanceId);
-    (void)_finalizerInstanceId;
+	(void)_finalizerInstanceId;
 
 	finalizerThread = instanceIds.ref(finalizerInstanceId)->threads.begin()->second.get();
 	assert(finalizerThread->getId() == finalizerThreadId);
@@ -1081,17 +1081,45 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 			}
 		}
 	}
-	out.append(" ").append(level == ErrorLevel::Warning ? "warning" : "error").append(": ").append(outMessage);
+
+	out.append(" ");
+	switch (level) {
+	case ErrorLevel::Info:  out.append("info");  break;
+	case ErrorLevel::Warning:  out.append("warning");  break;
+	case ErrorLevel::Error:  out.append("error");  break;
+	}
+
+	out.append(": ").append(outMessage);
 	if (outputExtraMessagePlaceholder)
 		out.append("${0}");  // Placeholder for "+extra N errors"
 
 	if (!line.empty()) {
-		out.append(":\n");
-		first = (first == SIZE_MAX ? 0 : first);
-		last = (last == SIZE_MAX ? line.size() : last);
-		assert(first <= last);
-		out.append("  ").append(line.substr(0, first))
-				.append(" *HERE* >>").append(line.substr(first, last - first)).append("<< ").append(line.substr(last));
+		out.append(":\n\t");
+
+		auto skip = static_cast<size_t>(std::distance(line.cbegin(),
+				std::find_if(line.cbegin(), line.cend(), [](char c) { return !isSpace(c); })));
+
+		if (first == SIZE_MAX || last == SIZE_MAX)
+			out.append(line.substr(skip));
+		else {
+			assert(first <= last && last <= line.size());
+			skip = std::min(skip, first);
+
+			auto validLength = line.find("//", last);
+			if (validLength == std::string::npos)
+				validLength = line.size();
+
+			bool hasTailingText = (line.cbegin() + validLength
+					!= std::find_if(line.cbegin() + last, line.cbegin() + validLength, [](char c) { return !isSpace(c); }));
+
+			if (first == skip && !hasTailingText)
+				out.append(line.substr(skip));
+			else {
+				out.append(line.substr(skip, first - skip))
+						.append(" *HERE* ->").append(line.substr(first, last - first)).append("<- ")
+						.append(line.substr(last));
+			}
+		}
 	}
 
 	out.append("\n");

@@ -23,6 +23,7 @@
 
 #include "chatra.h"
 #include "Internal.h"
+#include "CharacterClass.h"
 #include "LexicalAnalyzer.h"
 #include "Parser.h"
 #include "StringTable.h"
@@ -509,6 +510,7 @@ public:
 	std::vector<TemporaryObject*> values;
 	TemporaryObject* exception = nullptr;
 	Node* exceptionNode = nullptr;
+	std::string stackTrace;
 	TemporaryObject* caughtException = nullptr;
 
 	std::vector<TemporaryTuple*> temporaryTuples;
@@ -531,6 +533,8 @@ public:
 	void clearAllTemporaries();
 
 	Reference getSelf();
+
+	Node* getExceptionNode();
 
 public:
 	Frame(Thread& thread, Package& package, size_t parentIndex,
@@ -702,7 +706,7 @@ private:
 	void scanInnerFunctions(IErrorReceiver* errorReceiver, const StringTable* sTable);
 	bool parse();
 
-	Node* getExceptionNode();
+	std::string captureStackTrace();
 	void raiseException(const RuntimeException& ex);
 	void raiseException(TemporaryObject* exValue);
 	void consumeException();
@@ -849,7 +853,8 @@ public:
 	void error(ErrorLevel level,
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args) override;
-	void emitError(StringId exceptionName, Node* exceptionNode);
+	void emitError(StringId exceptionName, Node* exceptionNode,
+			const char* additionalMessage = nullptr);
 
 public:
 	static Node* refSpecialNode(NodeType type, Operator op = defaultOp);

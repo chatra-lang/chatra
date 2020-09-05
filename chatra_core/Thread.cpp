@@ -142,19 +142,93 @@ bool Thread::parse() {
 	return true;
 }
 
-Node* Thread::getExceptionNode() {
-	auto& f = frames.back();
-	for (auto it = f.stack.crbegin(); it != f.stack.crend(); it++) {
-		auto* node = it->first;
-		if (!node->tokens.empty())
-			return node;
+struct ICaptureMessageErrorReceiver final : public IErrorReceiver {
+	std::string out;
+	void error(ErrorLevel level,
+			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
+			const std::string& message, const std::vector<std::string>& args) override {
+		out += RuntimeImp::formatError(level, fileName, lineNo, line, first, last, message, args);
 	}
-	if (f.node != nullptr && f.phase != 0 && f.phase <= f.node->blockNodes.size()) {
-		auto& n = f.node->blockNodes[f.phase - 1];
-		if (!n->tokens.empty())
-			return n.get();
+};
+
+std::string Thread::captureStackTrace() {
+	ICaptureMessageErrorReceiver errorReceiver;
+	size_t count = 1;
+	bool directAfterFunctionCall = false;
+
+	for (auto frameIndex = frames.size() - 1; frameIndex >= residentialFrameCount; ) {
+		auto& f = frames[frameIndex];
+		auto* node = f.getExceptionNode();
+
+		if (directAfterFunctionCall) {
+			errorAtNode(errorReceiver, ErrorLevel::Info, node,
+					"stack#" + std::to_string(count++) + " called from", {});
+			directAfterFunctionCall = false;
+		}
+
+		auto scopeType = f.scope->getScopeType();
+		if (scopeType == ScopeType::Method || scopeType == ScopeType::InnerMethod) {
+			INullErrorReceiver nullErrorReceiver;
+			IErrorReceiverBridge argErrorReceiver(nullErrorReceiver);
+			auto args = tupleToArguments(argErrorReceiver, sTable, f.package,
+					f.node->subNodes[SubNode::Def_Parameter].get());
+
+			std::string out;
+			if (!argErrorReceiver.hasError()) {
+				for (auto& arg : args) {
+					if (!out.empty())
+						out.append(", ");
+
+					out.append(sTable->ref(arg.name)).append(":");
+					if (!f.scope->has(arg.name))
+						out.append("?");
+					else {
+						auto ref = f.scope->ref(arg.name);
+
+						bool locked = false;
+						if (ref.lockedBy() != getId() && ref.lockOnce(getId()))
+							locked = true;
+						if (ref.lockedBy() != getId())
+							out.append("?");
+						else {
+							switch (ref.valueType()) {
+							case ReferenceValueType::Bool:  out.append(ref.getBool() ? "true" : "false");  break;
+							case ReferenceValueType::Int:  out.append(std::to_string(ref.getInt()));  break;
+							case ReferenceValueType::Float:  out.append(std::to_string(ref.getFloat()));  break;
+							case ReferenceValueType::Object: {
+								if (ref.isNull())
+									out.append("null");
+								else {
+									auto* cl = ref.deref<ObjectBase>().getClass();
+									if (cl->getName() == StringId::String)
+										out.append("\"").append(ref.deref<String>().getValue()).append("\"");
+									else {
+										if (cl->getPackage() != nullptr && !cl->getPackage()->name.empty())
+											out.append(cl->getPackage()->name).append(".");
+
+										out.append(sTable->ref(cl->getName())).append("#")
+												.append(std::to_string(ref.deref().getObjectIndex()));
+									}
+								}
+								break;
+							}
+							}
+							if (locked)
+								ref.unlock();
+						}
+					}
+				}
+			}
+
+			errorAtNode(errorReceiver, ErrorLevel::Info, f.node,
+					"stack#" + std::to_string(count++) + " function" + (out.empty() ? "" : " currentArgs=(" + out + ")" ), {});
+			directAfterFunctionCall = true;
+		}
+
+		frameIndex -= f.popCount;
 	}
-	return f.node == nullptr ? nullptr : f.node->tokens.empty() ? nullptr : f.node;
+
+	return std::move(errorReceiver.out);
 }
 
 template <class Type>
@@ -165,10 +239,11 @@ struct AllocateExceptionPredicate {
 };
 
 void Thread::raiseException(const RuntimeException& ex) {
-	Node* exceptionNode = getExceptionNode();
-
 	auto& f = frames.back();
 	assert(f.exception == nullptr);
+	Node* exceptionNode = f.getExceptionNode();
+	f.stackTrace = captureStackTrace();
+
 	f.stack.clear();
 	f.exception = f.allocateTemporary();
 	switchException<AllocateExceptionPredicate>(ex.name, f.exception->setRvalue());
@@ -181,14 +256,16 @@ void Thread::raiseException(const RuntimeException& ex) {
 void Thread::raiseException(TemporaryObject* exValue) {
 	assert(exValue != nullptr && exValue->hasRef());
 	if (exValue->getRef().isNull()) {
-		errorAtNode(*this, ErrorLevel::Error, getExceptionNode(), "throw statement cannot handle null value", {});
+		errorAtNode(*this, ErrorLevel::Error, frames.back().getExceptionNode(),
+				"throw statement cannot handle null value", {});
 		throw RuntimeException(StringId::UnsupportedOperationException);
 	}
 
-	Node* exceptionNode = getExceptionNode();
-
 	auto& f = frames.back();
 	assert(f.exception == nullptr);
+	Node* exceptionNode = f.getExceptionNode();
+	f.stackTrace = captureStackTrace();
+
 	f.stack.clear();
 	f.exception = f.allocateTemporary();
 	f.exception->setRvalue().set(exValue->getRef());
@@ -252,7 +329,7 @@ void Thread::consumeException() {
 
 			if (!f0.stack.empty() && f0.stack.back().first->op == opInitializePackage) {
 				errorAtNode(*this, ErrorLevel::Error, f.exceptionNode,"unhandled exception raised during package initialization", {});
-				emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode);
+				emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode, f.stackTrace.data());
 				throw AbortThreadException();
 			}
 		}
@@ -266,6 +343,7 @@ void Thread::consumeException() {
 		f0.exception = f0.allocateTemporary();
 		f0.exception->setRvalue().set(f.exception->getRef());
 		f0.exceptionNode = f.exceptionNode;
+		f0.stackTrace = std::move(f.stackTrace);
 		f0.stack.clear();
 
 		f.recycle(f.exception);
@@ -304,7 +382,7 @@ void Thread::consumeException() {
 
 	f0.recycle(f0.exception);
 	f0.exception = nullptr;
-	emitError(exCl->getName(), f0.exceptionNode);
+	emitError(exCl->getName(), f0.exceptionNode, f0.stackTrace.data());
 }
 
 void Thread::checkIsValidNode(Node* node) {
@@ -3432,7 +3510,9 @@ void Thread::error(ErrorLevel level,
 	errors.emplace_back(fileName, lineNo, std::move(formatted), 1);
 }
 
-void Thread::emitError(StringId exceptionName, Node* exceptionNode) {
+void Thread::emitError(StringId exceptionName, Node* exceptionNode,
+		const char* additionalMessage) {
+
 	if (exceptionName != StringId::Invalid) {
 		std::string message = sTable->ref(exceptionName) + " raised";
 		if (exceptionNode != nullptr && !exceptionNode->tokens.empty()) {
@@ -3443,6 +3523,7 @@ void Thread::emitError(StringId exceptionName, Node* exceptionNode) {
 		message.append("\n");
 		runtime.outputError(message);
 	}
+
 	for (auto& e : errors) {
 		auto& message = std::get<2>(e);
 		std::string target = "${0}";
@@ -3453,6 +3534,10 @@ void Thread::emitError(StringId exceptionName, Node* exceptionNode) {
 		}
 		runtime.outputError(message);
 	}
+
+	if (additionalMessage != nullptr && additionalMessage[0] != '\0')
+		runtime.outputError(additionalMessage);
+
 	errors.clear();
 }
 
@@ -3503,8 +3588,8 @@ void Thread::finish() {
 		f.popAll();
 
 		if (f.exception != nullptr) {
-			errorAtNode(*this, ErrorLevel::Error, frames.back().exceptionNode, "unhandled exception", {});
-			emitError(getReferClass(frames.back().exception->getRef())->getName(), frames.back().exceptionNode);
+			errorAtNode(*this, ErrorLevel::Error, f.exceptionNode, "unhandled exception", {});
+			emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode, f.stackTrace.data());
 
 			f.recycle(f.exception);
 			f.exception = nullptr;
