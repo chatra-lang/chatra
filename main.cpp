@@ -46,6 +46,8 @@ static void help(FILE* stream) {
 			"options:\n"
 			" -h, --help\n"
 			"    print this help message and exit\n"
+			" -V, --version\n"
+			"    print the chatra version number\n"
 			" -t <NUM>, --thread <NUM>\n"
 			"    multi-thread mode with number of threads as NUM\n"
 			" -I <PATH>\n"
@@ -209,7 +211,7 @@ static std::string parseArg(size_t index, const std::string& arg) {
 	}
 	outputLine(out, indent, line);
 
-	std::printf("[%s]\n", out.data());
+	// std::printf("[%s]\n", out.data());
 	return out;
 }
 
@@ -303,6 +305,8 @@ int main(int argc, char* argv[]) {
 				help(stdout);
 				return 0;
 			}
+			else if (arg == "-V" || arg == "--version")
+				optFiles.emplace_back(ScriptSourceType::Arg, argSourceIndex++, "import sys; log(chatraVersion())");
 			else if (arg == "-t" || arg == "--thread")
 				optThreads = consume<unsigned>(arg, args);
 			else if (arg == "-I")
