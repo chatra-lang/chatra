@@ -1,5 +1,10 @@
 ![chatra_logo](https://raw.githubusercontent.com/chatra-lang/resources/master/logo/chatra_logo_for_light_bg_small.png "Chatra")
 
+
+Chatra Cheat Sheet:<br/>
+[![Chatra Cheet Sheet Light](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light.pdf)
+[![Chatra Cheet Sheet Dark](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark.pdf)
+
 # About “Chatra”
 Chatraは誰でも簡単に書けることを重視して開発された軽量スクリプト言語です。  
 独立したインタプリタとしても使えるほか、プログラムに組み込んでマクロ言語として使うこともできます。
