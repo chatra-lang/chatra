@@ -263,7 +263,7 @@ public:
 	}
 
 	template <class Container, typename Predicate, typename ElementWriter,
-	        CHATRA_TYPE_EXISTS(typename Container::iterator)>
+			CHATRA_TYPE_EXISTS(typename Container::iterator)>
 	Writer& out(const Container& container, Predicate predicate, ElementWriter elementWriter) {
 		return out(container.cbegin(), container.cend(), predicate, elementWriter);
 	}
@@ -309,7 +309,7 @@ public:
 	}
 
 	template <class Container, typename Predicate, typename ElementWriter,
-	        CHATRA_WHEN(std::is_base_of<IdPool<typename Container::_KeyType, typename Container::_ValueType>, Container>::value)>
+			CHATRA_WHEN(std::is_base_of<IdPool<typename Container::_KeyType, typename Container::_ValueType>, Container>::value)>
 	void out(const Container& pool, Predicate predicate, ElementWriter elementWriter) {
 		CHATRA_SAVE_TYPE_TAG(List);
 		size_t length = 0;

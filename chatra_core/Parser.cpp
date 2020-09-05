@@ -19,6 +19,7 @@
  */
 
 #include "Parser.h"
+#include "CharacterClass.h"
 
 namespace chatra {
 

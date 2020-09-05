@@ -622,6 +622,20 @@ Reference Frame::getSelf() {
 	return scope->ref(StringId::Self);
 }
 
+Node* Frame::getExceptionNode() {
+	for (auto it = stack.crbegin(); it != stack.crend(); it++) {
+		auto* stackNode = it->first;
+		if (!stackNode->tokens.empty())
+			return stackNode;
+	}
+	if (node != nullptr && phase != 0 && phase <= node->blockNodes.size()) {
+		auto& n = node->blockNodes[phase - 1];
+		if (!n->tokens.empty())
+			return n.get();
+	}
+	return node == nullptr ? nullptr : node->tokens.empty() ? nullptr : node;
+}
+
 Frame::Frame(Thread& thread, Package& package, size_t parentIndex,
 		Scope* scope, size_t popCount) noexcept
 		: thread(thread), package(package), parentIndex(parentIndex), scope(scope), popCount(popCount) {}
@@ -691,6 +705,7 @@ void Frame::save(Writer& w) const {
 	if (exception != nullptr)
 		w.out(objectMap.at(exception));
 	w.out(exceptionNode);
+	w.out(stackTrace);
 	w.out(caughtException != nullptr);
 	if (caughtException != nullptr)
 		w.out(objectMap.at(caughtException));
@@ -741,6 +756,7 @@ void Frame::restore(Reader& r) {
 	if (r.read<bool>())
 		exception = thread.restoreTemporary(r);
 	exceptionNode = r.read<Node*>();
+	stackTrace = r.read<std::string>();
 	if (r.read<bool>())
 		caughtException = thread.restoreTemporary(r);
 

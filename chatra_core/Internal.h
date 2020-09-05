@@ -90,6 +90,7 @@ struct remove_pointer_cv {
 };
 
 enum class ErrorLevel {
+	Info,
 	Warning,
 	Error,
 };
@@ -446,10 +447,6 @@ inline size_t extractChar(char32_t c, char* dest) {
 		return 4;
 	}
 	return 0;
-}
-
-inline constexpr bool isSpace(char c) {
-	return c == ' ' || c == '\t';
 }
 
 

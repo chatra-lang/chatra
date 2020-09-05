@@ -35,9 +35,9 @@ def testRandom()
 			}
 
 	for i in Range(5)
-    	v = r.nextU64()
-    	_check('seq0[%d]' % i, '%016x' % v == seq0[i])
-    	if i + 1 != 5
+		v = r.nextU64()
+		_check('seq0[%d]' % i, '%016x' % v == seq0[i])
+		if i + 1 != 5
 			for in Range(83)
 				r.nextU64()
 
@@ -52,9 +52,9 @@ def testRandom()
 			}
 
 	for i in Range(5)
-    	v = r.nextU64()
-    	_check('seq1[%d]' % i, '%016x' % v == seq1[i])
-    	if i + 1 != 5
+		v = r.nextU64()
+		_check('seq1[%d]' % i, '%016x' % v == seq1[i])
+		if i + 1 != 5
 			for in Range(83)
 				r.nextU64()
 
@@ -68,7 +68,7 @@ def testRandom()
 
 	for i in Range(5)
 		v = r.nextFloat()
-    	_check('seq2[%d]' % i, '%.20f' % v == seq2[i])
+		_check('seq2[%d]' % i, '%.20f' % v == seq2[i])
 
 
 testRandom()

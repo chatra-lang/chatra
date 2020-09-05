@@ -2,6 +2,7 @@ add_library(chatra_core
         Internal.h
         StringTable.h
         StringTable.cpp
+        CharacterClass.h
         LexicalAnalyzer.h
         LexicalAnalyzer.cpp
         Parser.h
