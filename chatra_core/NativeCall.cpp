@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -96,7 +96,7 @@ public:
 		return thread.runtime.runtimeId;
 	}
 
-	InstanceId intanceId() const override {
+	InstanceId instanceId() const override {
 		return thread.instance.getId();
 	}
 
@@ -173,7 +173,8 @@ private:
 	bool topLevel;
 
 public:
-	NativeReferenceImp(const NativeCallContextImp& ct, Reference ref, bool topLevel) : ct(ct), ref(ref), topLevel(topLevel) {
+	NativeReferenceImp(const NativeCallContextImp& ct, Reference ref, bool topLevel)
+			: ct(ct), ref(std::move(ref)), topLevel(topLevel) {
 		assert(!ref.requiresLock() || ref.lockedBy() == ct.thread.getId());
 	}
 

@@ -146,7 +146,7 @@ void TemporaryObject::checkBeforeEvaluation() {
 			throw RuntimeException(StringId::UnsupportedOperationException);
 		}
 		if (hasRef() && targetRef.isNull()) {
-			errorAtNode(thread, ErrorLevel::Error, node, "dereferencing null", {});
+			errorAtNode(thread, ErrorLevel::Error, node, "de-referencing null", {});
 			throw RuntimeException(StringId::NullReferenceException);
 		}
 	}
@@ -587,7 +587,7 @@ void TemporaryObject::selectElement(Node* node, StringId name) {
 		throw RuntimeException(StringId::UnsupportedOperationException);
 	}
 	if (hasRef() && targetRef.isNull()) {
-		errorAtNode(thread, ErrorLevel::Error, node, "dereferencing null", {});
+		errorAtNode(thread, ErrorLevel::Error, node, "de-referencing null", {});
 		throw RuntimeException(StringId::NullReferenceException);
 	}
 

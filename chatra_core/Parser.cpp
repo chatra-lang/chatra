@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -391,7 +391,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 	// Check order of Catch/Finally and unreachable code
 	bool catchFinallyFound = false;
 	bool finallyFound = false;
-	bool leaved = false;
+	bool left = false;
 	for (auto it = outNodes.cbegin(); it != outNodes.cend(); it++) {
 		auto& n = *it;
 		if (finallyFound) {
@@ -407,7 +407,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 			finallyFound = true;
 		}
 		else {
-			if (leaved) {
+			if (left) {
 				ct.errorAtLine(ErrorLevel::Warning, n->line, "unreachable code", {});
 				it = outNodes.erase(it, std::find_if(it, outNodes.cend(), [](const std::shared_ptr<Node>& n) {
 					return n->type == NodeType::Catch || n->type == NodeType::Finally; }));
@@ -422,7 +422,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 			case NodeType::Continue:
 			case NodeType::Return:
 			case NodeType::Throw:
-				leaved = true;
+				left = true;
 				break;
 			default:
 				break;
@@ -814,16 +814,16 @@ struct OperatorPattern {
 	std::vector<OperatorPatternElement> elements;
 
 	OperatorPattern() noexcept : op(defaultOp), subNodes(0) {}
-	OperatorPattern(Operator op, size_t subNodes, const std::vector<OperatorPatternElement>& elements) noexcept
-			: op(op), subNodes(subNodes), elements(elements) {}
+	OperatorPattern(Operator op, size_t subNodes, std::vector<OperatorPatternElement> elements) noexcept
+			: op(op), subNodes(subNodes), elements(std::move(elements)) {}
 };
 
 struct OperatorPatternGroup {
 	bool leftToRight;
 	std::vector<OperatorPattern> patterns;
 
-	OperatorPatternGroup(bool leftToRight, const std::vector<OperatorPattern>& patterns) noexcept
-			: leftToRight(leftToRight), patterns(patterns) {}
+	OperatorPatternGroup(bool leftToRight, std::vector<OperatorPattern> patterns) noexcept
+			: leftToRight(leftToRight), patterns(std::move(patterns)) {}
 };
 
 enum class OperatorType {
@@ -836,8 +836,8 @@ struct OperatorAttributes {
 	std::string description;
 
 	OperatorAttributes() noexcept : type(enum_max<OperatorType>::value), allowOverride(false) {}
-	OperatorAttributes(OperatorType type, bool allowOverride, const std::string& description = "") noexcept
-			: type(type), allowOverride(allowOverride), description(description) {}
+	OperatorAttributes(OperatorType type, bool allowOverride, std::string description = "") noexcept
+			: type(type), allowOverride(allowOverride), description(std::move(description)) {}
 };
 
 static std::vector<OperatorPatternGroup> opPatterns;
@@ -1374,8 +1374,8 @@ struct StatementPatternElement {
 	size_t subNodeIndex = 0;
 	std::string errorMessage;  // only for required field
 
-	StatementPatternElement(StPt type, StringId token, bool required, size_t subNodeIndex, const std::string& errorMessage = "") noexcept
-			: type(type), token(token), required(required), subNodeIndex(subNodeIndex), errorMessage(errorMessage) {}
+	StatementPatternElement(StPt type, StringId token, bool required, size_t subNodeIndex, std::string errorMessage = "") noexcept
+			: type(type), token(token), required(required), subNodeIndex(subNodeIndex), errorMessage(std::move(errorMessage)) {}
 };
 
 struct StatementAttributes {
@@ -1384,8 +1384,8 @@ struct StatementAttributes {
 	std::vector<StatementPatternElement> pattern;
 
 	StatementAttributes() noexcept : subNodes(0), skipTokens(0) {}
-	StatementAttributes(size_t subNodes, size_t skipTokens, const std::vector<StatementPatternElement>& pattern) noexcept
-			: subNodes(subNodes), skipTokens(skipTokens), pattern(pattern) {}
+	StatementAttributes(size_t subNodes, size_t skipTokens, std::vector<StatementPatternElement> pattern) noexcept
+			: subNodes(subNodes), skipTokens(skipTokens), pattern(std::move(pattern)) {}
 };
 
 static std::vector<StatementAttributes> stAttrs;  // [NodeType]

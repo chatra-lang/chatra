@@ -18,8 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#ifndef CHATRA_CHARACTERCLASS_H
-#define CHATRA_CHARACTERCLASS_H
+#ifndef CHATRA_CHARACTER_CLASS_H
+#define CHATRA_CHARACTER_CLASS_H
 
 namespace chatra {
 
@@ -61,4 +61,4 @@ static constexpr bool isPartOfName(char c) {
 
 }  // namespace chatra
 
-#endif //CHATRA_CHARACTERCLASS_H
+#endif //CHATRA_CHARACTER_CLASS_H

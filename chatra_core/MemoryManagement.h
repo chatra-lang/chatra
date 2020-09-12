@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#ifndef CHATRA_MEMORYMANAGEMENT_H
-#define CHATRA_MEMORYMANAGEMENT_H
+#ifndef CHATRA_MEMORY_MANAGEMENT_H
+#define CHATRA_MEMORY_MANAGEMENT_H
 
 #include "Internal.h"
 #include "StringTable.h"
@@ -33,7 +33,7 @@ constexpr Requester InvalidRequester = enum_max<Requester>::value;
 enum class TypeId : int {
 	CapturedScope = -1,
 	CapturedScopeObject = -2,
-	_Dummy = 0
+	Dummy = 0
 };
 
 constexpr TypeId toTypeId(int id) noexcept {
@@ -228,7 +228,7 @@ private:
 public:
 	// This strange method is used for implementing serializing, std::hash() and std::equal_to().
 	// Also used for some debugging features.
-	ReferenceNode* ___nodePtr() const {
+	ReferenceNode* internal_nodePtr() const {
 		return node;
 	}
 
@@ -929,7 +929,7 @@ inline void Storage::save(Writer& w, WriteObject writeObject, WriteObjectReferen
 			break;
 
 		default:
-			(void)TypeId::_Dummy;
+			(void)TypeId::Dummy;
 			saveRefs = !writeObject(object->typeId, object);
 			break;
 		}
@@ -1097,13 +1097,13 @@ namespace std {
 
 template<> struct hash<chatra::Reference> {
 	size_t operator()(const chatra::Reference& x) const noexcept {
-		return std::hash<void*>()(x.___nodePtr());
+		return std::hash<void*>()(x.internal_nodePtr());
 	}
 };
 
 template<> struct equal_to<chatra::Reference> {
 	bool operator()(const chatra::Reference& a, const chatra::Reference& b) const noexcept {
-		return a.___nodePtr() == b.___nodePtr();
+		return a.internal_nodePtr() == b.internal_nodePtr();
 	}
 };
 
@@ -1111,4 +1111,4 @@ template<> struct equal_to<chatra::Reference> {
 
 CHATRA_ENUM_HASH(chatra::Requester)
 
-#endif //CHATRA_MEMORYMANAGEMENT_H
+#endif //CHATRA_MEMORY_MANAGEMENT_H

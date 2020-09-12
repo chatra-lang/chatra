@@ -462,8 +462,11 @@ public:
 #endif
 
 public:
-	Lock() noexcept {}
+	Lock() noexcept = default;
+
+#ifdef CHATRA_DEBUG_LOCK
 	~Lock();
+#endif // CHATRA_DEBUG_LOCK
 
 	bool has(Reference ref, LockType lockType) const;
 	void add(Reference ref, LockType lockType);
@@ -532,9 +535,9 @@ public:
 
 	void clearAllTemporaries();
 
-	Reference getSelf();
+	Reference getSelf() const;
 
-	Node* getExceptionNode();
+	Node* getExceptionNode() const;
 
 public:
 	Frame(Thread& thread, Package& package, size_t parentIndex,
@@ -712,7 +715,7 @@ private:
 	void consumeException();
 	void checkIsValidNode(Node* node);
 
-	void sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder);
+	void sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder) const;
 	bool lockReference(Reference ref, LockType lockType);
 	bool lockReference(TemporaryObject* value);
 	void checkTransferReq();
@@ -787,7 +790,7 @@ private:
 	EvaluateValueResult evaluateTuple();
 	EvaluateValueResult evaluateAndAllocateForAssignment(Node* node, TemporaryObject* value);
 
-	std::string getClassName(const Class* cl);
+	std::string getClassName(const Class* cl) const;
 
 	template <typename PrBool, typename PrInt, typename PrFloat>
 	bool standardUnaryOperator(PrBool prBool, PrInt prInt, PrFloat prFloat);
@@ -869,8 +872,8 @@ public:
 	void run();
 
 	Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept;
-	TemporaryObject* restoreTemporary(Reader& r);
-	TemporaryTuple* restoreTemporaryTuple(Reader& r);
+	TemporaryObject* restoreTemporary(Reader& r) const;
+	TemporaryTuple* restoreTemporaryTuple(Reader& r) const;
 	CHATRA_DECLARE_SERIALIZE_METHODS_WITHOUT_CONSTRUCTOR(Thread);
 	void postInitialize(Reader& r);
 };
@@ -934,16 +937,16 @@ public:
 	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
 
 	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
-			bool warnIfDuplicates = true);
+			bool warnIfDuplicates = true) const;
 	Package& import(Node* node, PackageId targetPackageId);
 	void build(IErrorReceiver& errorReceiver, const StringTable* sTable);
-	void allocatePackageObject();
+	void allocatePackageObject() const;
 
 	const Class* findClass(StringId name) override;
 	const Class* findPackageClass(StringId packageName, StringId name) override;
 
 	Package* findPackage(StringId name);
-	const std::vector<Package*>& refAnonymousImports();
+	const std::vector<Package*>& refAnonymousImports() const;
 
 	void pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, ScopeType type, size_t popCount = 1);
 
@@ -1046,13 +1049,13 @@ private:
 
 	void saveEntityFrames(Writer& w);
 	void saveEntityMap(Writer& w);
-	void saveStorage(Writer& w);
-	void saveState(Writer& w);
+	void saveStorage(Writer& w) const;
+	void saveState(Writer& w) const;
 
 	void restoreEntityFrames(Reader& r);
 	void restoreEntityMap(Reader& r);
 	void restoreEntities(Reader& r, PackageId packageId, Node* node);
-	void restoreStorage(Reader& r);
+	void restoreStorage(Reader& r) const;
 	void restoreState(Reader& r);
 
 	void reactivateFinalizerThread();
@@ -1085,7 +1088,7 @@ public:
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args) override;
 
-	void outputError(const std::string& message);
+	void outputError(const std::string& message) const;
 
 public:
 	explicit RuntimeImp(std::shared_ptr<IHost> host) noexcept;
@@ -1099,6 +1102,7 @@ public:
 	const MethodTable* restoreMethodTable(PackageId packageId, Node* node);
 	const MethodTable* refMethodTable() { return &methods; }
 
+	std::vector<uint8_t> doShutdown(bool save);
 	~RuntimeImp() override;
 
 	std::vector<uint8_t> shutdown(bool save) override;

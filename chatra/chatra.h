@@ -202,7 +202,7 @@ struct NativeCallContext {
 
 	virtual RuntimeId runtimeId() const = 0;
 
-	virtual InstanceId intanceId() const = 0;
+	virtual InstanceId instanceId() const = 0;
 
 	virtual bool hasSelf() const = 0;
 	virtual INativePtr* selfPtr() const = 0;

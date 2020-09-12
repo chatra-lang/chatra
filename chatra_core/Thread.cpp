@@ -392,7 +392,7 @@ void Thread::checkIsValidNode(Node* node) {
 	throw RuntimeException(StringId::ParserErrorException);
 }
 
-void Thread::sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder) {
+void Thread::sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder) const {
 	assert(holder != requester);
 	auto* holderThread = runtime.threadIds.ref(holder);
 
@@ -401,7 +401,7 @@ void Thread::sendTransferReq(Requester requester, Reference ref, LockType lockTy
 	holderThread->transferReq.emplace_back(requester, ref, lockType);
 
 	// std::printf("sendTransferReq: requester %u -> holder %u, %p\n", static_cast<unsigned>(getId()),
-	// 		static_cast<unsigned>(holder), ref.___nodePtr());
+	// 		static_cast<unsigned>(holder), ref.internal_nodePtr());
 	std::fflush(stdout);
 }
 
@@ -466,7 +466,7 @@ void Thread::checkTransferReq() {
 				thread->frames.back().lock->add(r.ref, r.lockType);
 				runtime.enqueue(thread);
 				// std::printf("checkTransferReq: requester %u <- holder %u, %p\n", static_cast<unsigned>(r.requester),
-				// 		static_cast<unsigned>(getId()), r.ref.___nodePtr());
+				// 		static_cast<unsigned>(getId()), r.ref.internal_nodePtr());
 				break;
 			}
 			auto holder = r.ref.lockedBy();
@@ -1425,7 +1425,7 @@ Thread::EvaluateValueResult Thread::evaluateAndAllocateForAssignment(Node* node,
 	return EvaluateValueResult::Next;
 }
 
-std::string Thread::getClassName(const Class* cl) {
+std::string Thread::getClassName(const Class* cl) const {
 	if (cl == nullptr)
 		return "null";
 	auto name = sTable->ref(cl->getName());
@@ -3945,11 +3945,11 @@ Thread::Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept
 	(void)r;
 }
 
-TemporaryObject* Thread::restoreTemporary(Reader& r) {
+TemporaryObject* Thread::restoreTemporary(Reader& r) const {
 	return &scope->ref(r.read<StringId>()).derefWithoutLock<TemporaryObject>();
 }
 
-TemporaryTuple* Thread::restoreTemporaryTuple(Reader& r) {
+TemporaryTuple* Thread::restoreTemporaryTuple(Reader& r) const {
 	return &scope->ref(r.read<StringId>()).derefWithoutLock<TemporaryTuple>();
 }
 

@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -309,16 +309,16 @@ public:
 	}
 
 	template <class Container, typename Predicate, typename ElementWriter,
-			CHATRA_WHEN(std::is_base_of<IdPool<typename Container::_KeyType, typename Container::_ValueType>, Container>::value)>
+			CHATRA_WHEN(std::is_base_of<IdPool<typename Container::KeyType_s, typename Container::ValueType_s>, Container>::value)>
 	void out(const Container& pool, Predicate predicate, ElementWriter elementWriter) {
 		CHATRA_SAVE_TYPE_TAG(List);
 		size_t length = 0;
-		pool.forEach([&](typename Container::_ValueType& value) {
+		pool.forEach([&](typename Container::ValueType_s& value) {
 			if (predicate(value))
 				length++;
 		});
 		out(length);
-		pool.forEach([&](typename Container::_ValueType& value) {
+		pool.forEach([&](typename Container::ValueType_s& value) {
 			if (predicate(value))
 				elementWriter(value);
 		});
@@ -425,7 +425,9 @@ private:
 public:
 	explicit Reader(RuntimeImp& runtime) noexcept;
 
+#ifndef NDEBUG
 	~Reader();
+#endif
 
 	void parse(unsigned expectedVersion, const std::vector<uint8_t>& bytes);
 

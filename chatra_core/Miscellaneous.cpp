@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -349,15 +349,15 @@ void Lock::audit() {
 
 #endif // CHATRA_DEBUG_LOCK
 
-Lock::~Lock() {
 #ifdef CHATRA_DEBUG_LOCK
+Lock::~Lock() {
 	if (saved)
 		return;
 	assert(!methodCall);
 	for (auto& e : refs)
 		assert(e.empty());
-#endif
 }
+#endif
 
 bool Lock::has(Reference ref, LockType lockType) const {
 	return refs[static_cast<size_t>(lockType)].count(ref) != 0;
@@ -617,12 +617,12 @@ void Frame::clearAllTemporaries() {
 	temporaryTuples.clear();
 }
 
-Reference Frame::getSelf() {
+Reference Frame::getSelf() const {
 	assert(scope->getScopeType() == ScopeType::Class);
 	return scope->ref(StringId::Self);
 }
 
-Node* Frame::getExceptionNode() {
+Node* Frame::getExceptionNode() const {
 	for (auto it = stack.crbegin(); it != stack.crend(); it++) {
 		auto* stackNode = it->first;
 		if (!stackNode->tokens.empty())

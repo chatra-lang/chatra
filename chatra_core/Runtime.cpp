@@ -119,7 +119,7 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 }
 
 bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
-		bool warnIfDuplicates) {
+		bool warnIfDuplicates) const {
 	assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
@@ -229,7 +229,7 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	}
 }
 
-void Package::allocatePackageObject() {
+void Package::allocatePackageObject() const {
 	scope->addConst(StringId::PackageObject).allocateWithoutLock<PackageObject>(clPackage.get());
 }
 
@@ -262,7 +262,7 @@ Package* Package::findPackage(StringId name) {
 	return it == importsByName.end() ? nullptr : it->second;
 }
 
-const std::vector<Package*>& Package::refAnonymousImports() {
+const std::vector<Package*>& Package::refAnonymousImports() const {
 	return anonymousImports;
 }
 
@@ -530,7 +530,7 @@ void RuntimeImp::saveEntityMap(Writer& w) {
 #define CHATRA_WRITE_OBJECT_REFS(className)  case typeId_##className:  \
 		static_cast<className*>(object)->saveReferences(w);  break
 
-void RuntimeImp::saveStorage(Writer& w) {
+void RuntimeImp::saveStorage(Writer& w) const {
 	storage->save(w, [&](TypeId typeId, Object* object) {
 		w.saveResync(static_cast<int>(typeId));
 		switch (typeId) {
@@ -565,7 +565,7 @@ void RuntimeImp::saveStorage(Writer& w) {
 	});
 }
 
-void RuntimeImp::saveState(Writer& w) {
+void RuntimeImp::saveState(Writer& w) const {
 
 	w.out(packageIds, [&](const Package& package) {
 		return package.getId() != finalizerPackageId;
@@ -749,7 +749,7 @@ struct RestoreExceptionPredicate {
 	}
 };
 
-void RuntimeImp::restoreStorage(Reader& r) {
+void RuntimeImp::restoreStorage(Reader& r) const {
 	storage->restore(r, [&](TypeId typeId, Object** object) {
 		r.restoreResync(static_cast<int>(typeId));
 		switch (typeId) {
@@ -1132,7 +1132,7 @@ void RuntimeImp::error(ErrorLevel level,
 	outputError(formatError(level, fileName, lineNo, line, first, last, message, args));
 }
 
-void RuntimeImp::outputError(const std::string& message) {
+void RuntimeImp::outputError(const std::string& message) const {
 	host->console(message);
 }
 
@@ -1233,15 +1233,7 @@ const MethodTable* RuntimeImp::restoreMethodTable(PackageId packageId, Node* nod
 	return methodTableCache.scanInnerFunctions(this, primarySTable.get(), *package, node);
 }
 
-RuntimeImp::~RuntimeImp() {
-	if (!closed)
-		(void)shutdown(false);
-
-	gcThread.reset();
-	gcInstance.reset();
-}
-
-std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
+std::vector<uint8_t> RuntimeImp::doShutdown(bool save) {
 	if (closed)
 		throw UnsupportedOperationException();
 	closed = true;
@@ -1279,6 +1271,18 @@ std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
 	}
 
 	return {};
+}
+
+RuntimeImp::~RuntimeImp() {
+	if (!closed)
+		(void)doShutdown(false);
+
+	gcThread.reset();
+	gcInstance.reset();
+}
+
+std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
+	return doShutdown(save);
 }
 
 void RuntimeImp::setWorkers(unsigned threadCount) {

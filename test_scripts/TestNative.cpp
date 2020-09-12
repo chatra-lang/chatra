@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ static void testCommand(cha::Ct& ct) {
 	}
 
 	if (verb == "instanceId") {
-		ct.set(static_cast<std::underlying_type<cha::InstanceId>::type>(ct.intanceId()));
+		ct.set(static_cast<std::underlying_type<cha::InstanceId>::type>(ct.instanceId()));
 		return;
 	}
 

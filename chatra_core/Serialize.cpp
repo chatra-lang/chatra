@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -290,7 +290,7 @@ Writer& Writer::outMethodTable(const MethodTable* methodTable) {
 
 Writer& Writer::outReference(const Reference& ref) {
 	CHATRA_SAVE_TYPE_TAG(Reference);
-	CHATRA_OUT_POINTER(ref.___nodePtr(), ReferenceNode);
+	CHATRA_OUT_POINTER(ref.internal_nodePtr(), ReferenceNode);
 	return *this;
 }
 
@@ -332,12 +332,12 @@ Reader::Reader(RuntimeImp& runtime) noexcept : runtime(runtime) {
 #endif
 }
 
-Reader::~Reader() {
 #ifndef NDEBUG
+Reader::~Reader() {
 	for (auto& p : pointerList)
 		assert(p.mode != PointerMode::Unique);
-#endif
 }
+#endif
 
 void Reader::parse(unsigned expectedVersion, const std::vector<uint8_t>& bytes) {
 	buffer = &bytes;
