@@ -43,8 +43,15 @@ enum class TimerId : size_t {};
 
 struct NativeException : public std::exception {
 	std::string message;
+
+public:
 	NativeException() = default;
 	explicit NativeException(const char* format, ...);
+
+	const char* what() const noexcept override {
+		return message.data();
+	}
+
 protected:
 	void setMessage(const char* format, va_list args);
 };
