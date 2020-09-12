@@ -36,8 +36,8 @@ const Method* TemporaryObject::findSetMethod(const MethodTable& table, const Cla
 }
 
 void TemporaryObject::resolveNativeMethod(StringId name, StringId subName) {
-	assert(method0 != nullptr);
-	assert(methodTable != nullptr);
+	chatra_assert(method0 != nullptr);
+	chatra_assert(methodTable != nullptr);
 
 	if (method1 != nullptr || method0->node == nullptr || !(method0->node->flags & NodeFlags::Native)) {
 		nativeMethod = nullptr;
@@ -92,7 +92,7 @@ bool TemporaryObject::findOnPackage(Package* package) {
 }
 
 bool TemporaryObject::findScopeRef(Scope* scope) {
-	assert(hasName && !hasArgs);
+	chatra_assert(hasName && !hasArgs);
 	if (!scope->has(name))
 		return false;
 	setScopeRef(scope->ref(name));
@@ -100,7 +100,7 @@ bool TemporaryObject::findScopeRef(Scope* scope) {
 }
 
 bool TemporaryObject::findFrameMethods(size_t frameIndex, Package* package, const MethodTable& table) {
-	assert(hasName && hasArgs);
+	chatra_assert(hasName && hasArgs);
 
 	auto* refMethod = table.find(nullptr, name, StringId::Invalid, args, {});
 	if (refMethod == nullptr)
@@ -112,7 +112,7 @@ bool TemporaryObject::findFrameMethods(size_t frameIndex, Package* package, cons
 }
 
 bool TemporaryObject::findConstructor(const Class* cl, StringId subName) {
-	assert(hasArgs);
+	chatra_assert(hasArgs);
 	auto& table = cl->refConstructors();
 	auto* constructor = table.find(nullptr, StringId::Init, subName, args, {});
 	if (constructor == nullptr)
@@ -123,7 +123,7 @@ bool TemporaryObject::findConstructor(const Class* cl, StringId subName) {
 }
 
 bool TemporaryObject::findConstructorCall(Reference sourceRef, const Class* cl, StringId subName) {
-	assert(hasArgs);
+	chatra_assert(hasArgs);
 	auto& table = cl->refConstructors();
 	auto* constructor = table.find(nullptr, StringId::Init, subName, args, {});
 	if (constructor == nullptr)
@@ -367,7 +367,7 @@ bool TemporaryObject::partialEvaluation(size_t frameIndex, const Class* cl) {
 	else
 		result = evaluateDirect(false);
 
-	assert(result != EvaluationResult::Partial);
+	chatra_assert(result != EvaluationResult::Partial);
 	if (result == EvaluationResult::Failed) {
 		hasArgs = true;
 		args = _args;
@@ -440,7 +440,7 @@ Reference TemporaryObject::setRvalue() {
 }
 
 void TemporaryObject::setName(Node* node, StringId name) {
-	assert(name != StringId::Invalid);
+	chatra_assert(name != StringId::Invalid);
 	type = Type::Empty;
 	clearTargetRef();
 	clearRestrictions();
@@ -503,8 +503,8 @@ void TemporaryObject::setConstructorCall(Reference sourceRef, const Class* cl, c
 void TemporaryObject::setFrameMethod(size_t frameIndex, Package* package, const MethodTable* methodTable,
 		const Method* refMethod, const Method* setMethod, bool hasArgs) {
 
-	assert(methodTable != nullptr);
-	assert(frameIndex == SIZE_MAX || (thread.frames[frameIndex].scope->getScopeType() != ScopeType::Thread &&
+	chatra_assert(methodTable != nullptr);
+	chatra_assert(frameIndex == SIZE_MAX || (thread.frames[frameIndex].scope->getScopeType() != ScopeType::Thread &&
 			thread.frames[frameIndex].scope->getScopeType() != ScopeType::Global &&
 			thread.frames[frameIndex].scope->getScopeType() != ScopeType::Package));
 
@@ -522,7 +522,7 @@ void TemporaryObject::setFrameMethod(size_t frameIndex, Package* package, const 
 void TemporaryObject::setObjectMethod(Reference sourceRef, const MethodTable* methodTable,
 		const Method* refMethod, const Method* setMethod, bool hasArgs) {
 
-	assert(methodTable != nullptr);
+	chatra_assert(methodTable != nullptr);
 
 	type = Type::ObjectMethod;
 	clearTargetRef();
@@ -569,10 +569,10 @@ void TemporaryObject::setExplicitSuper(Reference targetRef, const Class* cl) {
 }
 
 void TemporaryObject::selectElement(Node* node, StringId name) {
-	assert(!requiresEvaluate());
-	assert(!hasArgs && !hasSetArg);
-	assert(type != Type::Empty);
-	assert(!hasMethods());
+	chatra_assert(!requiresEvaluate());
+	chatra_assert(!hasArgs && !hasSetArg);
+	chatra_assert(type != Type::Empty);
+	chatra_assert(!hasMethods());
 
 	if (type == Type::Rvalue && targetRef.valueType() != ReferenceValueType::Object) {
 		errorAtNode(thread, ErrorLevel::Error, node, "invalid suffix or element selection on primitive", {});
@@ -598,9 +598,9 @@ void TemporaryObject::selectElement(Node* node, StringId name) {
 }
 
 void TemporaryObject::addArgument(Node* node, std::vector<ArgumentSpec> args) {
-	assert(!hasArgs);
-	assert(type != Type::Empty || hasName);
-	assert(!hasMethods());
+	chatra_assert(!hasArgs);
+	chatra_assert(type != Type::Empty || hasName);
+	chatra_assert(!hasMethods());
 
 	if (this->node == nullptr)
 		this->node = node;
@@ -609,8 +609,8 @@ void TemporaryObject::addArgument(Node* node, std::vector<ArgumentSpec> args) {
 }
 
 void TemporaryObject::addAssignment(Node* node, ArgumentSpec arg) {
-	assert(!hasSetArg);
-	assert(!hasMethods());
+	chatra_assert(!hasSetArg);
+	chatra_assert(!hasMethods());
 
 	if (this->node == nullptr)
 		this->node = node;
@@ -634,8 +634,8 @@ bool TemporaryObject::requiresEvaluate() const {
 }
 
 TemporaryObject::EvaluationResult TemporaryObject::evaluate(bool raiseExceptionIfVariableNotFound) {
-	assert(requiresEvaluate());
-	assert(!hasRef() || !targetRef.requiresLock() || targetRef.lockedBy() == thread.getId());
+	chatra_assert(requiresEvaluate());
+	chatra_assert(!hasRef() || !targetRef.requiresLock() || targetRef.lockedBy() == thread.getId());
 
 	checkBeforeEvaluation();
 
@@ -671,7 +671,7 @@ TemporaryObject::EvaluationResult TemporaryObject::evaluate(bool raiseExceptionI
 			throw RuntimeException(StringId::MemberNotFoundException);
 		}
 		auto instanceRef = f->getSelf();
-		assert(f->cl != nullptr);
+		chatra_assert(f->cl != nullptr);
 		if (hasArgs) {
 			for (auto* cl : f->cl->refDirectParents()) {
 				if (findConstructorCall(instanceRef, cl, StringId::Invalid))
@@ -718,9 +718,9 @@ TemporaryObject::EvaluationResult TemporaryObject::evaluate(bool raiseExceptionI
 }
 
 TemporaryObject::EvaluationResult TemporaryObject::evaluateAsPackageInitCall() {
-	assert(requiresEvaluate());
-	assert(!hasRef());
-	assert(type == Type::Empty && hasName && name == StringId::Init && !hasArgs);
+	chatra_assert(requiresEvaluate());
+	chatra_assert(!hasRef());
+	chatra_assert(type == Type::Empty && hasName && name == StringId::Init && !hasArgs);
 
 	size_t frameIndex = thread.frames.size() - 1;
 	while (frameIndex != SIZE_MAX) {
@@ -958,7 +958,7 @@ void TemporaryTuple::initialize(size_t frameIndex, Node* node) {
 
 void TemporaryTuple::clear() {
 	// Remove all captured TemporaryObject with using exportAll() prior to call this method.
-	assert(values.empty());
+	chatra_assert(values.empty());
 	frameIndex = SIZE_MAX;
 }
 
@@ -983,9 +983,9 @@ const Tuple::Key& TemporaryTuple::key(size_t position) const {
 }
 
 void TemporaryTuple::capture(Tuple::Key key) {
-	assert(thread.frames.size() - 1 == frameIndex);
+	chatra_assert(thread.frames.size() - 1 == frameIndex);
 	auto& f = thread.frames.back();
-	assert(valuesTop < f.values.size());
+	chatra_assert(valuesTop < f.values.size());
 	if (f.values.back()->getName() == StringId::OpTupleDelimiter)
 		delimiterPosition = values.size();
 	else {
@@ -996,7 +996,7 @@ void TemporaryTuple::capture(Tuple::Key key) {
 }
 
 void TemporaryTuple::copyFrom(Tuple& source) {
-	assert(thread.frames.size() - 1 == frameIndex);
+	chatra_assert(thread.frames.size() - 1 == frameIndex);
 	auto& f = thread.frames.back();
 	for (size_t i = 0; i < source.tupleSize(); i++) {
 		std::vector<TemporaryObject*> v = {f.allocateTemporary()};
@@ -1006,7 +1006,7 @@ void TemporaryTuple::copyFrom(Tuple& source) {
 }
 
 void TemporaryTuple::copyFrom(Array& source) {
-	assert(thread.frames.size() - 1 == frameIndex);
+	chatra_assert(thread.frames.size() - 1 == frameIndex);
 	auto& f = thread.frames.back();
 	std::lock_guard<SpinLock> lock(source.lockValue);
 	for (size_t i = 0; i < source.length; i++) {
@@ -1017,7 +1017,7 @@ void TemporaryTuple::copyFrom(Array& source) {
 }
 
 void TemporaryTuple::copyFrom(Dict& source, Node* node) {
-	assert(thread.frames.size() - 1 == frameIndex);
+	chatra_assert(thread.frames.size() - 1 == frameIndex);
 	auto& f = thread.frames.back();
 	std::lock_guard<SpinLock> lock(source.lockValue);
 	for (auto& e : source.keyToIndex) {
@@ -1032,7 +1032,7 @@ void TemporaryTuple::copyFrom(Dict& source, Node* node) {
 }
 
 void TemporaryTuple::extract(size_t position) {
-	assert(thread.frames.size() - 1 == frameIndex);
+	chatra_assert(thread.frames.size() - 1 == frameIndex);
 	auto& collected = values[position].second;
 	auto& f = thread.frames.back();
 	f.values.insert(f.values.cend(), collected.cbegin(), collected.cend());
@@ -1108,7 +1108,7 @@ void TemporaryTuple::saveReferences(Writer& w) const {
 	if (frameIndex == SIZE_MAX)
 		return;
 
-	assert(frameIndex < thread.frames.size());
+	chatra_assert(frameIndex < thread.frames.size());
 
 	w.CHATRA_OUT_POINTER(thread.scope.get(), Scope);
 
@@ -1160,7 +1160,7 @@ void TemporaryTuple::restoreReferences(Reader& r) {
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void TemporaryObject::dump(const std::shared_ptr<StringTable>& sTable) const {
 	printf("TemporaryObject: type=");
 	switch (type) {
@@ -1194,6 +1194,6 @@ void TemporaryObject::dump(const std::shared_ptr<StringTable>& sTable) const {
 	printf(" ");
 	Object::dump(sTable);
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

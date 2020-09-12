@@ -121,9 +121,9 @@ public:
 	void mapReturns(const TupleType& tuple, Mapper mapper, MapperForContainer mapperForContainer,
 			MapperForNull mapperForNull) const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dumpArgumentMatcher(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -150,9 +150,9 @@ public:
 	Method(Node* node, const Class* cl, StringId name, StringId subName,
 			std::vector<ArgumentDef> args, std::vector<ArgumentDef> subArgs) noexcept;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -167,9 +167,9 @@ public:
 	OperatorMethod(Package* package, Node* node, Operator op, std::vector<ArgumentDef> args) noexcept
 			: MethodBase(node), package(package), op(op), args(std::move(args)) {}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -221,17 +221,17 @@ public:
 	}
 
 	const Class* sourceClass() const {
-		assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
+		chatra_assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
 		return sourceClassPtr;
 	}
 
 	Package* sourcePackage() const {
-		assert(source == Source::InnerFunctions);
+		chatra_assert(source == Source::InnerFunctions);
 		return sourcePackagePtr;
 	}
 
 	Node* sourceNode() const {
-		assert(source == Source::InnerFunctions);
+		chatra_assert(source == Source::InnerFunctions);
 		return sourceNodePtr;
 	}
 
@@ -263,9 +263,9 @@ public:
 			pred(method);
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -299,9 +299,9 @@ public:
 	const OperatorMethod* find(Operator op, const Class* argCl) const;
 	const OperatorMethod* find(Operator op, const Class* argCl0, const Class* argCl1) const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -329,9 +329,9 @@ public:
 		return read<const OperatorMethod*>([&](const OperatorTable& table) { return table.find(op, argCl0, argCl1); });
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -420,7 +420,7 @@ public:
 	}
 
 	bool isAssignableFrom(const Class* cl) const {
-		assert(cl != nullptr);
+		chatra_assert(cl != nullptr);
 		return cl == this || cl->parentsSet.count(this) != 0;
 	}
 
@@ -448,9 +448,9 @@ public:
 		return constructors;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -483,9 +483,9 @@ public:
 		return byName;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -554,9 +554,9 @@ public:
 		return cl;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 class UserObjectBase : public ObjectBase {
@@ -729,9 +729,9 @@ public:
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(Tuple);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -842,9 +842,9 @@ public:
 	static void native_equals(CHATRA_NATIVE_ARGS);
 	static void native_sub(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -919,9 +919,9 @@ public:
 		return true;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -952,9 +952,9 @@ public:
 	static void native_keys(CHATRA_NATIVE_ARGS);
 	static void native_values(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 

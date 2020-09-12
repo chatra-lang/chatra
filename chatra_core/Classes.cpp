@@ -143,13 +143,13 @@ MethodTable::MethodTable(ForEmbeddedMethods forEmbeddedMethods) noexcept
 }
 
 MethodTable::MethodTable(const Class* cl, Source source) noexcept : source(source), sourceClassPtr(cl) {
-	assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
-	assert(cl != nullptr);
+	chatra_assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
+	chatra_assert(cl != nullptr);
 }
 
 MethodTable::MethodTable(Package& package, Node* node) noexcept
 		: source(Source::InnerFunctions), sourcePackagePtr(&package), sourceNodePtr(node) {
-	assert(node != nullptr);
+	chatra_assert(node != nullptr);
 }
 
 size_t MethodTable::add(Node* node, const Class* cl, StringId name, Node* syncNode) noexcept {
@@ -182,7 +182,7 @@ void MethodTable::add(const NativeMethod& method) noexcept {
 
 void MethodTable::inherit(const MethodTable& r, const Class* cl) {
 	ptrdiff_t delta = size - r.baseSize;
-	assert(delta >= 0);
+	chatra_assert(delta >= 0);
 
 	for (auto& e : r.byName) {
 		auto& methodList = byName[e.first];
@@ -388,7 +388,7 @@ void Class::addDefaultConstructor(ObjectBuilder objectBuilder) {
 }
 
 void Class::addConvertingConstructor(const Class* sourceCl) {
-	assert(sourceCl != this);
+	chatra_assert(sourceCl != this);
 	ArgumentDef arg;
 	arg.type = ArgumentDef::Type::List;
 	arg.name = StringId::a0;
@@ -416,7 +416,7 @@ void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable,
 		ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) {
 	this->objectBuilder = objectBuilder;
 
-	assert(node->blockNodesState == NodeState::Parsed);
+	chatra_assert(node->blockNodesState == NodeState::Parsed);
 
 	bool isClass = (node->type == NodeType::Class);
 	if (isClass)
@@ -503,9 +503,9 @@ static std::pair<StringId, const Class*> findArgumentClass(IClassFinder& classFi
 
 static std::pair<StringId, const Class*> findArgumentClassAsPrimitive(IClassFinder& classFinder, Node* nValue) {
 	if (nValue->type != NodeType::Literal) {
-		assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
+		chatra_assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
 		nValue = nValue->subNodes[0].get();
-		assert(nValue->type == NodeType::Literal);
+		chatra_assert(nValue->type == NodeType::Literal);
 	}
 
 	switch (nValue->literalValue->type) {
@@ -516,7 +516,7 @@ static std::pair<StringId, const Class*> findArgumentClassAsPrimitive(IClassFind
 	case LiteralType::MultilingualString:
 		return std::make_pair(StringId::String, classFinder.findClass(StringId::String));  // Is it safe?
 	default:
-		assert(false);
+		chatra_assert(false);
 		return std::make_pair(StringId::Invalid, nullptr);
 	}
 }
@@ -552,7 +552,7 @@ ArgumentDef nodeToArgument(IErrorReceiver& errorReceiver,
 				|| nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus)
 			c = findArgumentClassAsPrimitive(classFinder, nValue);
 		else {
-			assert(nValue->op == Operator::Call);
+			chatra_assert(nValue->op == Operator::Call);
 			c = findArgumentClass(classFinder, nValue->subNodes[0].get());
 		}
 
@@ -666,7 +666,7 @@ void addMethod(MethodTable& table, IErrorReceiver& errorReceiver,
 
 void addInnerMethods(MethodTable& table, IErrorReceiver& errorReceiver,
 		const StringTable* sTable, IClassFinder& classFinder, Node* node) {
-	assert(node->type != NodeType::ScriptRoot && node->type != NodeType::Class);
+	chatra_assert(node->type != NodeType::ScriptRoot && node->type != NodeType::Class);
 	for (auto& n : node->symbols) {
 		if (n->type == NodeType::Def)
 			addMethod(table, errorReceiver, sTable, classFinder, n.get());
@@ -729,7 +729,7 @@ void Tuple::Key::restore(Reader& r) {
 
 Tuple::Tuple(Storage& storage, Requester requester) noexcept
 		: ObjectBase(storage, typeId_Tuple, getClassStatic(), 0, requester) {
-	assert(requester != InvalidRequester);
+	chatra_assert(requester != InvalidRequester);
 }
 
 Tuple::Tuple(Storage& storage, const StringTable* sTable, const std::vector<std::pair<Key, Reference>>& args,
@@ -737,7 +737,7 @@ Tuple::Tuple(Storage& storage, const StringTable* sTable, const std::vector<std:
 		: ObjectBase(storage, typeId_Tuple, getClassStatic(), args.size(), requester) {
 
 	// Tuple is always temporary value, never at outside of scope
-	assert(requester != InvalidRequester);
+	chatra_assert(requester != InvalidRequester);
 
 	indexToKey.reserve(args.size());
 
@@ -802,7 +802,7 @@ std::vector<ArgumentSpec> Tuple::toArgs() const {
 				: !key.str.empty() ? StringId::AnyString : StringId::Invalid);
 
 		auto r0 = ref(i);
-		assert(!r0.requiresLock() || r0.lockedBy() != InvalidRequester);
+		chatra_assert(!r0.requiresLock() || r0.lockedBy() != InvalidRequester);
 		ret.emplace_back(sid, getReferClass(r0));
 	}
 	return ret;
@@ -830,7 +830,7 @@ bool Tuple::restore(Reader& r) {
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void ArgumentMatcher::dumpArgumentMatcher(const std::shared_ptr<StringTable>& sTable) const {
 	printf("(");
 	for (size_t i = 0; i < args.size(); i++) {
@@ -932,6 +932,6 @@ void Tuple::dump(const std::shared_ptr<StringTable>& sTable) const {
 		printf(" \"%s\"[%u]", e.first.c_str(), static_cast<unsigned>(e.second));
 	printf("\n");
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

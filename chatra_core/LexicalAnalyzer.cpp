@@ -522,7 +522,7 @@ void initializeLexicalAnalyzer() {
 	initializeOperators();
 }
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Line>& line) {
  	printf("Line{containsError=%s, file=%s, lineNo=%s, indents=%u,\n  line=\"%s\"\n  tokens=\n",
  			line->containsError ? "true" : "false",
@@ -537,7 +537,7 @@ void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Line
  				sTable->ref(token.sid).c_str());
  	printf("]}\n");
  }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
  }  // namespace chatra
 

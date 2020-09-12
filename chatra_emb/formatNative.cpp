@@ -127,7 +127,7 @@ static std::string toNegative(const std::string& valueString) {
 	auto it = std::find_if(valueString.cbegin(), valueString.cend(), [](char c) {
 		return isDigit(c) || c == '+';
 	});
-	assert(it != valueString.cend());
+	chatra_assert(it != valueString.cend());
 
 	auto offset = static_cast<size_t>(std::distance(valueString.cbegin(), it));
 	auto ret = valueString;

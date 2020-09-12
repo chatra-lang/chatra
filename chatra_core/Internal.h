@@ -52,9 +52,15 @@
 
 #include <cmath>
 
-#ifndef NDEBUG
-#include <cstdio>
-#endif // !NDEBUG
+#ifdef CHATRA_NDEBUG
+	#define chatra_assert(e)  ((void)0)
+#else
+	#define chatra_assert(e)  assert(e)
+#endif
+
+#ifndef CHATRA_NDEBUG
+	#include <cstdio>
+#endif // !CHATRA_NDEBUG
 
 #if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
 	#define CHATRA_MAYBE_GCC   __GNUC__
@@ -142,7 +148,7 @@ struct IAssertionNullErrorReceiver final : public IErrorReceiver {
 			const std::string& message, const std::vector<std::string>& args) override {
 		(void)level;  (void)fileName;  (void)lineNo;  (void)line;  (void)first;  (void)last;
 		(void)message;  (void)args;
-		assert(false);
+		chatra_assert(false);
 	}
 };
 

@@ -89,7 +89,7 @@ public:
 	NativeCallContextImp(Thread& thread, ObjectBase* object, std::string name, std::string subName, Tuple& args, Reference ret)
 			: thread(thread), object(static_cast<UserObjectBase*>(object)),
 			_name(std::move(name)), _subName(std::move(subName)), args(args), ret(std::move(ret)) {
-		assert(object == nullptr || object->getTypeId() == typeId_UserObjectBase);
+		chatra_assert(object == nullptr || object->getTypeId() == typeId_UserObjectBase);
 	}
 
 	RuntimeId runtimeId() const override {
@@ -175,7 +175,7 @@ private:
 public:
 	NativeReferenceImp(const NativeCallContextImp& ct, Reference ref, bool topLevel)
 			: ct(ct), ref(std::move(ref)), topLevel(topLevel) {
-		assert(!ref.requiresLock() || ref.lockedBy() == ct.thread.getId());
+		chatra_assert(!ref.requiresLock() || ref.lockedBy() == ct.thread.getId());
 	}
 
 	bool isNull() const override {
@@ -361,7 +361,7 @@ NativeReference& NativeCallContextImp::at(size_t position) const {
 }
 
 void nativeCall(CHATRA_NATIVE_ARGS) {
-	assert(handler != nullptr);
+	chatra_assert(handler != nullptr);
 
 	NativeCallContextImp ct(thread, object,
 			name == StringId::Invalid ? "" : thread.sTable->ref(name),

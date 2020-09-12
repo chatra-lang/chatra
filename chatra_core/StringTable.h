@@ -300,11 +300,11 @@ public:
 	}
 
 	std::string ref(StringId id) const {
-		#ifndef NDEBUG
+		#ifndef CHATRA_NDEBUG
 			if (id == StringId::Invalid)
 				return "#invalid";
-		#endif  // !NDEBUG
-		assert(static_cast<size_t>(id) < idToStr.size());
+		#endif  // !CHATRA_NDEBUG
+		chatra_assert(static_cast<size_t>(id) < idToStr.size());
 		return idToStr[static_cast<size_t>(id)];
 	}
 
@@ -324,11 +324,11 @@ public:
 
 	friend StringId add(std::shared_ptr<StringTable>& sTable, std::string str);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	size_t validIdCount() const {
 		return idToStr.size();
 	}
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 };
 
 StringId add(std::shared_ptr<StringTable>& sTable, std::string str);

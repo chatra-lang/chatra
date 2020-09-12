@@ -313,9 +313,9 @@ void errorAtNode(IErrorReceiver& errorReceiver, ErrorLevel level, Node* node,
 
 std::string getOpDescription(Operator op);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Node>& node);
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 
 }  // namespace chatra

@@ -281,7 +281,7 @@ StringTable::StringTable(const StringTable& r) noexcept {
 }
 
 void StringTable::restore(Reader& r) {
-	assert(idToStr.size() == static_cast<size_t>(StringId::PredefinedStringIds));
+	chatra_assert(idToStr.size() == static_cast<size_t>(StringId::PredefinedStringIds));
 	r.in(baseVersion);
 	r.in(version);
 	r.inList([&]() { add(r.read<std::string>()); });

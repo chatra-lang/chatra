@@ -41,7 +41,7 @@ void Timer::popAndInvokeHandlers(Time currentTime) {
 		timeQueue.pop_front();
 
 		auto it = map.find(tm);
-		assert(it != map.cend());
+		chatra_assert(it != map.cend());
 		handlers = std::move(it->second.handlers);
 		map.erase(it);
 		for (auto& e : handlers) {

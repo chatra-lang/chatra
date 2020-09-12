@@ -29,6 +29,12 @@
 	#define CHATRA_MAYBE_GCC   __GNUC__
 #endif
 
+#ifdef CHATRA_NDEBUG
+	#define chatra_assert(e)  ((void)0)
+#else
+	#define chatra_assert(e)  assert(e)
+#endif
+
 namespace chatra {
 namespace emb {
 

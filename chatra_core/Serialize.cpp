@@ -23,7 +23,7 @@
 
 namespace chatra {
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 
 constexpr uint16_t tagMarker = 0xB5A6;
 constexpr uint32_t resyncMarker = 0xF1E2D3C4;
@@ -48,10 +48,10 @@ void Reader::restoreTypeTag(TypeTag tag) {
 	}
 }
 
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 Writer& Writer::saveResync(int tag) {
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	(void)tag;
 #else
 	outRawInteger(resyncMarker);
@@ -61,7 +61,7 @@ Writer& Writer::saveResync(int tag) {
 }
 
 Reader& Reader::restoreResync(int tag) {
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	(void)tag;
 #else
 	try {
@@ -132,7 +132,7 @@ static size_t find(const std::vector<std::shared_ptr<Node>>& childNodes, const N
 }
 
 Writer& Writer::outNode(const Node* node) {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_SAVE_TYPE_TAG(Node);
 
 	out(node == nullptr ? 0 :
@@ -214,13 +214,13 @@ Writer& Writer::outNode(const Node* node) {
 			continue;
 		}
 
-		assert(false);
+		chatra_assert(false);
 	}
 	return *this;
 }
 
 Writer& Writer::outClass(const Class* cl) {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_SAVE_TYPE_TAG(Class);
 
 	if (cl == nullptr)
@@ -237,13 +237,13 @@ Writer& Writer::outClass(const Class* cl) {
 }
 
 Writer& Writer::outMethod(const Method* method) {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_SAVE_TYPE_TAG(Method);
 
 	if (method == nullptr)
 		out(0);
 	else if (method->node == nullptr) {
-		assert(method->cl != nullptr);
+		chatra_assert(method->cl != nullptr);
 
 		// default constructor or copy/converting constructor
 		if (method->args.empty()) {
@@ -251,7 +251,7 @@ Writer& Writer::outMethod(const Method* method) {
 			out(method->cl);
 		}
 		else {
-			assert(method->args.size() == 1);
+			chatra_assert(method->args.size() == 1);
 			out(3);
 			out(method->cl);
 			out(method->args[0].cl);
@@ -265,7 +265,7 @@ Writer& Writer::outMethod(const Method* method) {
 }
 
 Writer& Writer::outMethodTable(const MethodTable* methodTable) {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_SAVE_TYPE_TAG(MethodTable);
 
 	if (methodTable == nullptr) {
@@ -299,7 +299,7 @@ void Reader::checkSpace(size_t size) {
 		throw IllegalArgumentException();
 }
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 Reader::PointerInfo& Reader::readPointerInfo() {
 	CHATRA_RESTORE_TYPE_TAG(Pointer);
 	auto index = read<size_t>();
@@ -307,7 +307,7 @@ Reader::PointerInfo& Reader::readPointerInfo() {
 		throw IllegalArgumentException();
 	return pointerList.at(index);
 }
-#else // NDEBUG
+#else // CHATRA_NDEBUG
 Reader::PointerInfo& Reader::readPointerInfo(PointerType type) {
 	CHATRA_RESTORE_TYPE_TAG(Pointer);
 	auto index = read<size_t>();
@@ -317,25 +317,25 @@ Reader::PointerInfo& Reader::readPointerInfo(PointerType type) {
 		throw IllegalArgumentException();
 
 	auto savedType = read<PointerType>();
-	assert(savedType == type);
-	assert(savedType == pointerList.at(index).type);
+	chatra_assert(savedType == type);
+	chatra_assert(savedType == pointerList.at(index).type);
 
 	return pointerList.at(index);
 }
-#endif  // NDEBUG
+#endif  // CHATRA_NDEBUG
 
 Reader::Reader(RuntimeImp& runtime) noexcept : runtime(runtime) {
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	pointerList.emplace_back(PointerInfo{PointerMode::Raw, nullptr});
 #else
 	pointerList.emplace_back(PointerInfo{PointerMode::Raw, nullptr, static_cast<PointerType>(0)});
 #endif
 }
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 Reader::~Reader() {
 	for (auto& p : pointerList)
-		assert(p.mode != PointerMode::Unique);
+		chatra_assert(p.mode != PointerMode::Unique);
 }
 #endif
 
@@ -391,8 +391,8 @@ void Reader::setEntityMap(
 }
 
 void Reader::add(const Class* cl) {
-	assert(cl->getNode() != nullptr);
-	assert(nodeClassMap.count(cl->getNode()) == 0);
+	chatra_assert(cl->getNode() != nullptr);
+	chatra_assert(nodeClassMap.count(cl->getNode()) == 0);
 	nodeClassMap.emplace(cl->getNode(), cl);
 	add(&cl->refMethods());
 	add(&cl->refSuperMethods());
@@ -401,7 +401,7 @@ void Reader::add(const Class* cl) {
 
 void Reader::add(const Method* method) {
 	if (method->node != nullptr) {
-		assert(nodeMethodMap.count(method->node) == 0);
+		chatra_assert(nodeMethodMap.count(method->node) == 0);
 		nodeMethodMap.emplace(method->node, method);
 	}
 }
@@ -415,7 +415,7 @@ void Reader::add(const MethodTable* methodTable) {
 }
 
 Node* Reader::readNode() {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_RESTORE_TYPE_TAG(Node);
 
 	switch (read<int>()) {
@@ -506,7 +506,7 @@ Node* Reader::readNode() {
 }
 
 const Class* Reader::readClass() {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_RESTORE_TYPE_TAG(Class);
 
 	switch (read<int>()) {
@@ -519,7 +519,7 @@ const Class* Reader::readClass() {
 }
 
 const Method* Reader::readMethod() {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_RESTORE_TYPE_TAG(Method);
 
 	switch (read<int>()) {
@@ -549,7 +549,7 @@ const Method* Reader::readMethod() {
 }
 
 const MethodTable* Reader::readMethodTable() {
-	assert(entityMapEnabled);
+	chatra_assert(entityMapEnabled);
 	CHATRA_RESTORE_TYPE_TAG(MethodTable);
 
 	switch (read<int>()) {

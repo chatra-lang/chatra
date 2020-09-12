@@ -70,9 +70,9 @@ std::vector<std::shared_ptr<Line>> parseLines(IErrorReceiver& errorReceiver,
 
 void initializeLexicalAnalyzer();
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Line>& line);
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra
 

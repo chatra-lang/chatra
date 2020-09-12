@@ -43,7 +43,7 @@ public:
 	}
 
 	ParserWorkingSet& getWs() {
-		assert(ws != nullptr);
+		chatra_assert(ws != nullptr);
 		return *ws;
 	}
 
@@ -288,7 +288,7 @@ static void recursiveStructureNodes(IErrorReceiver& errorReceiver,
 void structureInnerNode(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive) {
 
-	assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Grouped);
+	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Grouped);
 
 	ParserContext ct(nullptr, errorReceiver, sTable);
 	unsigned expectedIndents = (node->line ? node->line->indents + 1 : 0);
@@ -1063,7 +1063,7 @@ static void initializeOpTables() {
 }
 
 static const OperatorAttributes& getOpAttr(Operator op) {
-	assert(static_cast<size_t>(op) < opAttrs.size());
+	chatra_assert(static_cast<size_t>(op) < opAttrs.size());
 	return opAttrs[static_cast<size_t>(op)];
 }
 
@@ -1484,7 +1484,7 @@ static void initializeStTables() {
 }
 
 static const StatementAttributes& getStAttr(NodeType type) {
-	assert(static_cast<size_t>(type) < stAttrs.size());
+	chatra_assert(static_cast<size_t>(type) < stAttrs.size());
 	return stAttrs[static_cast<size_t>(type)];
 }
 
@@ -1656,7 +1656,7 @@ template <class TokenPtrIterator>
 static std::shared_ptr<Node> extractStatementPiece(ParserContext& ct, TokenPtrIterator& it, TokenPtrIterator last,
 		const StatementPatternElement& e) {
 
-	assert(it != last);
+	chatra_assert(it != last);
 	auto it0 = it;
 	auto leftTokens = static_cast<size_t>(std::distance(it, last));
 
@@ -1798,7 +1798,7 @@ static std::shared_ptr<Node> extractStatementPiece(ParserContext& ct, TokenPtrIt
 	}
 
 	if (e.required) {
-		assert(!e.errorMessage.empty());
+		chatra_assert(!e.errorMessage.empty());
 		ct.errorAtToken(ErrorLevel::Error, **it0, e.errorMessage, {});
 	}
 
@@ -1844,7 +1844,7 @@ static InputIterator find_it(InputIterator first, InputIterator last, Predicate 
 static const Token* addToken(ParserContext& ct, const std::shared_ptr<Node>& node, const Token& templateToken,
 		TokenType type, std::string token) {
 
-	assert(type != TokenType::Number && type != TokenType::String);
+	chatra_assert(type != TokenType::Number && type != TokenType::String);
 
 	node->additionalTokens.emplace_back(new Token(
 			templateToken.line, templateToken.index, templateToken.first, templateToken.last,
@@ -1967,7 +1967,7 @@ static void mapAnnotations(ParserContext& ct, AnnotationMap& aMap, Node* node) {
 }
 
 static void transferAnnotations(AnnotationMap& aMap, const void* from, const void* to) {
-	assert(aMap.count(to) == 0);
+	chatra_assert(aMap.count(to) == 0);
 	auto it = aMap.find(from);
 	if (it == aMap.end())
 		return;
@@ -2171,7 +2171,7 @@ static void replaceSyntaxSugar(ParserContext& ct, AnnotationMap& aMap, Node* nod
 void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive) {
 
-	assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Structured);
+	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Structured);
 
 	ParserContext ct(&ws, errorReceiver, sTable);
 
@@ -2196,7 +2196,7 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 			if (it == n->tokens.cend()) {
 				if (!e.required)
 					continue;
-				assert(!e.errorMessage.empty());
+				chatra_assert(!e.errorMessage.empty());
 				ct.errorAtNextToken(ErrorLevel::Error, *n->tokens.back(), e.errorMessage, {});
 				hasError = true;
 				break;
@@ -2205,7 +2205,7 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 			auto subNode = extractStatementPiece(ct, it, n->tokens.cend(), e);
 			if (subNode) {
 				if (e.subNodeIndex != SIZE_MAX) {
-					assert(e.subNodeIndex < n->subNodes.size() && !n->subNodes[e.subNodeIndex]);
+					chatra_assert(e.subNodeIndex < n->subNodes.size() && !n->subNodes[e.subNodeIndex]);
 					n->subNodes[e.subNodeIndex] = std::move(subNode);
 				}
 			}
@@ -2284,17 +2284,17 @@ void initializeParser() {
 void errorAtNode(IErrorReceiver& errorReceiver, ErrorLevel level, Node* node,
 		const std::string& message, const std::vector<std::string>& args) {
 
-	assert(!message.empty());
+	chatra_assert(!message.empty());
 
 	if (node == nullptr) {
 		errorReceiver.error(level, "", UnknownLine, "", SIZE_MAX, SIZE_MAX, message, args);
 		return;
 	}
 
-	assert(!node->tokens.empty());
+	chatra_assert(!node->tokens.empty());
 	auto& firstToken = *node->tokens[0];
 	auto firstLine = firstToken.line.lock();
-	assert(firstLine);
+	chatra_assert(firstLine);
 
 	size_t first = firstToken.first;
 	size_t last = (firstToken.last == SIZE_MAX ? 0 : firstToken.last);
@@ -2318,7 +2318,7 @@ std::string getOpDescription(Operator op) {
 	return getOpAttr(op).description;
 }
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 static const char* toString(NodeState v) {
 	switch (v) {
 	case NodeState::Grouped:  return "Grouped";
@@ -2445,6 +2445,6 @@ static void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_p
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Node>& node) {
 	dump(sTable, node, 0, false);
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

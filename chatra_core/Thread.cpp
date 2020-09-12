@@ -240,7 +240,7 @@ struct AllocateExceptionPredicate final {
 
 void Thread::raiseException(const RuntimeException& ex) {
 	auto& f = frames.back();
-	assert(f.exception == nullptr);
+	chatra_assert(f.exception == nullptr);
 	Node* exceptionNode = f.getExceptionNode();
 	f.stackTrace = captureStackTrace();
 
@@ -254,7 +254,7 @@ void Thread::raiseException(const RuntimeException& ex) {
 }
 
 void Thread::raiseException(TemporaryObject* exValue) {
-	assert(exValue != nullptr && exValue->hasRef());
+	chatra_assert(exValue != nullptr && exValue->hasRef());
 	if (exValue->getRef().isNull()) {
 		errorAtNode(*this, ErrorLevel::Error, frames.back().getExceptionNode(),
 				"throw statement cannot handle null value", {});
@@ -262,7 +262,7 @@ void Thread::raiseException(TemporaryObject* exValue) {
 	}
 
 	auto& f = frames.back();
-	assert(f.exception == nullptr);
+	chatra_assert(f.exception == nullptr);
 	Node* exceptionNode = f.getExceptionNode();
 	f.stackTrace = captureStackTrace();
 
@@ -364,7 +364,7 @@ void Thread::consumeException() {
 	}
 
 	auto& n = *it;
-	assert(n->type == NodeType::Catch);
+	chatra_assert(n->type == NodeType::Catch);
 	f.phase = static_cast<size_t>(std::distance(f.node->blockNodes.cbegin(), it)) + 1;
 	pushBlock(n.get(), 0);
 
@@ -393,7 +393,7 @@ void Thread::checkIsValidNode(Node* node) {
 }
 
 void Thread::sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder) const {
-	assert(holder != requester);
+	chatra_assert(holder != requester);
 	auto* holderThread = runtime.threadIds.ref(holder);
 
 	std::lock_guard<SpinLock> lock(holderThread->lockTransferReq);
@@ -410,12 +410,12 @@ bool Thread::lockReference(Reference ref, LockType lockType) {
 		return true;
 
 	auto& f = frames.back();
-	assert(f.lock != nullptr);
+	chatra_assert(f.lock != nullptr);
 
 	if (ref.lockedBy() == getId()) {
 		if (lockType == LockType::Temporary)
 			f.lock->moveFromSoftToTemporary(ref);
-		assert(lockType == LockType::Hard || f.lock->has(ref, lockType));
+		chatra_assert(lockType == LockType::Hard || f.lock->has(ref, lockType));
 		return true;
 	}
 
@@ -481,7 +481,7 @@ void Thread::checkTransferReq() {
 
 Reference Thread::allocateReference(StringId sid) {
 	auto& f = frames.back();
-	assert(f.lock != nullptr);
+	chatra_assert(f.lock != nullptr);
 	auto ref = f.scope->add(sid, getId());
 	f.lock->add(ref, LockType::Soft);
 	return ref;
@@ -568,8 +568,8 @@ void Thread::pop() {
 		}
 
 		f.clearAllTemporaries();
-		assert(f.exception == nullptr);
-		assert(f.caughtException == nullptr);
+		chatra_assert(f.exception == nullptr);
+		chatra_assert(f.caughtException == nullptr);
 
 		frames.pop_back();
 	}
@@ -612,7 +612,7 @@ void Thread::pop(size_t targetSize, FinallyBlockScheme scheme) {
 
 void Thread::constructFrames(Package* package, Node* node, size_t parentIndex) {
 	if (parentIndex != SIZE_MAX) {
-		assert(package != nullptr);
+		chatra_assert(package != nullptr);
 		frames.emplace_back(*this, *package, parentIndex, ScopeType::InnerMethod, node, 1);
 		return;
 	}
@@ -714,29 +714,29 @@ void Thread::methodCall(bool hasSetArg) {
 	auto* methodValue = f.values[valueIndex--];
 	auto* argsValue = (methodValue->methodHasArguments() ? f.values[valueIndex--] : nullptr);
 
-	assert(f.lock != nullptr);
+	chatra_assert(f.lock != nullptr);
 	checkStackOverflow(methodValue->getNode());
 
 	auto* method = (hasSetArg ? methodValue->getSetMethod() : methodValue->getRefMethod());
-	assert(method != nullptr);
+	chatra_assert(method != nullptr);
 
 	size_t callerFrame = frames.size() - 1;
 	auto methodValueType = methodValue->getType();
 
 	auto* methodNode = method->node;
 	if (methodNode == nullptr) {
-		assert(methodValueType == TemporaryObject::Type::Constructor ||
+		chatra_assert(methodValueType == TemporaryObject::Type::Constructor ||
 				methodValueType == TemporaryObject::Type::ConstructorCall);
 		methodNode = &defaultConstructorNode;
 	}
 
 	if (methodValueType == TemporaryObject::Type::Constructor) {
-		assert(!hasSetArg);
+		chatra_assert(!hasSetArg);
 		auto ref = f.pushTemporary()->setRvalue();
 		auto* cl = methodValue->getClass();
 
 		if (cl == Bool::getClassStatic() || cl == Int::getClassStatic() || cl == Float::getClassStatic()) {
-			assert(argsValue != nullptr);
+			chatra_assert(argsValue != nullptr);
 			buildPrimitive(methodValue->getNode(), cl, argsValue->getRef().deref<Tuple>().ref(0), ref);
 			f.pop(valueIndex + 1, f.values.size() - 1);
 			runtime.enqueue(this);
@@ -897,7 +897,7 @@ void Thread::methodCallViaFunctionObject(bool hasSetArg, const Method* method) {
 void Thread::importMethodArguments(const Method* method, TemporaryObject* argsValue,
 		TemporaryObject* setArgValue) {
 
-	assert(method != nullptr);
+	chatra_assert(method != nullptr);
 	auto& f = frames.back();
 	auto& emptyTuple = *this->emptyTuple;
 	auto& tuple = (argsValue == nullptr ? emptyTuple : argsValue->getRef().deref<Tuple>());
@@ -935,7 +935,7 @@ void Thread::importMethodArguments(const Method* method, TemporaryObject* argsVa
 
 	if (setArgValue != nullptr) {
 		auto& subArgs = method->refSubArgs();
-		assert(subArgs.size() == 1);
+		chatra_assert(subArgs.size() == 1);
 		allocateReference(subArgs[0].name).set(setArgValue->getRef());
 	}
 }
@@ -1015,7 +1015,7 @@ void Thread::returnStatement(TemporaryObject* returnValue, bool runFinallyBlock)
 	if (returnValue == nullptr)
 		value->setRvalue().setNull();
 	else {
-		assert(returnValue->hasRef());
+		chatra_assert(returnValue->hasRef());
 		value->setRvalue().set(returnValue->getRef());
 	}
 
@@ -1263,7 +1263,7 @@ void Thread::checkTupleAsContainerValueOrThrow(Node* node, const Tuple& tuple) {
 Thread::EvaluateValueResult Thread::evaluateTemporaryObject(TemporaryObject* value, bool allocateIfNotFound) {
 	if (value->hasRef()) {
 		auto ref = value->getRef();
-		assert(!ref.requiresLock() || ref.lockedBy() == getId());
+		chatra_assert(!ref.requiresLock() || ref.lockedBy() == getId());
 		if (value->hasArguments() && getReferClass(ref) == FunctionObject::getClassStatic())
 			return EvaluateValueResult::FunctionObject;
 	}
@@ -1274,7 +1274,7 @@ Thread::EvaluateValueResult Thread::evaluateTemporaryObject(TemporaryObject* val
 			allocateReference(value->getName());
 			// printf("allocated \"%s\"(%u)\n", sTable->ref(value->getName()).c_str(), static_cast<unsigned>(value->getName()));
 			result = value->evaluate();
-			assert(result != TemporaryObject::EvaluationResult::Partial);
+			chatra_assert(result != TemporaryObject::EvaluationResult::Partial);
 		}
 
 		if (result == TemporaryObject::EvaluationResult::Succeeded)
@@ -1412,7 +1412,7 @@ Thread::EvaluateValueResult Thread::evaluateAndAllocateForAssignment(Node* node,
 	}
 
 	if (result != EvaluateValueResult::Next) {
-		assert(result == EvaluateValueResult::Suspend);
+		chatra_assert(result == EvaluateValueResult::Suspend);
 		return result;
 	}
 
@@ -1562,7 +1562,7 @@ bool Thread::binaryOperator(Process process) {
 	case 2:  nodePhase++;  f.stack.emplace_back(node->subNodes[1].get(), 0);  return true;
 	case 3:  CHATRA_EVALUATE_VALUE;
 	default: {
-		assert(nodePhase == binaryOperatorProcessPhase);
+		chatra_assert(nodePhase == binaryOperatorProcessPhase);
 		auto r0 = (*(f.values.end() - 2))->getRef();
 		auto r1 = (*(f.values.end() - 1))->getRef();
 
@@ -1828,7 +1828,7 @@ bool Thread::containerOperator() {
 		auto& nCl = node->subNodes[SubNode::Container_Class];
 		nodePhase++;
 		if (!nCl) {
-			assert(!node->subNodes[SubNode::Container_Args]);
+			chatra_assert(!node->subNodes[SubNode::Container_Args]);
 			auto& tuple = (*(f.values.end() - 2))->getRef().deref<Tuple>();
 			f.pushTemporary()->setName(node, tuple.size() == 0 || tuple.key(0).isNull() ? StringId::Array : StringId::Dict);
 		}
@@ -1943,7 +1943,7 @@ bool Thread::functionObjectOperator() {
 					value->getMethodTable(), method->name);
 		}
 		else {
-			assert(value->getType() == TemporaryObject::Type::ObjectMethod);
+			chatra_assert(value->getType() == TemporaryObject::Type::ObjectMethod);
 			retValue->setRvalue().allocate<FunctionObject>(*this, method->cl->getPackage(), value->getSourceRef(),
 					value->getMethodTable(), method->name);
 		}
@@ -2077,7 +2077,7 @@ bool Thread::instanceOfOperator() {
 		break;
 	}
 
-	assert(cl != nullptr);
+	chatra_assert(cl != nullptr);
 	auto ref = f.values.back()->getRef();
 	bool result;
 	switch (ref.valueType()) {
@@ -2803,7 +2803,7 @@ bool Thread::resumeExpression() {
 			break;
 		}
 
-		assert(node->type == NodeType::Operator);
+		chatra_assert(node->type == NodeType::Operator);
 		bool shouldContinue = true;
 		switch (node->op) {
 
@@ -3620,7 +3620,7 @@ void Thread::finish() {
 	}
 	remove();
 	checkTransferReq();
-	assert(transferReq.empty());
+	chatra_assert(transferReq.empty());
 }
 
 void Thread::run() {
@@ -3830,7 +3830,7 @@ void Thread::run() {
 					continue;
 				}
 
-				assert(f.values.size() == 1);
+				chatra_assert(f.values.size() == 1);
 				size_t index = f.phase - Phase::IfGroup_Base1;
 				Node* blockNode = f.node->blockNodes[index].get();
 				if (getBoolOrThrow(blockNode, 0)) {
@@ -3871,7 +3871,7 @@ void Thread::run() {
 					prepareExpression(f.node->subNodes[SubNode::While_Condition].get());
 					continue;
 				}
-				assert(f.phase == Phase::While_Condition1 && f.values.size() == 1);
+				chatra_assert(f.phase == Phase::While_Condition1 && f.values.size() == 1);
 				if (getBoolOrThrow(f.node, SubNode::While_Condition))
 					f.phase = 0;
 				else
@@ -3884,7 +3884,7 @@ void Thread::run() {
 					continue;
 				}
 
-				assert(f.phase == Phase::Switch_Base1 && f.values.size() == 1);
+				chatra_assert(f.phase == Phase::Switch_Base1 && f.values.size() == 1);
 				convertTopToScalar(f.node, 0);
 				auto* value = f.values.back();
 				if (value->hasRef() && value->getRef().valueType() == ReferenceValueType::Bool) {
@@ -3993,8 +3993,8 @@ void Thread::restore(Reader& r) {
 	for (auto& f : frames) {
 		if (!f.hasMethods)
 			continue;
-		assert(f.node != nullptr && f.node->blockNodesState == NodeState::Parsed);
-		assert(f.methods == nullptr);
+		chatra_assert(f.node != nullptr && f.node->blockNodesState == NodeState::Parsed);
+		chatra_assert(f.methods == nullptr);
 		f.methods = methodTableCache.scanInnerFunctions(&errorReceiverBridge, sTable, f.package, f.node);
 	}
 	if (errorReceiverBridge.hasError())

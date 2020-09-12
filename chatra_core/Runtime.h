@@ -32,7 +32,7 @@
 #include "Timer.h"
 #include "Serialize.h"
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	// #define CHATRA_DEBUG_LOCK
 	// #define CHATRA_TRACE_TEMPORARY_ALLOCATION
 #endif
@@ -251,39 +251,39 @@ public:
 	bool hasSource() const;
 
 	Reference getSourceRef() const {
-		assert(hasSource());
+		chatra_assert(hasSource());
 		return ref(StringId::SourceObject);
 	}
 
 	bool hasRef() const;
 
 	Reference getRef() const {
-		assert(hasRef());
+		chatra_assert(hasRef());
 		return targetRef;
 	}
 
 	size_t getPrimaryIndex() const {
-		assert(type == Type::ObjectRef);
+		chatra_assert(type == Type::ObjectRef);
 		return primaryIndex;
 	}
 
 	// Get frameIndex. SIZE_MAX for methods, !SIZE_MAX for inner methods
 	size_t getFrameIndex() const {
-		assert(type == Type::FrameMethod);
+		chatra_assert(type == Type::FrameMethod);
 		return frameIndex;
 	}
 
 	bool hasPackage() const;
 
 	Package* getPackage() const {
-		assert(hasPackage());
+		chatra_assert(hasPackage());
 		return package;
 	}
 
 	bool hasClass() const;
 
 	const Class* getClass() const {
-		assert(hasClass());
+		chatra_assert(hasClass());
 		return cl;
 	}
 
@@ -297,9 +297,9 @@ public:
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS_WITH_THREAD(TemporaryObject);
 	CHATRA_DECLARE_SERIALIZE_OBJECT_REFS_METHODS;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -960,9 +960,9 @@ public:
 	void restoreScripts(Reader& r);
 	CHATRA_DECLARE_SERIALIZE_METHODS_WITHOUT_CONSTRUCTOR(Package);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable);
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -1118,10 +1118,10 @@ public:
 	TimerId addTimer(const std::string& name) override;
 	void increment(TimerId timerId, int64_t step) override;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	size_t objectCount() { return storage->objectCount(); }
 	void dump();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 void initializeEmbeddedFunctions();  // should be called after initializeEmbeddedClasses()
@@ -1138,14 +1138,14 @@ void native_sleep(CHATRA_NATIVE_ARGS);
 void native_type(CHATRA_NATIVE_ARGS);
 void native_objectId(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void enableStdout(bool enabled);
 void setTestMode(const std::string& testMode);
 void beginCheckScript();
 void endCheckScript();
 bool showResults();
 void waitUntilFinished();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 void native_check(CHATRA_NATIVE_ARGS);
 void native_checkCmd(CHATRA_NATIVE_ARGS);
@@ -1181,8 +1181,8 @@ Type* ObjectPool<Type>::allocate(Allocator allocator) {
 
 template <class Type>
 void ObjectPool<Type>::recycle(Type* value) {
-	assert(std::find(allocated.cbegin(), allocated.cend(), value) != allocated.cend());
-	assert(std::find(recycled.cbegin(), recycled.cend(), value) == recycled.cend());
+	chatra_assert(std::find(allocated.cbegin(), allocated.cend(), value) != allocated.cend());
+	chatra_assert(std::find(recycled.cbegin(), recycled.cend(), value) == recycled.cend());
 	value->clear();
 	recycled.emplace_back(value);
 }
@@ -1191,8 +1191,8 @@ template <class Type>
 template <class InputIterator>
 void ObjectPool<Type>::recycle(InputIterator first, InputIterator last) {
 	for (auto it = first; it != last; it++) {
-		assert(std::find(allocated.cbegin(), allocated.cend(), *it) != allocated.cend());
-		assert(std::find(recycled.cbegin(), recycled.cend(), *it) == recycled.cend());
+		chatra_assert(std::find(allocated.cbegin(), allocated.cend(), *it) != allocated.cend());
+		chatra_assert(std::find(recycled.cbegin(), recycled.cend(), *it) == recycled.cend());
 	}
 	std::for_each(first, last, [](Type* value) { value->clear(); });
 	recycled.insert(recycled.end(), first, last);
@@ -1248,7 +1248,7 @@ ObjectPool<Type>::~ObjectPool() {
 			value->dump(thread.runtime.primarySTable);
 		}
 	}
-	assert(leaked == 0);
+	chatra_assert(leaked == 0);
 }
 
 #else // CHATRA_TRACE_TEMPORARY_ALLOCATION
