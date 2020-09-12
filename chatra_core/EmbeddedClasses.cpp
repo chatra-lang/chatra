@@ -1086,7 +1086,7 @@ void Dict::add(std::string key, Reference ref) {
 		freeIndexes.pop_back();
 	}
 
-	keyToIndex.emplace(key, index);
+	keyToIndex.emplace(std::move(key), index);
 	length++;
 	container().ref(index).set(ref);
 }

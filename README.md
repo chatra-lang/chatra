@@ -4,8 +4,8 @@ Japanese version is [here](/README.ja.md).
 
 
 Chatra Cheat Sheet:<br/>
-[![Chatra Cheet Sheet Light](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light.pdf)
-[![Chatra Cheet Sheet Dark](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark.pdf)
+[![Chatra Cheat Sheet Light](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light.pdf)
+[![Chatra Cheat Sheet Dark](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark.pdf)
 
 # About “Chatra”
 Chatra is a lightweight scripting language which has simple design 

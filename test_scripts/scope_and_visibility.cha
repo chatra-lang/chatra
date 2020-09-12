@@ -66,9 +66,9 @@ class ClassA extends SuperClass0, SuperClass1, SuperClass2
 
 		do
 			super.SuperSuperClass()
-			_check('attemt to call ancient-class constructor directly', false)
+			_check('attempt to call ancient-class constructor directly', false)
 			catch MemberNotFoundException
-				_check('attemt to call ancient-class constructor directly', true)
+				_check('attempt to call ancient-class constructor directly', true)
 
 		super()
 		super(1)

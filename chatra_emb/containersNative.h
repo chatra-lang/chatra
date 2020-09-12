@@ -17,8 +17,8 @@
  *
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
-#ifndef CHATRA_CONTAINERSNATIVE_H
-#define CHATRA_CONTAINERSNATIVE_H
+#ifndef CHATRA_CONTAINERS_NATIVE_H
+#define CHATRA_CONTAINERS_NATIVE_H
 
 #include "EmbInternal.h"
 
@@ -38,4 +38,4 @@ ByteArray& refByteArray(cha::Ref& ref);
 }  // namespace emb
 }  // namespace chatra
 
-#endif //CHATRA_CONTAINERSNATIVE_H
+#endif //CHATRA_CONTAINERS_NATIVE_H

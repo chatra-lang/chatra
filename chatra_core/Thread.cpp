@@ -2085,7 +2085,7 @@ bool Thread::instanceOfOperator() {
 	case ReferenceValueType::Int:  result = (cl == Int::getClassStatic());  break;
 	case ReferenceValueType::Float:  result = (cl == Float::getClassStatic());  break;
 	default:
-		result = ref.isNull() ? false : cl->isAssignableFrom(ref.deref<ObjectBase>().getClass());
+		result = !ref.isNull() && cl->isAssignableFrom(ref.deref<ObjectBase>().getClass());
 		break;
 	}
 	f.pop();

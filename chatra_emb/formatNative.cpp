@@ -63,7 +63,7 @@ static constexpr bool isAlpha(char c) {
 
 template <typename Pred>
 static size_t findOffset(const std::string& str, size_t first, size_t last, Pred pred) {
-	return std::distance(str.cbegin(), std::find_if(str.cbegin() + first, str.cbegin() + last, pred));
+	return static_cast<size_t>(std::distance(str.cbegin(), std::find_if(str.cbegin() + first, str.cbegin() + last, pred)));
 }
 
 static std::string restoreValue(const std::string& value) {
@@ -102,7 +102,7 @@ static std::string convert(size_t specifierIndex, char* spec, size_t specSize, c
 	if (length < 0)
 		throw IllegalArgumentException("failed to apply format specifier #%u",
 				static_cast<unsigned>(specifierIndex));
-	std::vector<char> buffer(length + 1);
+	std::vector<char> buffer(static_cast<size_t>(length) + 1);
 	std::snprintf(buffer.data(), buffer.size(), spec, value);
 	return std::string(buffer.data());
 }

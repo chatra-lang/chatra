@@ -50,7 +50,7 @@ void NativeException::setMessage(const char *format, va_list args) {
 	if (length < 0)
 		message = "(error)";
 	else {
-		std::vector<char> buffer(length + 1);
+		std::vector<char> buffer(static_cast<size_t>(length) + 1);
 		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
 		message = std::string(buffer.data());
 	}

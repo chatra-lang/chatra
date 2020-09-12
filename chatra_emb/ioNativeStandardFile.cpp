@@ -91,7 +91,7 @@ struct StandardFileCommon : public IFile {
 			throw NativeException();
 		}
 
-		current = newPosition;
+		current = static_cast<size_t>(newPosition);
 	}
 };
 

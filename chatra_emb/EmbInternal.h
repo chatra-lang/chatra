@@ -17,8 +17,8 @@
  *
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
-#ifndef CHATRA_EMBINTERNAL_H
-#define CHATRA_EMBINTERNAL_H
+#ifndef CHATRA_EMB_INTERNAL_H
+#define CHATRA_EMB_INTERNAL_H
 
 #include "chatra.h"
 #include <atomic>
@@ -67,4 +67,4 @@ std::string readString(const std::vector<uint8_t> &buffer, size_t &offset);
 }  // namespace emb
 }  // namespace chatra
 
-#endif //CHATRA_EMBINTERNAL_H
+#endif //CHATRA_EMB_INTERNAL_H

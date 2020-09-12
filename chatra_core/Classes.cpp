@@ -643,7 +643,7 @@ void addMethod(MethodTable& table, IErrorReceiver& errorReceiver,
 
 	auto exists = table.findByName(node->sid, StringId::Invalid);
 	if (nOperator) {
-		auto it = std::find_if(exists.cbegin(), exists.cend(), [](const Method* m) -> bool { return m->node->flags & NodeFlags::Native; });
+		auto it = std::find_if(exists.cbegin(), exists.cend(), [](const Method* m) -> bool { return (m->node->flags & NodeFlags::Native) != 0; });
 		if (it != exists.cend()) {
 			errorAtNode(errorReceiver, ErrorLevel::Error, node, "function with operator suffix cannot have the same name with native functions", {});
 			if ((*it)->node != nullptr)

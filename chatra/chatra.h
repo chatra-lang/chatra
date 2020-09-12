@@ -414,11 +414,11 @@ public:
 	virtual InstanceId run(PackageId packageId) = 0;
 
 	/// Check whether at least one thread remains or not
-	/// @throws IllgalArgumentException  instance is not found
+	/// @throws IllegalArgumentException  instance is not found
 	virtual bool isRunning(InstanceId instanceId) = 0;
 
 	/// Stop specified instance.
-	/// @throws IllgalArgumentException  instance is not found
+	/// @throws IllegalArgumentException  instance is not found
 	/// @throws NotSupportedOperationException specified instance has active threads (= isRunning() returns true)
 	virtual void stop(InstanceId instanceId) = 0;
 

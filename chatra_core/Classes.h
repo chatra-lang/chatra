@@ -293,7 +293,7 @@ public:
 		if (methods.front().args.size() == 1)
 			addOp1(&methods.front());
 		else
-			addOp1(&methods.front());
+			addOp2(&methods.front());
 	}
 
 	const OperatorMethod* find(Operator op, const Class* argCl) const;
