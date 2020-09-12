@@ -33,6 +33,10 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
 endif()
 
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DCHATRA_NDEBUG)
+endif()
+
 # Adds interpreter
 add_subdirectory(chatra_core)
 # Adds embedded libraries

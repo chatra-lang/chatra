@@ -329,7 +329,7 @@ void EventObject::notifyOne() {
 		EventWatcher watcher;
 		{
 			std::lock_guard<SpinLock> lock(lockWatchers);
-			assert(count != std::numeric_limits<unsigned>::max());
+			chatra_assert(count != std::numeric_limits<unsigned>::max());
 			if (activated.empty()) {
 				count++;
 				return;
@@ -389,7 +389,7 @@ class Async
 [[noreturn]] static void createAsync(const Class* cl, Reference ref) {
 	(void)cl;
 	(void)ref;
-	assert(cl == clAsync.get());
+	chatra_assert(cl == clAsync.get());
 	throw RuntimeException(StringId::UnsupportedOperationException);
 }
 
@@ -399,7 +399,7 @@ void Async::native_updated(CHATRA_NATIVE_ARGS) {
 }
 
 void Async::updateResult(Reference ref) {
-	assert(Async::getClassStatic()->refMethods().find(nullptr, StringId::m0, StringId::Invalid, {}, {})->position == 0);
+	chatra_assert(Async::getClassStatic()->refMethods().find(nullptr, StringId::m0, StringId::Invalid, {}, {})->position == 0);
 	this->ref(0).setWithoutLock(ref);
 	updated = true;
 	notifyAll();
@@ -423,7 +423,7 @@ bool Async::restore(Reader& r) {
 
 static void createString(const Class* cl, Reference ref) {
 	(void)cl;
-	assert(cl == clString.get());
+	chatra_assert(cl == clString.get());
 	ref.allocate<String>();
 }
 
@@ -838,7 +838,7 @@ ContainerBase::ContainerBase(TypeId typeId, const Class* cl) noexcept : ObjectBa
 
 static void createArray(const Class* cl, Reference ref) {
 	(void)cl;
-	assert(cl == clArray.get());
+	chatra_assert(cl == clArray.get());
 	ref.allocate<Array>();
 }
 
@@ -1060,7 +1060,7 @@ void Array::native_at(CHATRA_NATIVE_ARGS) {
 
 static void createDict(const Class* cl, Reference ref) {
 	(void)cl;
-	assert(cl == clDict.get());
+	chatra_assert(cl == clDict.get());
 	ref.allocate<Dict>();
 }
 
@@ -1086,7 +1086,7 @@ void Dict::add(std::string key, Reference ref) {
 		freeIndexes.pop_back();
 	}
 
-	keyToIndex.emplace(key, index);
+	keyToIndex.emplace(std::move(key), index);
 	length++;
 	container().ref(index).set(ref);
 }
@@ -1323,7 +1323,7 @@ static std::unique_ptr<Class> createEmbeddedClass(ParserWorkingSet& ws, IErrorRe
 	auto node = groupScript(errorReceiver, sTable, lines);
 	structureInnerNode(errorReceiver, sTable, node.get(), true);
 	parseInnerNode(ws, errorReceiver, sTable, node.get(), true);
-	assert(node->blockNodes.size() == 1 && node->blockNodes[0]->type == NodeType::Class);
+	chatra_assert(node->blockNodes.size() == 1 && node->blockNodes[0]->type == NodeType::Class);
 
 	nodeMap.emplace(node->blockNodes[0]->sid, node.get());
 
@@ -1450,7 +1450,7 @@ void initializeEmbeddedClasses() {
 		throw InternalError();
 
 	if (sTable->getVersion() != 0) {
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 		printf("Additional strings:");
 		for (auto i = static_cast<size_t>(StringId::PredefinedStringIds); i < sTable->validIdCount(); i++)
 			printf(" %s", sTable->ref(static_cast<StringId>(i)).c_str());
@@ -1473,7 +1473,7 @@ const std::unordered_map<StringId, Node*>& refNodeMapForEmbeddedClasses() {
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void String::dump(const std::shared_ptr<chatra::StringTable>& sTable) const {
 	printf("String: value=\"%s\" ", value.c_str());
 	ObjectBase::dump(sTable);
@@ -1497,6 +1497,6 @@ void Dict::dump(const std::shared_ptr<chatra::StringTable>& sTable) const {
 	for (auto& e : indexToKey)
 		printf("  [%u] <- \"%s\"\n", static_cast<unsigned>(e.first), e.second.c_str());
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

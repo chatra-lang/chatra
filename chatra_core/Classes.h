@@ -49,19 +49,19 @@ class Thread;
 class Package;
 class NativeReferenceImp;
 
-struct HashPairStringId {
+struct HashPairStringId final {
 	size_t operator()(const std::pair<StringId, StringId>& x) const noexcept {
 		return std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.first))
 				^ std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.second) + 1);
 	}
 };
 
-struct HashPairClassPtr {
+struct HashPairClassPtr final {
 	size_t operator()(const std::pair<const Class*, const Class*>& x) const noexcept;
 };
 
 
-struct ArgumentDef {
+struct ArgumentDef final {
 	enum class Type {
 		// Before delimiter (contains the case of no delimiter)
 		List,
@@ -78,7 +78,7 @@ struct ArgumentDef {
 };
 
 
-struct ArgumentSpec {
+struct ArgumentSpec final {
 	StringId key = StringId::Invalid;
 	const Class* cl = nullptr;
 public:
@@ -121,9 +121,9 @@ public:
 	void mapReturns(const TupleType& tuple, Mapper mapper, MapperForContainer mapperForContainer,
 			MapperForNull mapperForNull) const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dumpArgumentMatcher(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -135,7 +135,7 @@ public:
 };
 
 
-struct Method : public MethodBase, public ArgumentMatcher {
+struct Method final : public MethodBase, public ArgumentMatcher {
 	const Class* cl;
 	StringId name;
 	StringId subName;  // init.*() or foo()."set"(); default = StringId::Invalid
@@ -150,13 +150,13 @@ public:
 	Method(Node* node, const Class* cl, StringId name, StringId subName,
 			std::vector<ArgumentDef> args, std::vector<ArgumentDef> subArgs) noexcept;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-struct OperatorMethod : public MethodBase {
+struct OperatorMethod final : public MethodBase {
 	friend class OperatorTable;
 
 	Package* package;  // Can be nullptr for embedded methods
@@ -167,13 +167,13 @@ public:
 	OperatorMethod(Package* package, Node* node, Operator op, std::vector<ArgumentDef> args) noexcept
 			: MethodBase(node), package(package), op(op), args(std::move(args)) {}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-struct NativeMethod {
+struct NativeMethod final {
 	using Signature = void (*)(NativeCallHandler handler, Thread& thread, ObjectBase* object,
 			StringId name, StringId subName, Tuple& args, Reference ret);
 
@@ -221,17 +221,17 @@ public:
 	}
 
 	const Class* sourceClass() const {
-		assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
+		chatra_assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
 		return sourceClassPtr;
 	}
 
 	Package* sourcePackage() const {
-		assert(source == Source::InnerFunctions);
+		chatra_assert(source == Source::InnerFunctions);
 		return sourcePackagePtr;
 	}
 
 	Node* sourceNode() const {
-		assert(source == Source::InnerFunctions);
+		chatra_assert(source == Source::InnerFunctions);
 		return sourceNodePtr;
 	}
 
@@ -263,9 +263,9 @@ public:
 			pred(method);
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -293,15 +293,15 @@ public:
 		if (methods.front().args.size() == 1)
 			addOp1(&methods.front());
 		else
-			addOp1(&methods.front());
+			addOp2(&methods.front());
 	}
 
 	const OperatorMethod* find(Operator op, const Class* argCl) const;
 	const OperatorMethod* find(Operator op, const Class* argCl0, const Class* argCl1) const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -329,9 +329,9 @@ public:
 		return read<const OperatorMethod*>([&](const OperatorTable& table) { return table.find(op, argCl0, argCl1); });
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -420,7 +420,7 @@ public:
 	}
 
 	bool isAssignableFrom(const Class* cl) const {
-		assert(cl != nullptr);
+		chatra_assert(cl != nullptr);
 		return cl == this || cl->parentsSet.count(this) != 0;
 	}
 
@@ -448,9 +448,9 @@ public:
 		return constructors;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -483,9 +483,9 @@ public:
 		return byName;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -554,9 +554,9 @@ public:
 		return cl;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 class UserObjectBase : public ObjectBase {
@@ -729,9 +729,9 @@ public:
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(Tuple);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -842,9 +842,9 @@ public:
 	static void native_equals(CHATRA_NATIVE_ARGS);
 	static void native_sub(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -919,9 +919,9 @@ public:
 		return true;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -952,9 +952,9 @@ public:
 	static void native_keys(CHATRA_NATIVE_ARGS);
 	static void native_values(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 

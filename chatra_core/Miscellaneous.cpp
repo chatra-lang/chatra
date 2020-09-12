@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ static size_t functionObjectRefCount(Thread& thread, size_t frameIndex) {
 		auto scopeType = f.scope->getScopeType();
 		if (scopeType == ScopeType::Package)
 			return count;
-		assert(scopeType != ScopeType::Thread && scopeType != ScopeType::Global);
+		chatra_assert(scopeType != ScopeType::Thread && scopeType != ScopeType::Global);
 		count++;
 		frameIndex = f.parentIndex;
 	}
@@ -85,7 +85,7 @@ FunctionObject::FunctionObject(Storage& storage, Thread& thread, Package* packag
 		position++;
 		parentIndex = f.parentIndex;
 	}
-	assert(scopes.size() == size());
+	chatra_assert(scopes.size() == size());
 }
 
 FunctionObject::FunctionObject(Storage& storage, Thread& thread, Package* package, Reference ref,
@@ -274,7 +274,7 @@ void Lock::setFrame(Frame* currentFramePtr) {
 }
 
 void Lock::outputHeader(std::FILE* fp) {
-	assert(thread != nullptr);
+	chatra_assert(thread != nullptr);
 	std::fprintf(fp, "Lock(thread=%u, frame#%u): ",
 			static_cast<unsigned>(thread->getId()), static_cast<unsigned>(frameIndex));
 }
@@ -296,7 +296,7 @@ void Lock::outputReference(std::FILE* fp, Reference ref, LockType lockType) {
 }
 
 void Lock::outputLog(const char* verb, Reference ref, LockType lockType) {
-	assert(thread != nullptr);
+	chatra_assert(thread != nullptr);
 	outputHeader(stdout);
 	std::printf("%s: ", verb);
 	outputReference(stdout, ref, lockType);
@@ -305,14 +305,14 @@ void Lock::outputLog(const char* verb, Reference ref, LockType lockType) {
 }
 
 void Lock::outputLog(const char* verb) {
-	assert(thread != nullptr);
+	chatra_assert(thread != nullptr);
 	outputHeader(stdout);
 	std::printf("%s\n", verb);
 	std::fflush(stdout);
 }
 
 void Lock::audit() {
-	assert(thread != nullptr);
+	chatra_assert(thread != nullptr);
 	std::vector<std::tuple<Reference, LockType>> failedList;
 	for (auto lockType : {LockType::Hard, LockType::Soft, LockType::Temporary}) {
 		for (auto& ref : refs[static_cast<size_t>(lockType)]) {
@@ -333,7 +333,7 @@ void Lock::audit() {
 		}
 		std::fprintf(stream, "\n");
 		std::fflush(stream);
-		assert(false);
+		chatra_assert(false);
 	}
 }
 
@@ -349,15 +349,15 @@ void Lock::audit() {
 
 #endif // CHATRA_DEBUG_LOCK
 
-Lock::~Lock() {
 #ifdef CHATRA_DEBUG_LOCK
+Lock::~Lock() {
 	if (saved)
 		return;
-	assert(!methodCall);
+	chatra_assert(!methodCall);
 	for (auto& e : refs)
-		assert(e.empty());
-#endif
+		chatra_assert(e.empty());
 }
+#endif
 
 bool Lock::has(Reference ref, LockType lockType) const {
 	return refs[static_cast<size_t>(lockType)].count(ref) != 0;
@@ -369,14 +369,14 @@ void Lock::add(Reference ref, LockType lockType) {
 
 #ifdef CHATRA_DEBUG_LOCK
 	if (methodCall && lockType == LockType::Temporary) {
-		assert(refs[static_cast<size_t>(LockType::Temporary)].count(ref) == 1);
-		assert(suspendedRefs.count(ref) == 1);
+		chatra_assert(refs[static_cast<size_t>(LockType::Temporary)].count(ref) == 1);
+		chatra_assert(suspendedRefs.count(ref) == 1);
 		suspendedRefs.erase(ref);
 	}
 	else
-		assert(refs[static_cast<size_t>(lockType)].count(ref) == 0);
+		chatra_assert(refs[static_cast<size_t>(lockType)].count(ref) == 0);
 	for (auto _lockType : {LockType::Hard, LockType::Soft, LockType::Temporary})
-		assert(_lockType == lockType || refs[static_cast<size_t>(_lockType)].count(ref) == 0);
+		chatra_assert(_lockType == lockType || refs[static_cast<size_t>(_lockType)].count(ref) == 0);
 #endif
 
 	refs[static_cast<size_t>(lockType)].emplace(ref);
@@ -388,8 +388,8 @@ void Lock::moveFromSoftToTemporary(Reference ref) {
 	CHATRA_DEBUG_LOCK_LOG1("move_to", ref, LockType::Temporary);
 
 #ifdef CHATRA_DEBUG_LOCK
-	assert(refs[static_cast<size_t>(LockType::Hard)].count(ref) == 0);
-	assert(refs[static_cast<size_t>(LockType::Soft)].count(ref) + 
+	chatra_assert(refs[static_cast<size_t>(LockType::Hard)].count(ref) == 0);
+	chatra_assert(refs[static_cast<size_t>(LockType::Soft)].count(ref) +
 			refs[static_cast<size_t>(LockType::Temporary)].count(ref) == 1);
 #endif
 
@@ -402,7 +402,7 @@ void Lock::moveFromSoftToTemporary(Reference ref) {
 }
 
 void Lock::release(Reference ref, LockType lockType) {
-	assert(lockType != LockType::Temporary || !methodCall);
+	chatra_assert(lockType != LockType::Temporary || !methodCall);
 	CHATRA_DEBUG_LOCK_AUDIT;
 	CHATRA_DEBUG_LOCK_LOG1("release", ref, lockType);
 	if (refs[static_cast<size_t>(lockType)].erase(ref) == 0)
@@ -411,7 +411,7 @@ void Lock::release(Reference ref, LockType lockType) {
 }
 
 void Lock::releaseIfExists(Reference ref, LockType lockType) {
-	assert(!methodCall);
+	chatra_assert(!methodCall);
 	CHATRA_DEBUG_LOCK_AUDIT;
 	if (refs[static_cast<size_t>(lockType)].erase(ref) != 0) {
 		CHATRA_DEBUG_LOCK_LOG1("releaseIfExists_exists", ref, lockType);
@@ -431,7 +431,7 @@ void Lock::releaseAll() {
 	for (auto& e : refs) {
 		for (auto& ref : e) {
 #ifdef CHATRA_DEBUG_LOCK
-			assert(ref.lockedBy() == thread->getId());
+			chatra_assert(ref.lockedBy() == thread->getId());
 #endif
 			ref.unlock();
 		}
@@ -445,7 +445,7 @@ void Lock::releaseAll() {
 }
 
 void Lock::releaseIfExists(Reference ref) {
-	assert(!methodCall);
+	chatra_assert(!methodCall);
 	CHATRA_DEBUG_LOCK_AUDIT;
 	CHATRA_DEBUG_LOCK_LOG0("releaseIfExists");
 
@@ -453,16 +453,16 @@ void Lock::releaseIfExists(Reference ref) {
 	auto requester = ref.lockedBy();
 	if (requester == InvalidRequester) {
 		for (auto& e : refs)
-			assert(e.count(ref) == 0);
+			chatra_assert(e.count(ref) == 0);
 		return;
 	}
-	assert(ref.lockedBy() == thread->getId());
+	chatra_assert(ref.lockedBy() == thread->getId());
 	if (methodCall && refs[static_cast<size_t>(LockType::Temporary)].count(ref) != 0)
 		return;
 	size_t count = 0;
 	for (auto& e : refs)
 		count += e.erase(ref);
-	assert(count <= 1);
+	chatra_assert(count <= 1);
 	if (count != 0)
 		ref.unlock();
 #else
@@ -473,7 +473,7 @@ void Lock::releaseIfExists(Reference ref) {
 }
 
 void Lock::moveTemporaryToSoftLock() {
-	assert(!methodCall);
+	chatra_assert(!methodCall);
 	CHATRA_DEBUG_LOCK_AUDIT;
 	CHATRA_DEBUG_LOCK_LOG0("moveTemporaryToSoftLock");
 
@@ -483,7 +483,7 @@ void Lock::moveTemporaryToSoftLock() {
 }
 
 void Lock::prepareToMethodCall() {
-	assert(!methodCall);
+	chatra_assert(!methodCall);
 	CHATRA_DEBUG_LOCK_AUDIT;
 	CHATRA_DEBUG_LOCK_LOG0("prepareToMethodCall");
 
@@ -499,7 +499,7 @@ void Lock::prepareToMethodCall() {
 		ref.unlock();
 
 #ifdef CHATRA_DEBUG_LOCK
-	assert(suspendedRefs.empty());
+	chatra_assert(suspendedRefs.empty());
 	suspendedRefs.insert(temp.cbegin(), temp.cend());
 #endif
 }
@@ -514,10 +514,10 @@ std::vector<Reference> Lock::getTemporary() const {
 }
 
 void Lock::temporaryLockRestored() {
-	assert(methodCall);
+	chatra_assert(methodCall);
 
 #ifdef CHATRA_DEBUG_LOCK
-	assert(suspendedRefs.empty());
+	chatra_assert(suspendedRefs.empty());
 #endif
 
 	methodCall = false;
@@ -571,13 +571,13 @@ void Frame::pushEmptyTuple() {
 }
 
 void Frame::pop() {
-	assert(!values.empty());
+	chatra_assert(!values.empty());
 	thread.recycleTemporary(values.back());
 	values.pop_back();
 }
 
 void Frame::pop(size_t first, size_t last) {
-	assert(first <= last && last <= values.size());
+	chatra_assert(first <= last && last <= values.size());
 	thread.recycleTemporary(values.cbegin() + first, values.cbegin() + last);
 	values.erase(values.cbegin() + first, values.cbegin() + last);
 }
@@ -617,12 +617,12 @@ void Frame::clearAllTemporaries() {
 	temporaryTuples.clear();
 }
 
-Reference Frame::getSelf() {
-	assert(scope->getScopeType() == ScopeType::Class);
+Reference Frame::getSelf() const {
+	chatra_assert(scope->getScopeType() == ScopeType::Class);
 	return scope->ref(StringId::Self);
 }
 
-Node* Frame::getExceptionNode() {
+Node* Frame::getExceptionNode() const {
 	for (auto it = stack.crbegin(); it != stack.crend(); it++) {
 		auto* stackNode = it->first;
 		if (!stackNode->tokens.empty())

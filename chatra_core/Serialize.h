@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ class Instance;
 class Package;
 class RuntimeImp;
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 
 #define CHATRA_SAVE_TYPE_TAG(tag)  (void)0
 #define CHATRA_RESTORE_TYPE_TAG(tag)  (void)0
@@ -47,7 +47,7 @@ class RuntimeImp;
 #define CHATRA_READ_UNIQUE(className)  readUnique<className>()
 #define CHATRA_READ_RAW(className)  readRaw<className>()
 
-#else  // NDEBUG
+#else  // CHATRA_NDEBUG
 
 enum class TypeTag : unsigned {
 	Node = 0, Class = 1, Method = 2, MethodTable = 3, Reference = 4,
@@ -71,19 +71,19 @@ enum class PointerType : unsigned {
 #define CHATRA_READ_UNIQUE(className)  readUnique<className>(PointerType::className)
 #define CHATRA_READ_RAW(className)  readRaw<className>(PointerType::className)
 
-#endif  // NDEBUG
+#endif  // CHATRA_NDEBUG
 
 
-class Writer {
+class Writer final {
 private:
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	RuntimeImp& runtime;
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 
 	std::vector<uint8_t>* buffer;
 	std::unordered_map<std::string, std::vector<uint8_t>> chunks;
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	std::unordered_map<const void*, size_t> pointerMap;
 #else
 	std::unordered_map<const void*, std::tuple<size_t, PointerType>> pointerMap;
@@ -115,19 +115,19 @@ private:
 		return *this;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void saveTypeTag(TypeTag tag);
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 
 public:
 	explicit Writer(RuntimeImp& runtime) noexcept
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 			: runtime(runtime)
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 	{
 		(void)runtime;
 		buffer = &chunks[""];
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 		pointerMap.emplace(nullptr, 0);
 #else
 		pointerMap.emplace(nullptr, std::make_tuple(0, static_cast<PointerType>(0)));
@@ -201,29 +201,29 @@ public:
 		return *this;
 	}
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	template <class Type>
 	Writer& outPointer(const Type* value) {
 		CHATRA_SAVE_TYPE_TAG(Pointer);
-		assert(pointerMap.count(value) != 0);
+		chatra_assert(pointerMap.count(value) != 0);
 		return out(pointerMap.at(value));
 	}
-#else  // NDEBUG
+#else  // CHATRA_NDEBUG
 	template <class Type>
 	Writer& outPointer(const Type* value, PointerType type) {
 		CHATRA_SAVE_TYPE_TAG(Pointer);
-		assert(pointerMap.count(value) != 0);
+		chatra_assert(pointerMap.count(value) != 0);
 		if (value == nullptr) {
 			out(static_cast<size_t>(0));
 			return *this;
 		}
 		auto& e = pointerMap.at(value);
-		assert(std::get<1>(e) == type);
+		chatra_assert(std::get<1>(e) == type);
 		out(std::get<0>(e));
 		out(std::get<1>(e));
 		return *this;
 	}
-#endif  // NDEBUG
+#endif  // CHATRA_NDEBUG
 
 	template <class Type, CHATRA_TYPE_EXISTS(typename Type::hasSerializeMethods)>
 	Writer& out(const Type& value) {
@@ -309,44 +309,44 @@ public:
 	}
 
 	template <class Container, typename Predicate, typename ElementWriter,
-			CHATRA_WHEN(std::is_base_of<IdPool<typename Container::_KeyType, typename Container::_ValueType>, Container>::value)>
+			CHATRA_WHEN(std::is_base_of<IdPool<typename Container::KeyType_s, typename Container::ValueType_s>, Container>::value)>
 	void out(const Container& pool, Predicate predicate, ElementWriter elementWriter) {
 		CHATRA_SAVE_TYPE_TAG(List);
 		size_t length = 0;
-		pool.forEach([&](typename Container::_ValueType& value) {
+		pool.forEach([&](typename Container::ValueType_s& value) {
 			if (predicate(value))
 				length++;
 		});
 		out(length);
-		pool.forEach([&](typename Container::_ValueType& value) {
+		pool.forEach([&](typename Container::ValueType_s& value) {
 			if (predicate(value))
 				elementWriter(value);
 		});
 	}
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	template <class Type>
 	Writer& registerPointer(const Type* value) {
 		pointerMap.emplace(value, pointerMap.size());
 		return *this;
 	}
-#else  // NDEBUG
+#else  // CHATRA_NDEBUG
 	template <class Type>
 	Writer& registerPointer(const Type* value, PointerType type) {
 		pointerMap.emplace(value, std::make_tuple(pointerMap.size(), type));
 		return *this;
 	}
-#endif  // NDEBUG
+#endif  // CHATRA_NDEBUG
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	RuntimeImp& getRuntime() const {
 		return runtime;
 	}
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 };
 
 
-class Reader {
+class Reader final {
 private:
 	enum PointerMode {
 		Raw, Unique, UniqueExported
@@ -355,9 +355,9 @@ private:
 	struct PointerInfo {
 		PointerMode mode;
 		void* raw;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 		PointerType type;
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 	};
 
 	RuntimeImp& runtime;
@@ -377,7 +377,7 @@ private:
 private:
 	void checkSpace(size_t size = 1);
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	PointerInfo& readPointerInfo();
 #else
 	PointerInfo& readPointerInfo(PointerType type);
@@ -403,9 +403,9 @@ private:
 		throw IllegalArgumentException();
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void restoreTypeTag(TypeTag tag);
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 
 	template <class KeyType, class ValueType>
 	ValueType* readIdType(Reader& r, IdPool<KeyType, ValueType>& pool) {
@@ -425,7 +425,9 @@ private:
 public:
 	explicit Reader(RuntimeImp& runtime) noexcept;
 
+#ifndef CHATRA_NDEBUG
 	~Reader();
+#endif
 
 	void parse(unsigned expectedVersion, const std::vector<uint8_t>& bytes);
 
@@ -588,28 +590,28 @@ public:
 		});
 	}
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	template <class Type>
 	void registerPointer(Type* ptr) {
-		assert(ptr != nullptr);
+		chatra_assert(ptr != nullptr);
 		pointerList.emplace_back();
 		auto& p = pointerList.back();
 		p.mode = PointerMode::Raw;
 		p.raw = ptr;
 	}
-#else  // NDEBUG
+#else  // CHATRA_NDEBUG
 	template <class Type>
 	void registerPointer(Type* ptr, PointerType type) {
-		assert(ptr != nullptr);
+		chatra_assert(ptr != nullptr);
 		pointerList.emplace_back();
 		auto& p = pointerList.back();
 		p.mode = PointerMode::Raw;
 		p.raw = ptr;
 		p.type = type;
 	}
-#endif // NDEBUG
+#endif // CHATRA_NDEBUG
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	template <class Type>
 	void registerPointer(std::unique_ptr<Type>&& ptr) {
 		pointerList.emplace_back();
@@ -617,7 +619,7 @@ public:
 		p.mode = PointerMode::Unique;
 		p.raw = ptr.release();
 	}
-#else // NDEBUG
+#else // CHATRA_NDEBUG
 	template <class Type>
 	void registerPointer(std::unique_ptr<Type>&& ptr, PointerType type) {
 		pointerList.emplace_back();
@@ -626,41 +628,41 @@ public:
 		p.raw = ptr.release();
 		p.type = type;
 	}
-#endif // NDEBUG
+#endif // CHATRA_NDEBUG
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	template <class Type>
 	std::unique_ptr<Type> readUnique() {
 		auto& p = readPointerInfo();
-		assert(p.raw == nullptr || p.mode == PointerMode::Unique);
+		chatra_assert(p.raw == nullptr || p.mode == PointerMode::Unique);
 		if (p.raw == nullptr)
 			return nullptr;
 		p.mode = PointerMode::UniqueExported;
 		return std::unique_ptr<Type>(static_cast<Type*>(p.raw));
 	}
-#else  // NDEBUG
+#else  // CHATRA_NDEBUG
 	template <class Type>
 	std::unique_ptr<Type> readUnique(PointerType type) {
 		auto& p = readPointerInfo(type);
-		assert(p.raw == nullptr || p.mode == PointerMode::Unique);
+		chatra_assert(p.raw == nullptr || p.mode == PointerMode::Unique);
 		if (p.raw == nullptr)
 			return nullptr;
 		p.mode = PointerMode::UniqueExported;
 		return std::unique_ptr<Type>(static_cast<Type*>(p.raw));
 	}
-#endif // NDEBUG
+#endif // CHATRA_NDEBUG
 
-#ifdef NDEBUG
+#ifdef CHATRA_NDEBUG
 	template <class Type>
 	Type* readRaw() {
 		return static_cast<Type*>(readPointerInfo().raw);
 	}
-#else  // NDEBUG
+#else  // CHATRA_NDEBUG
 	template <class Type>
 	Type* readRaw(PointerType type) {
 		return static_cast<Type*>(readPointerInfo(type).raw);
 	}
-#endif // NDEBUG
+#endif // CHATRA_NDEBUG
 };
 
 

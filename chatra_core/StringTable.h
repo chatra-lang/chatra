@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#ifndef CHATRA_STRINGTABLE_H
-#define CHATRA_STRINGTABLE_H
+#ifndef CHATRA_STRING_TABLE_H
+#define CHATRA_STRING_TABLE_H
 
 #include "Internal.h"
 #include "Serialize.h"
@@ -300,11 +300,11 @@ public:
 	}
 
 	std::string ref(StringId id) const {
-		#ifndef NDEBUG
+		#ifndef CHATRA_NDEBUG
 			if (id == StringId::Invalid)
 				return "#invalid";
-		#endif  // !NDEBUG
-		assert(static_cast<size_t>(id) < idToStr.size());
+		#endif  // !CHATRA_NDEBUG
+		chatra_assert(static_cast<size_t>(id) < idToStr.size());
 		return idToStr[static_cast<size_t>(id)];
 	}
 
@@ -324,11 +324,11 @@ public:
 
 	friend StringId add(std::shared_ptr<StringTable>& sTable, std::string str);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	size_t validIdCount() const {
 		return idToStr.size();
 	}
-#endif  // !NDEBUG
+#endif  // !CHATRA_NDEBUG
 };
 
 StringId add(std::shared_ptr<StringTable>& sTable, std::string str);
@@ -337,4 +337,4 @@ StringId add(std::shared_ptr<StringTable>& sTable, std::string str);
 
 CHATRA_ENUM_HASH(chatra::StringId)
 
-#endif //CHATRA_STRINGTABLE_H
+#endif //CHATRA_STRING_TABLE_H

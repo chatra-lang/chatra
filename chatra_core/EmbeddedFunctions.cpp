@@ -59,13 +59,13 @@ def operator(a0: String + a1)
 def operator(a0: Array + a1)
 	return a0.clone().append(a1)
 )***"
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 R"***(
 def _check(a0: String, a1: Bool) as native
 def _checkCmd(a0: String) as native
 def _incrementTestTimer(a0: Int) as native
 )***"
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 ;
 
 void initializeEmbeddedFunctions() {
@@ -118,7 +118,7 @@ void initializeEmbeddedFunctions() {
 		throw InternalError();
 
 	if (sTable->getVersion() != 0) {
-		#ifndef NDEBUG
+		#ifndef CHATRA_NDEBUG
 			printf("Additional strings:");
 			for (auto i = static_cast<size_t>(StringId::PredefinedStringIds); i < sTable->validIdCount(); i++)
 				printf(" %s", sTable->ref(static_cast<StringId>(i)).c_str());
@@ -164,7 +164,7 @@ void native_log(CHATRA_NATIVE_ARGS) {
 
 void native_dump(CHATRA_NATIVE_ARGS) {
 	CHATRA_NATIVE_ARGS_CAPTURE;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	if (args.size() == 0) {
 		thread.runtime.dump();
 		return;
@@ -190,7 +190,7 @@ void native_dump(CHATRA_NATIVE_ARGS) {
 		std::lock_guard<SpinLock> lock(thread.runtime.lockSTable);
 		args.ref(0).deref<ObjectBase>().dump(thread.runtime.distributedSTable);
 	}
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 }
 
 void native_gc(CHATRA_NATIVE_ARGS) {
@@ -312,11 +312,11 @@ void native_objectId(CHATRA_NATIVE_ARGS) {
 	}
 
 	auto id = ref.deref().getObjectIndex();
-	assert(id != SIZE_MAX);
+	chatra_assert(id != SIZE_MAX);
 	ret.setInt(static_cast<int64_t>(id));
 }
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 static bool stdoutEnabled = true;
 static std::string testMode;
 static bool checkFinished = false;
@@ -365,11 +365,11 @@ void waitUntilFinished() {
 #endif
 }
 
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 void native_check(CHATRA_NATIVE_ARGS) {
 	CHATRA_NATIVE_ARGS_CAPTURE;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	ret.setBool(false);
 
 	if (getReferClass(args.ref(0)) != String::getClassStatic()) {
@@ -400,12 +400,12 @@ void native_check(CHATRA_NATIVE_ARGS) {
 		std::fflush(stderr);
 		checkFailedCount++;
 	}
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 }
 
 void native_checkCmd(CHATRA_NATIVE_ARGS) {
 	CHATRA_NATIVE_ARGS_CAPTURE;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	if (getReferClass(args.ref(0)) != String::getClassStatic()) {
 		std::fprintf(stderr, "failed: argument 0 of _check() is not String\n");
 		std::fflush(stderr);
@@ -420,7 +420,7 @@ void native_checkCmd(CHATRA_NATIVE_ARGS) {
 		return;
 	}
 	if (verb == "abort") {
-		assert(false);
+		chatra_assert(false);
 		return;
 	}
 	if (verb == "testMode") {
@@ -428,15 +428,15 @@ void native_checkCmd(CHATRA_NATIVE_ARGS) {
 		return;
 	}
 	throw InternalError();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 }
 
 void native_incrementTestTimer(CHATRA_NATIVE_ARGS) {
 	CHATRA_NATIVE_ARGS_CAPTURE;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	auto timerId = thread.runtime.addTimer("test");
 	thread.runtime.increment(timerId, args.ref(0).getInt());
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 }
 
 }  // namespace chatra

@@ -32,7 +32,7 @@
 #include "Timer.h"
 #include "Serialize.h"
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	// #define CHATRA_DEBUG_LOCK
 	// #define CHATRA_TRACE_TEMPORARY_ALLOCATION
 #endif
@@ -84,7 +84,7 @@ constexpr InstanceId finalizerInstanceId = static_cast<InstanceId>(1);
 constexpr Requester finalizerThreadId = static_cast<Requester>(1);
 
 
-class TemporaryObject : public Object {
+class TemporaryObject final : public Object {
 public:
 	enum class Type : unsigned {
 		// Nothing is pointed (implicitly point to top level of frames).
@@ -251,39 +251,39 @@ public:
 	bool hasSource() const;
 
 	Reference getSourceRef() const {
-		assert(hasSource());
+		chatra_assert(hasSource());
 		return ref(StringId::SourceObject);
 	}
 
 	bool hasRef() const;
 
 	Reference getRef() const {
-		assert(hasRef());
+		chatra_assert(hasRef());
 		return targetRef;
 	}
 
 	size_t getPrimaryIndex() const {
-		assert(type == Type::ObjectRef);
+		chatra_assert(type == Type::ObjectRef);
 		return primaryIndex;
 	}
 
 	// Get frameIndex. SIZE_MAX for methods, !SIZE_MAX for inner methods
 	size_t getFrameIndex() const {
-		assert(type == Type::FrameMethod);
+		chatra_assert(type == Type::FrameMethod);
 		return frameIndex;
 	}
 
 	bool hasPackage() const;
 
 	Package* getPackage() const {
-		assert(hasPackage());
+		chatra_assert(hasPackage());
 		return package;
 	}
 
 	bool hasClass() const;
 
 	const Class* getClass() const {
-		assert(hasClass());
+		chatra_assert(hasClass());
 		return cl;
 	}
 
@@ -297,13 +297,13 @@ public:
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS_WITH_THREAD(TemporaryObject);
 	CHATRA_DECLARE_SERIALIZE_OBJECT_REFS_METHODS;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-class TemporaryTuple : public ObjectBase, public PreDefined<TemporaryTuple, StringId::TemporaryTuple> {
+class TemporaryTuple final : public ObjectBase, public PreDefined<TemporaryTuple, StringId::TemporaryTuple> {
 private:
 	Thread& thread;
 	size_t frameIndex = SIZE_MAX;
@@ -334,7 +334,7 @@ public:
 };
 
 
-class TupleAssignmentMap : public ObjectBase, public PreDefined<TupleAssignmentMap, StringId::TupleAssignmentMap> {
+class TupleAssignmentMap final : public ObjectBase, public PreDefined<TupleAssignmentMap, StringId::TupleAssignmentMap> {
 public:
 	struct Element {
 		size_t destIndex = 0;
@@ -360,7 +360,7 @@ public:
 };
 
 
-class FunctionObject : public ObjectBase, public PreDefined<FunctionObject, StringId::FunctionObject> {
+class FunctionObject final : public ObjectBase, public PreDefined<FunctionObject, StringId::FunctionObject> {
 public:
 	Package* package;
 	std::vector<std::tuple<ScopeType, Node*, const Class*>> scopes;  // Class, Method or Block; reverse order
@@ -378,7 +378,7 @@ public:
 };
 
 
-class WaitContext : public Object {
+class WaitContext final : public Object {
 	friend bool WaitContextEventWatcher(void* tag);
 
 private:
@@ -417,7 +417,7 @@ bool WaitContextEventWatcher(void* tag);
 EventObject* derefAsEventObject(Reference ref);
 
 
-class NativeEventObjectImp : public NativeEventObject {
+class NativeEventObjectImp final : public NativeEventObject {
 private:
 	RuntimeImp& runtime;
 	unsigned waitingId;
@@ -438,7 +438,7 @@ enum class LockType {
 
 constexpr size_t lockTypes = 3;
 
-class Lock {
+class Lock final {
 private:
 	std::unordered_set<Reference> refs[lockTypes];
 	bool methodCall = false;
@@ -462,8 +462,11 @@ public:
 #endif
 
 public:
-	Lock() noexcept {}
+	Lock() noexcept = default;
+
+#ifdef CHATRA_DEBUG_LOCK
 	~Lock();
+#endif // CHATRA_DEBUG_LOCK
 
 	bool has(Reference ref, LockType lockType) const;
 	void add(Reference ref, LockType lockType);
@@ -482,7 +485,7 @@ public:
 };
 
 
-class Frame {
+class Frame final {
 public:
 	Thread& thread;
 	Package& package;
@@ -532,9 +535,9 @@ public:
 
 	void clearAllTemporaries();
 
-	Reference getSelf();
+	Reference getSelf() const;
 
-	Node* getExceptionNode();
+	Node* getExceptionNode() const;
 
 public:
 	Frame(Thread& thread, Package& package, size_t parentIndex,
@@ -581,7 +584,7 @@ namespace Phase {
 }
 
 
-class TransferRequest {
+class TransferRequest final {
 public:
 	Requester requester;
 	Reference ref;
@@ -597,7 +600,7 @@ public:
 
 
 template <class Type>
-class ObjectPool {
+class ObjectPool final {
 private:
 	Thread& thread;
 	std::vector<Type*> recycled;
@@ -634,7 +637,7 @@ public:
 };
 
 
-class Thread : public IdType<Requester, Thread>, public IErrorReceiver {
+class Thread final : public IdType<Requester, Thread>, public IErrorReceiver {
 	friend class Frame;
 
 public:
@@ -712,7 +715,7 @@ private:
 	void consumeException();
 	void checkIsValidNode(Node* node);
 
-	void sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder);
+	void sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder) const;
 	bool lockReference(Reference ref, LockType lockType);
 	bool lockReference(TemporaryObject* value);
 	void checkTransferReq();
@@ -787,7 +790,7 @@ private:
 	EvaluateValueResult evaluateTuple();
 	EvaluateValueResult evaluateAndAllocateForAssignment(Node* node, TemporaryObject* value);
 
-	std::string getClassName(const Class* cl);
+	std::string getClassName(const Class* cl) const;
 
 	template <typename PrBool, typename PrInt, typename PrFloat>
 	bool standardUnaryOperator(PrBool prBool, PrInt prInt, PrFloat prFloat);
@@ -869,14 +872,14 @@ public:
 	void run();
 
 	Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept;
-	TemporaryObject* restoreTemporary(Reader& r);
-	TemporaryTuple* restoreTemporaryTuple(Reader& r);
+	TemporaryObject* restoreTemporary(Reader& r) const;
+	TemporaryTuple* restoreTemporaryTuple(Reader& r) const;
 	CHATRA_DECLARE_SERIALIZE_METHODS_WITHOUT_CONSTRUCTOR(Thread);
 	void postInitialize(Reader& r);
 };
 
 
-class Instance : public IdType<InstanceId, Instance> {
+class Instance final : public IdType<InstanceId, Instance> {
 public:
 	PackageId primaryPackageId;
 	SpinLock lockThreads;
@@ -888,7 +891,7 @@ public:
 };
 
 
-class PackageObject : public ObjectBase {
+class PackageObject final : public ObjectBase {
 public:
 	PackageObject(Storage& storage, const Class* cl) noexcept
 			: ObjectBase(storage, typeId_PackageObject, cl) {}
@@ -899,7 +902,7 @@ public:
 };
 
 
-class Package : public PackageInfo, public IdType<PackageId, Package>, public IClassFinder, public PackageContext {
+class Package final : public PackageInfo, public IdType<PackageId, Package>, public IClassFinder, public PackageContext {
 public:
 	RuntimeImp& runtime;
 	std::atomic<bool> initialized = {false};
@@ -934,16 +937,16 @@ public:
 	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
 
 	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
-			bool warnIfDuplicates = true);
+			bool warnIfDuplicates = true) const;
 	Package& import(Node* node, PackageId targetPackageId);
 	void build(IErrorReceiver& errorReceiver, const StringTable* sTable);
-	void allocatePackageObject();
+	void allocatePackageObject() const;
 
 	const Class* findClass(StringId name) override;
 	const Class* findPackageClass(StringId packageName, StringId name) override;
 
 	Package* findPackage(StringId name);
-	const std::vector<Package*>& refAnonymousImports();
+	const std::vector<Package*>& refAnonymousImports() const;
 
 	void pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, ScopeType type, size_t popCount = 1);
 
@@ -957,13 +960,13 @@ public:
 	void restoreScripts(Reader& r);
 	CHATRA_DECLARE_SERIALIZE_METHODS_WITHOUT_CONSTRUCTOR(Package);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable);
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-class RuntimeImp : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration {
+class RuntimeImp final : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration {
 public:
 	RuntimeId runtimeId;
 	std::shared_ptr<IHost> host;
@@ -1046,13 +1049,13 @@ private:
 
 	void saveEntityFrames(Writer& w);
 	void saveEntityMap(Writer& w);
-	void saveStorage(Writer& w);
-	void saveState(Writer& w);
+	void saveStorage(Writer& w) const;
+	void saveState(Writer& w) const;
 
 	void restoreEntityFrames(Reader& r);
 	void restoreEntityMap(Reader& r);
 	void restoreEntities(Reader& r, PackageId packageId, Node* node);
-	void restoreStorage(Reader& r);
+	void restoreStorage(Reader& r) const;
 	void restoreState(Reader& r);
 
 	void reactivateFinalizerThread();
@@ -1085,7 +1088,7 @@ public:
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args) override;
 
-	void outputError(const std::string& message);
+	void outputError(const std::string& message) const;
 
 public:
 	explicit RuntimeImp(std::shared_ptr<IHost> host) noexcept;
@@ -1099,6 +1102,7 @@ public:
 	const MethodTable* restoreMethodTable(PackageId packageId, Node* node);
 	const MethodTable* refMethodTable() { return &methods; }
 
+	std::vector<uint8_t> doShutdown(bool save);
 	~RuntimeImp() override;
 
 	std::vector<uint8_t> shutdown(bool save) override;
@@ -1114,10 +1118,10 @@ public:
 	TimerId addTimer(const std::string& name) override;
 	void increment(TimerId timerId, int64_t step) override;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	size_t objectCount() { return storage->objectCount(); }
 	void dump();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 void initializeEmbeddedFunctions();  // should be called after initializeEmbeddedClasses()
@@ -1134,14 +1138,14 @@ void native_sleep(CHATRA_NATIVE_ARGS);
 void native_type(CHATRA_NATIVE_ARGS);
 void native_objectId(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void enableStdout(bool enabled);
 void setTestMode(const std::string& testMode);
 void beginCheckScript();
 void endCheckScript();
 bool showResults();
 void waitUntilFinished();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 void native_check(CHATRA_NATIVE_ARGS);
 void native_checkCmd(CHATRA_NATIVE_ARGS);
@@ -1177,8 +1181,8 @@ Type* ObjectPool<Type>::allocate(Allocator allocator) {
 
 template <class Type>
 void ObjectPool<Type>::recycle(Type* value) {
-	assert(std::find(allocated.cbegin(), allocated.cend(), value) != allocated.cend());
-	assert(std::find(recycled.cbegin(), recycled.cend(), value) == recycled.cend());
+	chatra_assert(std::find(allocated.cbegin(), allocated.cend(), value) != allocated.cend());
+	chatra_assert(std::find(recycled.cbegin(), recycled.cend(), value) == recycled.cend());
 	value->clear();
 	recycled.emplace_back(value);
 }
@@ -1187,8 +1191,8 @@ template <class Type>
 template <class InputIterator>
 void ObjectPool<Type>::recycle(InputIterator first, InputIterator last) {
 	for (auto it = first; it != last; it++) {
-		assert(std::find(allocated.cbegin(), allocated.cend(), *it) != allocated.cend());
-		assert(std::find(recycled.cbegin(), recycled.cend(), *it) == recycled.cend());
+		chatra_assert(std::find(allocated.cbegin(), allocated.cend(), *it) != allocated.cend());
+		chatra_assert(std::find(recycled.cbegin(), recycled.cend(), *it) == recycled.cend());
 	}
 	std::for_each(first, last, [](Type* value) { value->clear(); });
 	recycled.insert(recycled.end(), first, last);
@@ -1244,7 +1248,7 @@ ObjectPool<Type>::~ObjectPool() {
 			value->dump(thread.runtime.primarySTable);
 		}
 	}
-	assert(leaked == 0);
+	chatra_assert(leaked == 0);
 }
 
 #else // CHATRA_TRACE_TEMPORARY_ALLOCATION

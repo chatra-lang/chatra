@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ void NativeException::setMessage(const char *format, va_list args) {
 	if (length < 0)
 		message = "(error)";
 	else {
-		std::vector<char> buffer(length + 1);
+		std::vector<char> buffer(static_cast<size_t>(length) + 1);
 		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
 		message = std::string(buffer.data());
 	}
@@ -73,7 +73,7 @@ void NativeEventObjectImp::unlock() {
 }
 
 
-class NativeCallContextImp : public NativeCallContext {
+class NativeCallContextImp final : public NativeCallContext {
 	friend class NativeReferenceImp;
 
 private:
@@ -89,14 +89,14 @@ public:
 	NativeCallContextImp(Thread& thread, ObjectBase* object, std::string name, std::string subName, Tuple& args, Reference ret)
 			: thread(thread), object(static_cast<UserObjectBase*>(object)),
 			_name(std::move(name)), _subName(std::move(subName)), args(args), ret(std::move(ret)) {
-		assert(object == nullptr || object->getTypeId() == typeId_UserObjectBase);
+		chatra_assert(object == nullptr || object->getTypeId() == typeId_UserObjectBase);
 	}
 
 	RuntimeId runtimeId() const override {
 		return thread.runtime.runtimeId;
 	}
 
-	InstanceId intanceId() const override {
+	InstanceId instanceId() const override {
 		return thread.instance.getId();
 	}
 
@@ -166,15 +166,16 @@ public:
 };
 
 
-class NativeReferenceImp : public NativeReference {
+class NativeReferenceImp final : public NativeReference {
 private:
 	const NativeCallContextImp& ct;
 	Reference ref;
 	bool topLevel;
 
 public:
-	NativeReferenceImp(const NativeCallContextImp& ct, Reference ref, bool topLevel) : ct(ct), ref(ref), topLevel(topLevel) {
-		assert(!ref.requiresLock() || ref.lockedBy() == ct.thread.getId());
+	NativeReferenceImp(const NativeCallContextImp& ct, Reference ref, bool topLevel)
+			: ct(ct), ref(std::move(ref)), topLevel(topLevel) {
+		chatra_assert(!ref.requiresLock() || ref.lockedBy() == ct.thread.getId());
 	}
 
 	bool isNull() const override {
@@ -360,7 +361,7 @@ NativeReference& NativeCallContextImp::at(size_t position) const {
 }
 
 void nativeCall(CHATRA_NATIVE_ARGS) {
-	assert(handler != nullptr);
+	chatra_assert(handler != nullptr);
 
 	NativeCallContextImp ct(thread, object,
 			name == StringId::Invalid ? "" : thread.sTable->ref(name),

@@ -43,8 +43,15 @@ enum class TimerId : size_t {};
 
 struct NativeException : public std::exception {
 	std::string message;
+
+public:
 	NativeException() = default;
 	explicit NativeException(const char* format, ...);
+
+	const char* what() const noexcept override {
+		return message.data();
+	}
+
 protected:
 	void setMessage(const char* format, va_list args);
 };
@@ -202,7 +209,7 @@ struct NativeCallContext {
 
 	virtual RuntimeId runtimeId() const = 0;
 
-	virtual InstanceId intanceId() const = 0;
+	virtual InstanceId instanceId() const = 0;
 
 	virtual bool hasSelf() const = 0;
 	virtual INativePtr* selfPtr() const = 0;
@@ -414,11 +421,11 @@ public:
 	virtual InstanceId run(PackageId packageId) = 0;
 
 	/// Check whether at least one thread remains or not
-	/// @throws IllgalArgumentException  instance is not found
+	/// @throws IllegalArgumentException  instance is not found
 	virtual bool isRunning(InstanceId instanceId) = 0;
 
 	/// Stop specified instance.
-	/// @throws IllgalArgumentException  instance is not found
+	/// @throws IllegalArgumentException  instance is not found
 	/// @throws NotSupportedOperationException specified instance has active threads (= isRunning() returns true)
 	virtual void stop(InstanceId instanceId) = 0;
 

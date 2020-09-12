@@ -52,9 +52,15 @@
 
 #include <cmath>
 
-#ifndef NDEBUG
-#include <cstdio>
-#endif // !NDEBUG
+#ifdef CHATRA_NDEBUG
+	#define chatra_assert(e)  ((void)0)
+#else
+	#define chatra_assert(e)  assert(e)
+#endif
+
+#ifndef CHATRA_NDEBUG
+	#include <cstdio>
+#endif // !CHATRA_NDEBUG
 
 #if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
 	#define CHATRA_MAYBE_GCC   __GNUC__
@@ -106,7 +112,7 @@ struct IErrorReceiver {
 			const std::string& message, const std::vector<std::string>& args) = 0;
 };
 
-class IErrorReceiverBridge : public IErrorReceiver {
+class IErrorReceiverBridge final : public IErrorReceiver {
 private:
 	IErrorReceiver& target;
 	unsigned errorCount = 0;
@@ -142,12 +148,12 @@ struct IAssertionNullErrorReceiver final : public IErrorReceiver {
 			const std::string& message, const std::vector<std::string>& args) override {
 		(void)level;  (void)fileName;  (void)lineNo;  (void)line;  (void)first;  (void)last;
 		(void)message;  (void)args;
-		assert(false);
+		chatra_assert(false);
 	}
 };
 
 
-class SpinLock {
+class SpinLock final {
 private:
 	std::atomic_flag flag = ATOMIC_FLAG_INIT;
 
@@ -203,6 +209,8 @@ public:
 	}
 
 	AsyncRead& operator=(const AsyncRead<ValueType>& r) {
+		if (&r == this)
+			return *this;
 		r.read([&](const ValueType& rValue) {
 			write([&](ValueType& lValue) {
 				lValue = rValue;
@@ -221,7 +229,7 @@ private:
 public:
 	template <typename Process>
 	void writeAsync(Process process) {
-		std::lock_guard<SpinLock> lock(this->lock);
+		std::lock_guard<SpinLock> lock0(lock);
 		AsyncRead<ValueType>::write(std::move(process));
 	}
 
@@ -291,8 +299,8 @@ class IdPool {
 	using KeyBaseType = typename key_base_type<KeyType>::type;
 
 public:
-	using _KeyType = KeyType;
-	using _ValueType = ValueType;
+	using KeyType_s = KeyType;
+	using ValueType_s = ValueType;
 
 private:
 	mutable SpinLock lockValues;
@@ -413,12 +421,12 @@ inline bool endsWith(std::string::const_iterator first, std::string::const_itera
 }
 
 inline size_t byteCount(const std::string& str, size_t index) {
-	auto c = static_cast<unsigned>(str[index]);
+	auto c = static_cast<unsigned char>(str[index]);
 	size_t length = ((c & 0x80U) == 0U ? 1 : (c & 0xE0U) == 0xC0U ? 2 : (c & 0xF0U) == 0xE0U ? 3 :
 			(c & 0xF8U) == 0xF0U ? 4 : 0);
 	if (index + length > str.size())
 		return 0;
-	for (size_t i = 1; i < length; i++)  if ((static_cast<unsigned>(str[index + i]) & 0xC0U) != 0x80U)
+	for (size_t i = 1; i < length; i++)  if ((static_cast<unsigned char>(str[index + i]) & 0xC0U) != 0x80U)
 			return 0;
 	return length;
 }

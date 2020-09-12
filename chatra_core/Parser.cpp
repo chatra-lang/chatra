@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@
 
 namespace chatra {
 
-class ParserContext {
+class ParserContext final {
 private:
 	ParserWorkingSet* ws;
 	IErrorReceiver& errorReceiver;
@@ -43,7 +43,7 @@ public:
 	}
 
 	ParserWorkingSet& getWs() {
-		assert(ws != nullptr);
+		chatra_assert(ws != nullptr);
 		return *ws;
 	}
 
@@ -197,7 +197,7 @@ std::shared_ptr<Node> groupScript(IErrorReceiver& errorReceiver,
 	return stack[0];
 }
 
-struct LineAttributes {
+struct LineAttributes final {
 	NodeType type;
 	bool hasBlock;
 	std::vector<NodeType> parentType;
@@ -288,7 +288,7 @@ static void recursiveStructureNodes(IErrorReceiver& errorReceiver,
 void structureInnerNode(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive) {
 
-	assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Grouped);
+	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Grouped);
 
 	ParserContext ct(nullptr, errorReceiver, sTable);
 	unsigned expectedIndents = (node->line ? node->line->indents + 1 : 0);
@@ -391,7 +391,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 	// Check order of Catch/Finally and unreachable code
 	bool catchFinallyFound = false;
 	bool finallyFound = false;
-	bool leaved = false;
+	bool left = false;
 	for (auto it = outNodes.cbegin(); it != outNodes.cend(); it++) {
 		auto& n = *it;
 		if (finallyFound) {
@@ -407,7 +407,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 			finallyFound = true;
 		}
 		else {
-			if (leaved) {
+			if (left) {
 				ct.errorAtLine(ErrorLevel::Warning, n->line, "unreachable code", {});
 				it = outNodes.erase(it, std::find_if(it, outNodes.cend(), [](const std::shared_ptr<Node>& n) {
 					return n->type == NodeType::Catch || n->type == NodeType::Finally; }));
@@ -422,7 +422,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 			case NodeType::Continue:
 			case NodeType::Return:
 			case NodeType::Throw:
-				leaved = true;
+				left = true;
 				break;
 			default:
 				break;
@@ -797,7 +797,7 @@ enum class OpPt {
 	Expression
 };
 
-struct OperatorPatternElement {
+struct OperatorPatternElement final {
 	OpPt type;
 	StringId token;
 	size_t subNodeIndex;
@@ -808,36 +808,36 @@ struct OperatorPatternElement {
 			: type(OpPt::Token), token(token), subNodeIndex(SIZE_MAX) {}
 };
 
-struct OperatorPattern {
+struct OperatorPattern final {
 	Operator op;
 	size_t subNodes;
 	std::vector<OperatorPatternElement> elements;
 
 	OperatorPattern() noexcept : op(defaultOp), subNodes(0) {}
-	OperatorPattern(Operator op, size_t subNodes, const std::vector<OperatorPatternElement>& elements) noexcept
-			: op(op), subNodes(subNodes), elements(elements) {}
+	OperatorPattern(Operator op, size_t subNodes, std::vector<OperatorPatternElement> elements) noexcept
+			: op(op), subNodes(subNodes), elements(std::move(elements)) {}
 };
 
-struct OperatorPatternGroup {
+struct OperatorPatternGroup final {
 	bool leftToRight;
 	std::vector<OperatorPattern> patterns;
 
-	OperatorPatternGroup(bool leftToRight, const std::vector<OperatorPattern>& patterns) noexcept
-			: leftToRight(leftToRight), patterns(patterns) {}
+	OperatorPatternGroup(bool leftToRight, std::vector<OperatorPattern> patterns) noexcept
+			: leftToRight(leftToRight), patterns(std::move(patterns)) {}
 };
 
 enum class OperatorType {
 	Prefix, Postfix, Binary, Ternary, Special
 };
 
-struct OperatorAttributes {
+struct OperatorAttributes final {
 	OperatorType type;
 	bool allowOverride;
 	std::string description;
 
 	OperatorAttributes() noexcept : type(enum_max<OperatorType>::value), allowOverride(false) {}
-	OperatorAttributes(OperatorType type, bool allowOverride, const std::string& description = "") noexcept
-			: type(type), allowOverride(allowOverride), description(description) {}
+	OperatorAttributes(OperatorType type, bool allowOverride, std::string description = "") noexcept
+			: type(type), allowOverride(allowOverride), description(std::move(description)) {}
 };
 
 static std::vector<OperatorPatternGroup> opPatterns;
@@ -1063,7 +1063,7 @@ static void initializeOpTables() {
 }
 
 static const OperatorAttributes& getOpAttr(Operator op) {
-	assert(static_cast<size_t>(op) < opAttrs.size());
+	chatra_assert(static_cast<size_t>(op) < opAttrs.size());
 	return opAttrs[static_cast<size_t>(op)];
 }
 
@@ -1367,25 +1367,25 @@ enum class StPt {
 	OperatorParameter
 };
 
-struct StatementPatternElement {
+struct StatementPatternElement final {
 	StPt type = enum_max<StPt>::value;
 	StringId token = StringId::Invalid;
 	bool required = false;
 	size_t subNodeIndex = 0;
 	std::string errorMessage;  // only for required field
 
-	StatementPatternElement(StPt type, StringId token, bool required, size_t subNodeIndex, const std::string& errorMessage = "") noexcept
-			: type(type), token(token), required(required), subNodeIndex(subNodeIndex), errorMessage(errorMessage) {}
+	StatementPatternElement(StPt type, StringId token, bool required, size_t subNodeIndex, std::string errorMessage = "") noexcept
+			: type(type), token(token), required(required), subNodeIndex(subNodeIndex), errorMessage(std::move(errorMessage)) {}
 };
 
-struct StatementAttributes {
+struct StatementAttributes final {
 	size_t subNodes;
 	size_t skipTokens;
 	std::vector<StatementPatternElement> pattern;
 
 	StatementAttributes() noexcept : subNodes(0), skipTokens(0) {}
-	StatementAttributes(size_t subNodes, size_t skipTokens, const std::vector<StatementPatternElement>& pattern) noexcept
-			: subNodes(subNodes), skipTokens(skipTokens), pattern(pattern) {}
+	StatementAttributes(size_t subNodes, size_t skipTokens, std::vector<StatementPatternElement> pattern) noexcept
+			: subNodes(subNodes), skipTokens(skipTokens), pattern(std::move(pattern)) {}
 };
 
 static std::vector<StatementAttributes> stAttrs;  // [NodeType]
@@ -1484,7 +1484,7 @@ static void initializeStTables() {
 }
 
 static const StatementAttributes& getStAttr(NodeType type) {
-	assert(static_cast<size_t>(type) < stAttrs.size());
+	chatra_assert(static_cast<size_t>(type) < stAttrs.size());
 	return stAttrs[static_cast<size_t>(type)];
 }
 
@@ -1656,7 +1656,7 @@ template <class TokenPtrIterator>
 static std::shared_ptr<Node> extractStatementPiece(ParserContext& ct, TokenPtrIterator& it, TokenPtrIterator last,
 		const StatementPatternElement& e) {
 
-	assert(it != last);
+	chatra_assert(it != last);
 	auto it0 = it;
 	auto leftTokens = static_cast<size_t>(std::distance(it, last));
 
@@ -1798,7 +1798,7 @@ static std::shared_ptr<Node> extractStatementPiece(ParserContext& ct, TokenPtrIt
 	}
 
 	if (e.required) {
-		assert(!e.errorMessage.empty());
+		chatra_assert(!e.errorMessage.empty());
 		ct.errorAtToken(ErrorLevel::Error, **it0, e.errorMessage, {});
 	}
 
@@ -1844,7 +1844,7 @@ static InputIterator find_it(InputIterator first, InputIterator last, Predicate 
 static const Token* addToken(ParserContext& ct, const std::shared_ptr<Node>& node, const Token& templateToken,
 		TokenType type, std::string token) {
 
-	assert(type != TokenType::Number && type != TokenType::String);
+	chatra_assert(type != TokenType::Number && type != TokenType::String);
 
 	node->additionalTokens.emplace_back(new Token(
 			templateToken.line, templateToken.index, templateToken.first, templateToken.last,
@@ -1967,7 +1967,7 @@ static void mapAnnotations(ParserContext& ct, AnnotationMap& aMap, Node* node) {
 }
 
 static void transferAnnotations(AnnotationMap& aMap, const void* from, const void* to) {
-	assert(aMap.count(to) == 0);
+	chatra_assert(aMap.count(to) == 0);
 	auto it = aMap.find(from);
 	if (it == aMap.end())
 		return;
@@ -2171,7 +2171,7 @@ static void replaceSyntaxSugar(ParserContext& ct, AnnotationMap& aMap, Node* nod
 void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive) {
 
-	assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Structured);
+	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Structured);
 
 	ParserContext ct(&ws, errorReceiver, sTable);
 
@@ -2196,7 +2196,7 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 			if (it == n->tokens.cend()) {
 				if (!e.required)
 					continue;
-				assert(!e.errorMessage.empty());
+				chatra_assert(!e.errorMessage.empty());
 				ct.errorAtNextToken(ErrorLevel::Error, *n->tokens.back(), e.errorMessage, {});
 				hasError = true;
 				break;
@@ -2205,7 +2205,7 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 			auto subNode = extractStatementPiece(ct, it, n->tokens.cend(), e);
 			if (subNode) {
 				if (e.subNodeIndex != SIZE_MAX) {
-					assert(e.subNodeIndex < n->subNodes.size() && !n->subNodes[e.subNodeIndex]);
+					chatra_assert(e.subNodeIndex < n->subNodes.size() && !n->subNodes[e.subNodeIndex]);
 					n->subNodes[e.subNodeIndex] = std::move(subNode);
 				}
 			}
@@ -2284,17 +2284,17 @@ void initializeParser() {
 void errorAtNode(IErrorReceiver& errorReceiver, ErrorLevel level, Node* node,
 		const std::string& message, const std::vector<std::string>& args) {
 
-	assert(!message.empty());
+	chatra_assert(!message.empty());
 
 	if (node == nullptr) {
 		errorReceiver.error(level, "", UnknownLine, "", SIZE_MAX, SIZE_MAX, message, args);
 		return;
 	}
 
-	assert(!node->tokens.empty());
+	chatra_assert(!node->tokens.empty());
 	auto& firstToken = *node->tokens[0];
 	auto firstLine = firstToken.line.lock();
-	assert(firstLine);
+	chatra_assert(firstLine);
 
 	size_t first = firstToken.first;
 	size_t last = (firstToken.last == SIZE_MAX ? 0 : firstToken.last);
@@ -2318,7 +2318,7 @@ std::string getOpDescription(Operator op) {
 	return getOpAttr(op).description;
 }
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 static const char* toString(NodeState v) {
 	switch (v) {
 	case NodeState::Grouped:  return "Grouped";
@@ -2445,6 +2445,6 @@ static void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_p
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Node>& node) {
 	dump(sTable, node, 0, false);
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

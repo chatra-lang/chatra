@@ -23,7 +23,7 @@
 
 namespace chatra {
 
-struct CodePoint {
+struct CodePoint final {
 	unsigned lineNo = 0;
 	std::string line;
 	size_t first = SIZE_MAX;
@@ -250,14 +250,14 @@ static std::shared_ptr<Line> parseLine(LexContext& ct, std::string fileName, uns
 			continue;
 		}
 
-		size_t mNumber = matches(line, index, [](char c) { return isBeginningOfNumber(c); }, [](char c) { return isPartOfNumber(c); });
+		size_t mNumber = matches(line, index, isBeginningOfNumber, isPartOfNumber);
 		if (mNumber != 0) {
 			addToken(ct, ret, columnIndex, index, mNumber, TokenType::Number, line.substr(index, mNumber));
 			index += mNumber;
 			continue;
 		}
 
-		size_t mName = matches(line, index, [](char c) { return isBeginningOfName(c); }, [](char c) { return isPartOfName(c); });
+		size_t mName = matches(line, index, isBeginningOfName, isPartOfName);
 		if (mName != 0) {
 			auto token = line.substr(index, mName);
 			addToken(ct, ret, columnIndex, index, mName,
@@ -266,7 +266,7 @@ static std::shared_ptr<Line> parseLine(LexContext& ct, std::string fileName, uns
 			continue;
 		}
 
-		size_t mOperator = matches(line, index, [](char c) { return isBeginningOfOperator(c); }, [](char c) { return isPartOfOperator(c); });
+		size_t mOperator = matches(line, index, isBeginningOfOperator, isPartOfOperator);
 		if (mOperator != 0) {
 			size_t i;
 			for (i = 0; i < operatorsByLength.size(); i++) {
@@ -300,13 +300,13 @@ static std::string consumeLine(const std::string& source, std::string::const_ite
 	return rawLine;
 }
 
-struct ProcessedLine {
+struct ProcessedLine final {
 	bool validLine = false;
 	std::string line;
 	std::vector<size_t> columnIndex;
 };
 
-struct CommentState {
+struct CommentState final {
 	unsigned level = 0;
 	CodePoint start0;
 };
@@ -470,7 +470,7 @@ std::vector<std::shared_ptr<Line>> parseLines(IErrorReceiver& errorReceiver,
 			break;
 		auto lineLength = std::distance(source.crbegin(), itLf);
 		auto line = source.substr(source.length() - lineLength);
-		if (lineLength == 0 || std::all_of(line.cbegin(), line.cend(), [](char c) { return isSpace(c); })) {
+		if (lineLength == 0 || std::all_of(line.cbegin(), line.cend(), isSpace)) {
 			source = source.substr(0, source.length() - lineLength - 1);
 			continue;
 		}
@@ -497,7 +497,7 @@ std::vector<std::shared_ptr<Line>> parseLines(IErrorReceiver& errorReceiver,
 
 				lineNo++;
 				auto nextRawLine = consumeLine(source, it);
-				auto itFirstChar = std::find_if(nextRawLine.cbegin(), nextRawLine.cend(), [](char c) { return !isSpace(c); });
+				auto itFirstChar = std::find_if(nextRawLine.cbegin(), nextRawLine.cend(), isNotSpace);
 				if (startsWith(itFirstChar, nextRawLine.cend(), ">>>")) {
 					append(rawLine, line, nextRawLine, removeComments(ct, comment, lineNo, nextRawLine, false));
 					break;
@@ -522,7 +522,7 @@ void initializeLexicalAnalyzer() {
 	initializeOperators();
 }
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Line>& line) {
  	printf("Line{containsError=%s, file=%s, lineNo=%s, indents=%u,\n  line=\"%s\"\n  tokens=\n",
  			line->containsError ? "true" : "false",
@@ -537,7 +537,7 @@ void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Line
  				sTable->ref(token.sid).c_str());
  	printf("]}\n");
  }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
  }  // namespace chatra
 

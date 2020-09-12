@@ -17,8 +17,8 @@
  *
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
-#ifndef CHATRA_EMBINTERNAL_H
-#define CHATRA_EMBINTERNAL_H
+#ifndef CHATRA_EMB_INTERNAL_H
+#define CHATRA_EMB_INTERNAL_H
 
 #include "chatra.h"
 #include <atomic>
@@ -29,10 +29,16 @@
 	#define CHATRA_MAYBE_GCC   __GNUC__
 #endif
 
+#ifdef CHATRA_NDEBUG
+	#define chatra_assert(e)  ((void)0)
+#else
+	#define chatra_assert(e)  assert(e)
+#endif
+
 namespace chatra {
 namespace emb {
 
-class SpinLock {
+class SpinLock final {
 private:
 	std::atomic_flag flag = ATOMIC_FLAG_INIT;
 
@@ -67,4 +73,4 @@ std::string readString(const std::vector<uint8_t> &buffer, size_t &offset);
 }  // namespace emb
 }  // namespace chatra
 
-#endif //CHATRA_EMBINTERNAL_H
+#endif //CHATRA_EMB_INTERNAL_H

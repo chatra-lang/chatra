@@ -119,8 +119,8 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 }
 
 bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
-		bool warnIfDuplicates) {
-	assert(node->type == NodeType::Import);
+		bool warnIfDuplicates) const {
+	chatra_assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 	if (imports.count(sid) != 0) {
@@ -147,7 +147,7 @@ bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringT
 }
 
 Package& Package::import(Node* node, PackageId targetPackageId) {
-	assert(node->type == NodeType::Import);
+	chatra_assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 
@@ -193,7 +193,7 @@ static std::vector<NativeMethod> filterNativeMethods(
 }
 
 void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
-	assert(node->blockNodesState == NodeState::Parsed);
+	chatra_assert(node->blockNodesState == NodeState::Parsed);
 
 	// Performs two-path initialization to allow cross references in
 	// constructor arguments or package-global defs
@@ -215,7 +215,7 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	}
 
 	// Register variables, classes and operator overrides
-	assert(!clPackage);
+	chatra_assert(!clPackage);
 	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
 
 	for (auto* cl : classList)
@@ -229,7 +229,7 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	}
 }
 
-void Package::allocatePackageObject() {
+void Package::allocatePackageObject() const {
 	scope->addConst(StringId::PackageObject).allocateWithoutLock<PackageObject>(clPackage.get());
 }
 
@@ -262,7 +262,7 @@ Package* Package::findPackage(StringId name) {
 	return it == importsByName.end() ? nullptr : it->second;
 }
 
-const std::vector<Package*>& Package::refAnonymousImports() {
+const std::vector<Package*>& Package::refAnonymousImports() const {
 	return anonymousImports;
 }
 
@@ -367,12 +367,12 @@ void RuntimeImp::launchStorage() {
 	storage = Storage::newInstance(this);
 	gcInstance = instanceIds.allocate();
 	gcThread = threadIds.allocate(*this, *gcInstance);
-	assert(gcInstance->getId() == static_cast<InstanceId>(0));
-	assert(gcThread->getId() == static_cast<Requester>(0));
+	chatra_assert(gcInstance->getId() == static_cast<InstanceId>(0));
+	chatra_assert(gcThread->getId() == static_cast<Requester>(0));
 
 	// Register pseudo package for finalizer
 	auto _finalizerPackageId = loadPackage({std::string("(finalizer)"), ""});
-	assert(_finalizerPackageId == finalizerPackageId);
+	chatra_assert(_finalizerPackageId == finalizerPackageId);
 	(void)_finalizerPackageId;
 
 	auto* finalizerPackage = packageIds.ref(finalizerPackageId);
@@ -389,11 +389,11 @@ void RuntimeImp::launchStorage() {
 
 void RuntimeImp::launchFinalizerThread() {
 	auto _finalizerInstanceId = run(finalizerPackageId);  // global scope will be restored later
-	assert(_finalizerInstanceId == finalizerInstanceId);
+	chatra_assert(_finalizerInstanceId == finalizerInstanceId);
 	(void)_finalizerInstanceId;
 
 	finalizerThread = instanceIds.ref(finalizerInstanceId)->threads.begin()->second.get();
-	assert(finalizerThread->getId() == finalizerThreadId);
+	chatra_assert(finalizerThread->getId() == finalizerThreadId);
 
 	scope = storage->add(ScopeType::Global);
 	scope->add(StringId::Parser);
@@ -448,7 +448,7 @@ static void addToParentMap(std::unordered_map<const Node*, const Node*>& parentM
 	for (auto& n : childNodes) {
 		if (!n)
 			continue;
-		assert(parentMap.count(n.get()) == 0);
+		chatra_assert(parentMap.count(n.get()) == 0);
 		parentMap.emplace(n.get(), node);
 		nodes.emplace_back(n.get());
 	}
@@ -530,7 +530,7 @@ void RuntimeImp::saveEntityMap(Writer& w) {
 #define CHATRA_WRITE_OBJECT_REFS(className)  case typeId_##className:  \
 		static_cast<className*>(object)->saveReferences(w);  break
 
-void RuntimeImp::saveStorage(Writer& w) {
+void RuntimeImp::saveStorage(Writer& w) const {
 	storage->save(w, [&](TypeId typeId, Object* object) {
 		w.saveResync(static_cast<int>(typeId));
 		switch (typeId) {
@@ -565,7 +565,7 @@ void RuntimeImp::saveStorage(Writer& w) {
 	});
 }
 
-void RuntimeImp::saveState(Writer& w) {
+void RuntimeImp::saveState(Writer& w) const {
 
 	w.out(packageIds, [&](const Package& package) {
 		return package.getId() != finalizerPackageId;
@@ -743,13 +743,13 @@ void RuntimeImp::restoreEntities(Reader& r, PackageId packageId, Node* node) {
 		static_cast<className*>(object)->restoreReferences(r);  break
 
 template <class Type>
-struct RestoreExceptionPredicate {
+struct RestoreExceptionPredicate final {
 	void operator()(Object** object, Storage& storage) {
 		*object = new Type(storage);
 	}
 };
 
-void RuntimeImp::restoreStorage(Reader& r) {
+void RuntimeImp::restoreStorage(Reader& r) const {
 	storage->restore(r, [&](TypeId typeId, Object** object) {
 		r.restoreResync(static_cast<int>(typeId));
 		switch (typeId) {
@@ -948,7 +948,7 @@ Thread& RuntimeImp::createThread(Instance& instance, Package& package, Node* nod
 }
 
 void RuntimeImp::enqueue(Thread* thread) {
-	assert(thread != nullptr);
+	chatra_assert(thread != nullptr);
 
 	/*std::printf("enqueue: instanceId %u, threadId = %u; frames.size = %u\n",
 			static_cast<unsigned>(thread->instance.getId()),
@@ -962,9 +962,9 @@ void RuntimeImp::enqueue(Thread* thread) {
 		std::unique_lock<std::mutex> lock(mtQueue);
 		count++;
 		if (count == breakCount)
-			assert(false);
+			chatra_assert(false);
 		for (auto* t : queue)
-			assert(t != thread);
+			chatra_assert(t != thread);
 	}*/
 
 	if (multiThread) {
@@ -997,7 +997,7 @@ void RuntimeImp::resume(unsigned waitingId) {
 	{
 		std::lock_guard<SpinLock> lock(lockWaitingThreads);
 		auto it = waitingThreads.find(waitingId);
-		assert(it != waitingThreads.end());
+		chatra_assert(it != waitingThreads.end());
 		thread = it->second;
 	}
 
@@ -1096,13 +1096,12 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 	if (!line.empty()) {
 		out.append(":\n\t");
 
-		auto skip = static_cast<size_t>(std::distance(line.cbegin(),
-				std::find_if(line.cbegin(), line.cend(), [](char c) { return !isSpace(c); })));
+		auto skip = static_cast<size_t>(std::distance(line.cbegin(), std::find_if(line.cbegin(), line.cend(), isNotSpace)));
 
 		if (first == SIZE_MAX || last == SIZE_MAX)
 			out.append(line.substr(skip));
 		else {
-			assert(first <= last && last <= line.size());
+			chatra_assert(first <= last && last <= line.size());
 			skip = std::min(skip, first);
 
 			auto validLength = line.find("//", last);
@@ -1110,7 +1109,7 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 				validLength = line.size();
 
 			bool hasTailingText = (line.cbegin() + validLength
-					!= std::find_if(line.cbegin() + last, line.cbegin() + validLength, [](char c) { return !isSpace(c); }));
+					!= std::find_if(line.cbegin() + last, line.cbegin() + validLength, isNotSpace));
 
 			if (first == skip && !hasTailingText)
 				out.append(line.substr(skip));
@@ -1132,7 +1131,7 @@ void RuntimeImp::error(ErrorLevel level,
 	outputError(formatError(level, fileName, lineNo, line, first, last, message, args));
 }
 
-void RuntimeImp::outputError(const std::string& message) {
+void RuntimeImp::outputError(const std::string& message) const {
 	host->console(message);
 }
 
@@ -1178,8 +1177,8 @@ void RuntimeImp::initialize(unsigned initialThreadCount, const std::vector<uint8
 		throw IllegalArgumentException();
 	}
 
-	assert(storage->audit());
-	assert(!primarySTable->isDirty());
+	chatra_assert(storage->audit());
+	chatra_assert(!primarySTable->isDirty());
 
 	reactivateFinalizerThread();
 
@@ -1203,7 +1202,7 @@ Node* RuntimeImp::restorePackageNode(Reader& r, PackageId packageId, bool initia
 	if (errorReceiverBridge.hasError())
 		throw IllegalArgumentException();
 
-	assert(scriptNode);
+	chatra_assert(scriptNode);
 	package->node = std::move(scriptNode);
 	restoreEntities(r, packageId, package->node.get());
 	return package->node.get();
@@ -1233,15 +1232,7 @@ const MethodTable* RuntimeImp::restoreMethodTable(PackageId packageId, Node* nod
 	return methodTableCache.scanInnerFunctions(this, primarySTable.get(), *package, node);
 }
 
-RuntimeImp::~RuntimeImp() {
-	if (!closed)
-		(void)shutdown(false);
-
-	gcThread.reset();
-	gcInstance.reset();
-}
-
-std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
+std::vector<uint8_t> RuntimeImp::doShutdown(bool save) {
 	if (closed)
 		throw UnsupportedOperationException();
 	closed = true;
@@ -1265,7 +1256,7 @@ std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
 	shutdownTimers();
 
 	if (save) {
-		assert(storage->audit());
+		chatra_assert(storage->audit());
 
 		Writer w(*this);
 		primarySTable->save(w.select("sTable"));
@@ -1279,6 +1270,18 @@ std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
 	}
 
 	return {};
+}
+
+RuntimeImp::~RuntimeImp() {
+	if (!closed)
+		(void)doShutdown(false);
+
+	gcThread.reset();
+	gcInstance.reset();
+}
+
+std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
+	return doShutdown(save);
 }
 
 void RuntimeImp::setWorkers(unsigned threadCount) {
@@ -1423,7 +1426,7 @@ void RuntimeImp::stop(InstanceId instanceId) {
 	}
 
 	auto* package = packageIds.lockAndRef(instance->primaryPackageId);
-	assert(package != nullptr);
+	chatra_assert(package != nullptr);
 	{
 		std::lock_guard<SpinLock> lock1(package->lockInstances);
 		package->instances.erase(instanceId);
@@ -1480,7 +1483,7 @@ std::shared_ptr<Runtime> Runtime::newInstance(std::shared_ptr<IHost> host,
 				initializeEmbeddedFunctions();
 			}
 			catch (...) {
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 				std::fprintf(stderr, "fatal: failed to initialize some subsystems!");
 #endif
 				return nullptr;
@@ -1504,7 +1507,7 @@ void UserObjectBase::onDestroy(void* tag, Requester requester, Reference& ref) {
 
 	auto& runtime = *static_cast<RuntimeImp*>(tag);
 
-	assert(ref.deref<ObjectBase>().getTypeId() == typeId_UserObjectBase);
+	chatra_assert(ref.deref<ObjectBase>().getTypeId() == typeId_UserObjectBase);
 	auto& object = ref.deref<UserObjectBase>();
 	if (object.deinitCalled)
 		return;
@@ -1532,7 +1535,7 @@ void UserObjectBase::onDestroy(void* tag, Requester requester, Reference& ref) {
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void Package::dump(const std::shared_ptr<StringTable>& sTable) {
 	if (scope) {
 		printf("scope:\n");
@@ -1569,6 +1572,6 @@ void RuntimeImp::dump() {
 		printf("%u threads running\n", static_cast<unsigned>(queue.size()));
 	}
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra
