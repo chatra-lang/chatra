@@ -1096,8 +1096,7 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 	if (!line.empty()) {
 		out.append(":\n\t");
 
-		auto skip = static_cast<size_t>(std::distance(line.cbegin(),
-				std::find_if(line.cbegin(), line.cend(), [](char c) { return !isSpace(c); })));
+		auto skip = static_cast<size_t>(std::distance(line.cbegin(), std::find_if(line.cbegin(), line.cend(), isNotSpace)));
 
 		if (first == SIZE_MAX || last == SIZE_MAX)
 			out.append(line.substr(skip));
@@ -1110,7 +1109,7 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 				validLength = line.size();
 
 			bool hasTailingText = (line.cbegin() + validLength
-					!= std::find_if(line.cbegin() + last, line.cbegin() + validLength, [](char c) { return !isSpace(c); }));
+					!= std::find_if(line.cbegin() + last, line.cbegin() + validLength, isNotSpace));
 
 			if (first == skip && !hasTailingText)
 				out.append(line.substr(skip));

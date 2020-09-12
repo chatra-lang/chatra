@@ -48,8 +48,17 @@ static const char* script =
 //   f=<digit group separators for fractional part (default = '', typical = ' ')>
 //   %c in value field means ','
 
+template <char targetCharacter>
+static constexpr bool isChar(char c) {
+	return c == targetCharacter;
+}
+
 static constexpr bool isDigit(char c) {
 	return '0' <= c && c <= '9';
+}
+
+static constexpr bool isNotDigit(char c) {
+	return !isDigit(c);
 }
 
 static constexpr bool isHexDigit(char c) {
@@ -146,11 +155,11 @@ static void postProcess(std::string& valueString,
 		const std::string& dMarker, const std::string& dsInt, const std::string& dsFrac,
 		IsDigitPred isDigitPred) {
 
-	auto marker = findOffset(valueString, 0, valueString.length(), [](char c) { return c == '.'; });
+	auto marker = findOffset(valueString, 0, valueString.length(), isChar<'.'>);
 
 	if (!dsInt.empty()) {
 		auto _dsInt = restoreValue(dsInt);
-		auto iInt0 = findOffset(valueString, 0, valueString.length(), [&](char c) { return isDigitPred(c); });
+		auto iInt0 = findOffset(valueString, 0, valueString.length(), isDigitPred);
 		auto iInt1 = findOffset(valueString, iInt0, valueString.length(), [&](char c) { return !isDigitPred(c); });
 		for (size_t j = 3; j < iInt1 - iInt0; j += 3) {
 			valueString.insert(iInt1 - j, _dsInt);
@@ -223,7 +232,7 @@ static void format(Ct& ct) {
 		size_t i0, i1;
 		if (f[i + 1] == '{') {
 			i0 = i + 2;
-			i1 = findOffset(f, i0, f.length(), [](char c) { return c == '}'; });
+			i1 = findOffset(f, i0, f.length(), isChar<'}'>);
 			if (i1 >= f.length())
 				throw IllegalArgumentException(
 						"unterminated format specifier #%u (started from offset %+u)",
@@ -232,7 +241,7 @@ static void format(Ct& ct) {
 		}
 		else {
 			i0 = i + 1;
-			i1 = findOffset(f, i0, f.length(), [](char c) { return isAlpha(c); });
+			i1 = findOffset(f, i0, f.length(), isAlpha);
 			if (i1 >= f.length())
 				throw IllegalArgumentException(
 						"unterminated format specifier #%u (started from offset %+u)",
@@ -250,7 +259,7 @@ static void format(Ct& ct) {
 		bool requiresPostProcess = false;
 
 		size_t iSpec = i0;
-		auto t0 = findOffset(f, iSpec, i1, [](char c) { return c == ':'; });
+		auto t0 = findOffset(f, iSpec, i1, isChar<':'>);
 		if (t0 != i1) {
 			auto firstChar = f[iSpec];
 			if (isDigit(firstChar) || firstChar == '-') {
@@ -305,7 +314,7 @@ static void format(Ct& ct) {
 		}
 
 		if (isDigit(f[iSpec])) {
-			auto length = findOffset(f, iSpec, i1, [](char c) { return !isDigit(c); }) - iSpec;
+			auto length = findOffset(f, iSpec, i1, isNotDigit) - iSpec;
 			if (length > 10)
 				throw IllegalArgumentException(
 						"at format specifier #%u: width field is out of range",
@@ -316,7 +325,7 @@ static void format(Ct& ct) {
 		}
 
 		if (f[iSpec] == '.' && iSpec + 1 < i1 && isDigit(f[iSpec + 1])) {
-			auto length = findOffset(f, iSpec + 1, i1, [](char c) { return !isDigit(c); }) - iSpec;
+			auto length = findOffset(f, iSpec + 1, i1, isNotDigit) - iSpec;
 			if (length > 1 + 10)
 				throw IllegalArgumentException(
 						"at format specifier #%u: precision field is out of range",
@@ -332,8 +341,8 @@ static void format(Ct& ct) {
 		if (f[iSpec] == ';') {
 			iSpec++;
 			while (iSpec < i1) {
-				auto last = findOffset(f, iSpec, i1, [](char c) { return c == ','; });
-				auto sep = findOffset(f, iSpec + 1, last, [](char c) { return c == '='; });
+				auto last = findOffset(f, iSpec, i1, isChar<','>);
+				auto sep = findOffset(f, iSpec + 1, last, isChar<'='>);
 				if (last == sep)
 					throw IllegalArgumentException(
 							"at format specifier #%u: option field requires 'key=value' form",
@@ -466,10 +475,10 @@ static void format(Ct& ct) {
 			case 'X':
 			case 'a':
 			case 'A':
-				postProcess(valueString, dMarker, dsInt, dsFrac, [](char c) { return isHexDigit(c); });
+				postProcess(valueString, dMarker, dsInt, dsFrac, isHexDigit);
 				break;
 			default:
-				postProcess(valueString, dMarker, dsInt, dsFrac, [](char c) { return isDigit(c); });
+				postProcess(valueString, dMarker, dsInt, dsFrac, isDigit);
 				break;
 			}
 		}

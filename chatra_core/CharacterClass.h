@@ -27,6 +27,10 @@ static constexpr bool isSpace(char c) {
 	return c == ' ' || c == '\t';
 }
 
+static constexpr bool isNotSpace(char c) {
+	return !isSpace(c);
+}
+
 static constexpr bool isBeginningOfNumber(char c) {
 	return '0' <= c && c <= '9';
 }
