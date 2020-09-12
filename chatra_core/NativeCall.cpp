@@ -73,7 +73,7 @@ void NativeEventObjectImp::unlock() {
 }
 
 
-class NativeCallContextImp : public NativeCallContext {
+class NativeCallContextImp final : public NativeCallContext {
 	friend class NativeReferenceImp;
 
 private:
@@ -166,7 +166,7 @@ public:
 };
 
 
-class NativeReferenceImp : public NativeReference {
+class NativeReferenceImp final : public NativeReference {
 private:
 	const NativeCallContextImp& ct;
 	Reference ref;

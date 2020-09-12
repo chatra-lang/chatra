@@ -40,20 +40,20 @@ struct NativeData : public INativePtr {
 	explicit NativeData(Type type) : type(type) {}
 };
 
-struct FileInputStreamData : public NativeData {
+struct FileInputStreamData final : public NativeData {
 	std::mutex mt;
 	std::unique_ptr<IFile> file;
 	FileInputStreamData() : NativeData(Type::FileInputStream) {}
 };
 
-struct FileOutputStreamData : public NativeData {
+struct FileOutputStreamData final : public NativeData {
 	std::mutex mt;
 	std::unique_ptr<IFile> file;
 	FileOutputStreamData() : NativeData(Type::FileOutputStream) {}
 };
 
 
-struct IoPackageInterface : public IPackage {
+struct IoPackageInterface final : public IPackage {
 	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;

@@ -32,7 +32,7 @@
 namespace chatra {
 namespace emb {
 
-class SpinLock {
+class SpinLock final {
 private:
 	std::atomic_flag flag = ATOMIC_FLAG_INIT;
 

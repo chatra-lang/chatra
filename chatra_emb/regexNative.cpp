@@ -73,7 +73,7 @@ struct NativeData : public INativePtr {
 	explicit NativeData(Type type) : type(type) {}
 };
 
-struct Pattern : public NativeData {
+struct Pattern final : public NativeData {
 	SpinLock lock;
 	std::string pattern;
 	srell::regex_constants::syntax_option_type flags = srell::regex_constants::ECMAScript;
@@ -81,7 +81,7 @@ struct Pattern : public NativeData {
 	Pattern() : NativeData(Type::Pattern) {}
 };
 
-struct Match : public NativeData {
+struct Match final : public NativeData {
 	SpinLock lock;
 	std::string pattern;
 	srell::regex_constants::syntax_option_type flags = srell::regex_constants::ECMAScript;
@@ -93,7 +93,7 @@ struct Match : public NativeData {
 	Match() : NativeData(Type::Match) {}
 };
 
-struct RegexPackageInterface : public IPackage {
+struct RegexPackageInterface final : public IPackage {
 	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;

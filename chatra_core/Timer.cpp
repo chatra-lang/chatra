@@ -119,7 +119,7 @@ void Timer::cancelAll() {
 }
 
 
-class SystemTimer : public Timer {
+class SystemTimer final : public Timer {
 private:
 	bool stop = false;
 	std::mutex mt;
@@ -163,7 +163,7 @@ public:
 };
 
 
-class EmulatedTimer : public Timer {
+class EmulatedTimer final : public Timer {
 public:
 	~EmulatedTimer() override = default;
 

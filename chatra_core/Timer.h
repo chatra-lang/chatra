@@ -30,7 +30,7 @@ using Time = std::chrono::milliseconds;
 using TimerHandler = std::function<void()>;
 
 
-struct TimerElement {
+struct TimerElement final {
 	std::unordered_map<unsigned, TimerHandler> handlers;
 };
 

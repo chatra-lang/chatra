@@ -301,7 +301,7 @@ StringId StringTable::add(std::string str) {
 	return id;
 }
 
-struct StringTableBridge : StringTable {
+struct StringTableBridge final : StringTable {
 	explicit StringTableBridge() noexcept : StringTable() {}
 	explicit StringTableBridge(const StringTable& r) noexcept : StringTable(r) {}
 };

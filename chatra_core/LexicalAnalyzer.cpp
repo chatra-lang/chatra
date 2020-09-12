@@ -23,7 +23,7 @@
 
 namespace chatra {
 
-struct CodePoint {
+struct CodePoint final {
 	unsigned lineNo = 0;
 	std::string line;
 	size_t first = SIZE_MAX;
@@ -300,13 +300,13 @@ static std::string consumeLine(const std::string& source, std::string::const_ite
 	return rawLine;
 }
 
-struct ProcessedLine {
+struct ProcessedLine final {
 	bool validLine = false;
 	std::string line;
 	std::vector<size_t> columnIndex;
 };
 
-struct CommentState {
+struct CommentState final {
 	unsigned level = 0;
 	CodePoint start0;
 };

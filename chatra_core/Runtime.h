@@ -84,7 +84,7 @@ constexpr InstanceId finalizerInstanceId = static_cast<InstanceId>(1);
 constexpr Requester finalizerThreadId = static_cast<Requester>(1);
 
 
-class TemporaryObject : public Object {
+class TemporaryObject final : public Object {
 public:
 	enum class Type : unsigned {
 		// Nothing is pointed (implicitly point to top level of frames).
@@ -303,7 +303,7 @@ public:
 };
 
 
-class TemporaryTuple : public ObjectBase, public PreDefined<TemporaryTuple, StringId::TemporaryTuple> {
+class TemporaryTuple final : public ObjectBase, public PreDefined<TemporaryTuple, StringId::TemporaryTuple> {
 private:
 	Thread& thread;
 	size_t frameIndex = SIZE_MAX;
@@ -334,7 +334,7 @@ public:
 };
 
 
-class TupleAssignmentMap : public ObjectBase, public PreDefined<TupleAssignmentMap, StringId::TupleAssignmentMap> {
+class TupleAssignmentMap final : public ObjectBase, public PreDefined<TupleAssignmentMap, StringId::TupleAssignmentMap> {
 public:
 	struct Element {
 		size_t destIndex = 0;
@@ -360,7 +360,7 @@ public:
 };
 
 
-class FunctionObject : public ObjectBase, public PreDefined<FunctionObject, StringId::FunctionObject> {
+class FunctionObject final : public ObjectBase, public PreDefined<FunctionObject, StringId::FunctionObject> {
 public:
 	Package* package;
 	std::vector<std::tuple<ScopeType, Node*, const Class*>> scopes;  // Class, Method or Block; reverse order
@@ -378,7 +378,7 @@ public:
 };
 
 
-class WaitContext : public Object {
+class WaitContext final : public Object {
 	friend bool WaitContextEventWatcher(void* tag);
 
 private:
@@ -417,7 +417,7 @@ bool WaitContextEventWatcher(void* tag);
 EventObject* derefAsEventObject(Reference ref);
 
 
-class NativeEventObjectImp : public NativeEventObject {
+class NativeEventObjectImp final : public NativeEventObject {
 private:
 	RuntimeImp& runtime;
 	unsigned waitingId;
@@ -438,7 +438,7 @@ enum class LockType {
 
 constexpr size_t lockTypes = 3;
 
-class Lock {
+class Lock final {
 private:
 	std::unordered_set<Reference> refs[lockTypes];
 	bool methodCall = false;
@@ -485,7 +485,7 @@ public:
 };
 
 
-class Frame {
+class Frame final {
 public:
 	Thread& thread;
 	Package& package;
@@ -584,7 +584,7 @@ namespace Phase {
 }
 
 
-class TransferRequest {
+class TransferRequest final {
 public:
 	Requester requester;
 	Reference ref;
@@ -600,7 +600,7 @@ public:
 
 
 template <class Type>
-class ObjectPool {
+class ObjectPool final {
 private:
 	Thread& thread;
 	std::vector<Type*> recycled;
@@ -637,7 +637,7 @@ public:
 };
 
 
-class Thread : public IdType<Requester, Thread>, public IErrorReceiver {
+class Thread final : public IdType<Requester, Thread>, public IErrorReceiver {
 	friend class Frame;
 
 public:
@@ -879,7 +879,7 @@ public:
 };
 
 
-class Instance : public IdType<InstanceId, Instance> {
+class Instance final : public IdType<InstanceId, Instance> {
 public:
 	PackageId primaryPackageId;
 	SpinLock lockThreads;
@@ -891,7 +891,7 @@ public:
 };
 
 
-class PackageObject : public ObjectBase {
+class PackageObject final : public ObjectBase {
 public:
 	PackageObject(Storage& storage, const Class* cl) noexcept
 			: ObjectBase(storage, typeId_PackageObject, cl) {}
@@ -902,7 +902,7 @@ public:
 };
 
 
-class Package : public PackageInfo, public IdType<PackageId, Package>, public IClassFinder, public PackageContext {
+class Package final : public PackageInfo, public IdType<PackageId, Package>, public IClassFinder, public PackageContext {
 public:
 	RuntimeImp& runtime;
 	std::atomic<bool> initialized = {false};
@@ -966,7 +966,7 @@ public:
 };
 
 
-class RuntimeImp : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration {
+class RuntimeImp final : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration {
 public:
 	RuntimeId runtimeId;
 	std::shared_ptr<IHost> host;

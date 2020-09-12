@@ -37,14 +37,14 @@ struct NativeData : public INativePtr {
 	explicit NativeData(Type type) : type(type) {}
 };
 
-struct ByteArrayData : public NativeData, public ByteArray {
+struct ByteArrayData final : public NativeData, public ByteArray {
 	ByteArrayData() : NativeData(Type::ByteArray) {}
 
 	static uint8_t fetchValue(Ct& ct, size_t position);
 	size_t fetchIndex(Ct& ct, size_t position, bool allowBoundary);
 };
 
-struct ContainersPackageInterface : public IPackage {
+struct ContainersPackageInterface final : public IPackage {
 	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;

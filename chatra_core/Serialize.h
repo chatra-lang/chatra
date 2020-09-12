@@ -74,7 +74,7 @@ enum class PointerType : unsigned {
 #endif  // NDEBUG
 
 
-class Writer {
+class Writer final {
 private:
 #ifndef NDEBUG
 	RuntimeImp& runtime;
@@ -346,7 +346,7 @@ public:
 };
 
 
-class Reader {
+class Reader final {
 private:
 	enum PointerMode {
 		Raw, Unique, UniqueExported

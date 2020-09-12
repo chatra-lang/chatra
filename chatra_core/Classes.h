@@ -49,19 +49,19 @@ class Thread;
 class Package;
 class NativeReferenceImp;
 
-struct HashPairStringId {
+struct HashPairStringId final {
 	size_t operator()(const std::pair<StringId, StringId>& x) const noexcept {
 		return std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.first))
 				^ std::hash<std::underlying_type<StringId>::type>()(static_cast<std::underlying_type<StringId>::type>(x.second) + 1);
 	}
 };
 
-struct HashPairClassPtr {
+struct HashPairClassPtr final {
 	size_t operator()(const std::pair<const Class*, const Class*>& x) const noexcept;
 };
 
 
-struct ArgumentDef {
+struct ArgumentDef final {
 	enum class Type {
 		// Before delimiter (contains the case of no delimiter)
 		List,
@@ -78,7 +78,7 @@ struct ArgumentDef {
 };
 
 
-struct ArgumentSpec {
+struct ArgumentSpec final {
 	StringId key = StringId::Invalid;
 	const Class* cl = nullptr;
 public:
@@ -135,7 +135,7 @@ public:
 };
 
 
-struct Method : public MethodBase, public ArgumentMatcher {
+struct Method final : public MethodBase, public ArgumentMatcher {
 	const Class* cl;
 	StringId name;
 	StringId subName;  // init.*() or foo()."set"(); default = StringId::Invalid
@@ -156,7 +156,7 @@ public:
 };
 
 
-struct OperatorMethod : public MethodBase {
+struct OperatorMethod final : public MethodBase {
 	friend class OperatorTable;
 
 	Package* package;  // Can be nullptr for embedded methods
@@ -173,7 +173,7 @@ public:
 };
 
 
-struct NativeMethod {
+struct NativeMethod final {
 	using Signature = void (*)(NativeCallHandler handler, Thread& thread, ObjectBase* object,
 			StringId name, StringId subName, Tuple& args, Reference ret);
 

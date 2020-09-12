@@ -425,7 +425,7 @@ void Storage::collect(Requester requester) {
 }
 
 std::shared_ptr<Storage> Storage::newInstance(void* tag) {
-	struct StorageBridge : Storage {
+	struct StorageBridge final : Storage {
 		explicit StorageBridge(void* tag) noexcept : Storage(tag) {}
 	};
 	return std::make_shared<StorageBridge>(tag);

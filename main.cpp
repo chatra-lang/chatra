@@ -243,7 +243,7 @@ static Type consume(const std::string& opt, std::deque<std::string>& args) {
 	return ret;
 }
 
-class Host : public cha::IHost {
+class Host final : public cha::IHost {
 public:
 	void console(const std::string& message) override {
 		std::printf("%s", message.data());

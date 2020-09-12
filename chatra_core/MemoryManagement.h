@@ -109,7 +109,7 @@ public:
 };
 
 
-class ReferenceGroup : public Lockable {
+class ReferenceGroup final : public Lockable {
 	friend class Object;
 	friend class Reference;
 	friend class Scope;
@@ -157,7 +157,7 @@ enum class ReferenceValueType {
 constexpr ReferenceValueType referenceValueType_ObjectIndex = static_cast<ReferenceValueType>(4);
 
 
-class ReferenceNode {
+class ReferenceNode final {
 	friend class Object;
 	friend class Reference;
 	friend class Scope;
@@ -214,7 +214,7 @@ private:
 /// This class is named "Reference", but actually this represents "reference to reference".
 /// example:
 ///   class A / var b -> Reference object points to "b" itself, not the value of b
-class Reference {
+class Reference final {
 	friend class Object;
 	friend class Scope;
 	friend class CapturedScope;
@@ -512,7 +512,7 @@ enum class ScopeType {
 
 using RefsContainer = std::unordered_map<StringId, Reference>;
 
-class Scope : private AsyncRead<RefsContainer> {
+class Scope final : private AsyncRead<RefsContainer> {
 	friend class Reference;
 	friend class Storage;
 
@@ -578,7 +578,7 @@ public:
 };
 
 
-class CapturedScope : private Object {
+class CapturedScope final : private Object {
 	friend class Reference;
 	friend class Scope;
 	friend class Storage;

@@ -232,7 +232,7 @@ std::string Thread::captureStackTrace() {
 }
 
 template <class Type>
-struct AllocateExceptionPredicate {
+struct AllocateExceptionPredicate final {
 	void operator()(Reference ref) {
 		ref.allocate<Type>();
 	}

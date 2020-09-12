@@ -82,7 +82,7 @@ enum class LiteralType {
 	Null, Bool, Int, Float, String, MultilingualString
 };
 
-struct Literal {
+struct Literal final {
 	LiteralType type;
 	union {
 		bool vBool;
@@ -249,7 +249,7 @@ namespace SubNode {
 	constexpr size_t Container_SubNodes = 3;
 }
 
-struct Node {
+struct Node final {
 	NodeType type = NodeType::Unknown;
 
 	// [!Parsed] reference to source line (first line if wrapped)
@@ -292,7 +292,7 @@ namespace NodeFlags {
 	constexpr uint32_t InitialNode = 0x4;
 }
 
-struct ParserWorkingSet {
+struct ParserWorkingSet final {
 	unsigned generatedVarCount = 0;
 };
 

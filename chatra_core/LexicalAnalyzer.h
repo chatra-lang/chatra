@@ -38,7 +38,7 @@ enum class TokenType {
 	CloseBracket,  // ) ] }
 };
 
-struct Token {
+struct Token final {
 	std::weak_ptr<Line> line;
 	unsigned index;
 	size_t first;  // byte position
@@ -53,7 +53,7 @@ public:
 			: line(std::move(line)), index(index), first(first), last(last), type(type), sid(sid) {}
 };
 
-struct Line {
+struct Line final {
 	bool containsError;  // To avoid generating too many warnings from this line
 	std::string fileName;
 	unsigned lineNo;

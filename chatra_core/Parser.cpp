@@ -23,7 +23,7 @@
 
 namespace chatra {
 
-class ParserContext {
+class ParserContext final {
 private:
 	ParserWorkingSet* ws;
 	IErrorReceiver& errorReceiver;
@@ -197,7 +197,7 @@ std::shared_ptr<Node> groupScript(IErrorReceiver& errorReceiver,
 	return stack[0];
 }
 
-struct LineAttributes {
+struct LineAttributes final {
 	NodeType type;
 	bool hasBlock;
 	std::vector<NodeType> parentType;
@@ -797,7 +797,7 @@ enum class OpPt {
 	Expression
 };
 
-struct OperatorPatternElement {
+struct OperatorPatternElement final {
 	OpPt type;
 	StringId token;
 	size_t subNodeIndex;
@@ -808,7 +808,7 @@ struct OperatorPatternElement {
 			: type(OpPt::Token), token(token), subNodeIndex(SIZE_MAX) {}
 };
 
-struct OperatorPattern {
+struct OperatorPattern final {
 	Operator op;
 	size_t subNodes;
 	std::vector<OperatorPatternElement> elements;
@@ -818,7 +818,7 @@ struct OperatorPattern {
 			: op(op), subNodes(subNodes), elements(std::move(elements)) {}
 };
 
-struct OperatorPatternGroup {
+struct OperatorPatternGroup final {
 	bool leftToRight;
 	std::vector<OperatorPattern> patterns;
 
@@ -830,7 +830,7 @@ enum class OperatorType {
 	Prefix, Postfix, Binary, Ternary, Special
 };
 
-struct OperatorAttributes {
+struct OperatorAttributes final {
 	OperatorType type;
 	bool allowOverride;
 	std::string description;
@@ -1367,7 +1367,7 @@ enum class StPt {
 	OperatorParameter
 };
 
-struct StatementPatternElement {
+struct StatementPatternElement final {
 	StPt type = enum_max<StPt>::value;
 	StringId token = StringId::Invalid;
 	bool required = false;
@@ -1378,7 +1378,7 @@ struct StatementPatternElement {
 			: type(type), token(token), required(required), subNodeIndex(subNodeIndex), errorMessage(std::move(errorMessage)) {}
 };
 
-struct StatementAttributes {
+struct StatementAttributes final {
 	size_t subNodes;
 	size_t skipTokens;
 	std::vector<StatementPatternElement> pattern;

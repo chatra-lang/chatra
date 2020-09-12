@@ -743,7 +743,7 @@ void RuntimeImp::restoreEntities(Reader& r, PackageId packageId, Node* node) {
 		static_cast<className*>(object)->restoreReferences(r);  break
 
 template <class Type>
-struct RestoreExceptionPredicate {
+struct RestoreExceptionPredicate final {
 	void operator()(Object** object, Storage& storage) {
 		*object = new Type(storage);
 	}

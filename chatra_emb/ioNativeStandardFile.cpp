@@ -95,7 +95,7 @@ struct StandardFileCommon : public IFile {
 	}
 };
 
-struct ReadStandardFile : public StandardFileCommon {
+struct ReadStandardFile final : public StandardFileCommon {
 	using StandardFileCommon::StandardFileCommon;
 
 	size_t read(uint8_t* dest, size_t length) override {
@@ -119,7 +119,7 @@ struct ReadStandardFile : public StandardFileCommon {
 	}
 };
 
-struct WriteStandardFile : public StandardFileCommon {
+struct WriteStandardFile final : public StandardFileCommon {
 	WriteStandardFile(std::string fileName, FileOpenFlags::Type flags,
 			std::FILE* fp, size_t length, bool append) : StandardFileCommon(std::move(fileName), flags, fp, length) {
 		if (append) {
@@ -163,7 +163,7 @@ static size_t getFileLengthOrClose(const std::string& fileName, FILE* fp) {
 	return static_cast<size_t>(st.st_size);
 }
 
-struct StandardFileSystem : public IFileSystem {
+struct StandardFileSystem final : public IFileSystem {
 	FileNameFilter filter;
 	explicit StandardFileSystem(FileNameFilter filter) : filter(filter) {}
 

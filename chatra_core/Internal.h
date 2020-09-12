@@ -106,7 +106,7 @@ struct IErrorReceiver {
 			const std::string& message, const std::vector<std::string>& args) = 0;
 };
 
-class IErrorReceiverBridge : public IErrorReceiver {
+class IErrorReceiverBridge final : public IErrorReceiver {
 private:
 	IErrorReceiver& target;
 	unsigned errorCount = 0;
@@ -147,7 +147,7 @@ struct IAssertionNullErrorReceiver final : public IErrorReceiver {
 };
 
 
-class SpinLock {
+class SpinLock final {
 private:
 	std::atomic_flag flag = ATOMIC_FLAG_INIT;
 
