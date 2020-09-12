@@ -100,8 +100,7 @@ size_t ByteArrayData::fetchIndex(Ct& ct, size_t position, bool allowBoundary) {
 		if (index == data.size() && allowBoundary)
 			return index;
 		throw IllegalArgumentException(
-				"specified position is out of range; size=%zu, specified = %lld",
-				data.size(), static_cast<long long>(position));
+				"specified position is out of range; size=%zu, specified = %zu", data.size(), position);
 	}
 	return index;
 }
