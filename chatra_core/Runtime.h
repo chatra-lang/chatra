@@ -22,6 +22,7 @@
 #define CHATRA_RUNTIME_H
 
 #include "chatra.h"
+#include "chatra_debugger.h"
 #include "Internal.h"
 #include "CharacterClass.h"
 #include "LexicalAnalyzer.h"
@@ -54,6 +55,7 @@ class RuntimeImp;
 
 struct OperatorNotSupportedException : public std::exception {};
 struct AbortThreadException : public std::exception {};
+struct BreakPointDuringStepRunException : public std::exception {};
 
 // Special node types
 constexpr NodeType adhocNodeType(size_t delta) noexcept {
@@ -62,6 +64,9 @@ constexpr NodeType adhocNodeType(size_t delta) noexcept {
 
 constexpr NodeType ntFinalizer = adhocNodeType(0);
 constexpr NodeType ntParserError = adhocNodeType(1);
+constexpr NodeType ntBreakPoint = adhocNodeType(2);
+constexpr NodeType ntBreakPointFor = adhocNodeType(3);
+constexpr NodeType ntBreakPointWhile = adhocNodeType(4);
 
 // Special operator types
 constexpr Operator adhocOperator(size_t delta) noexcept {
@@ -639,6 +644,7 @@ public:
 
 class Thread final : public IdType<Requester, Thread>, public IErrorReceiver {
 	friend class Frame;
+	friend class RuntimeImp;
 
 public:
 	RuntimeImp& runtime;
@@ -869,7 +875,13 @@ public:
 
 	void finish();
 
+	enum class StepRunResult {
+		Abort, Continue, Next
+	};
+	StepRunResult stepRun();
 	void run();
+
+	Node* currentNode(size_t frameIndex = SIZE_MAX) const;
 
 	Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept;
 	TemporaryObject* restoreTemporary(Reader& r) const;
@@ -882,7 +894,7 @@ public:
 class Instance final : public IdType<InstanceId, Instance> {
 public:
 	PackageId primaryPackageId;
-	SpinLock lockThreads;
+	mutable SpinLock lockThreads;
 	std::unordered_map<Requester, std::unique_ptr<Thread>> threads;
 
 public:
@@ -966,8 +978,24 @@ public:
 };
 
 
-class RuntimeImp final : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration {
+enum class BreakPointType {
+	BreakPoint,
+	BreakPointFor,
+	BreakPointWhile,
+};
+
+struct BreakPoint : public IdType<debugger::BreakPointId, BreakPoint> {
+	BreakPointType type = BreakPointType::BreakPoint;
+	debugger::CodePoint point;
+	Node* node = nullptr;
+	std::vector<Node*> tagNodes;
+};
+
+
+class RuntimeImp final : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration, public debugger::IDebugger {
 public:
+	std::weak_ptr<RuntimeImp> self;
+
 	RuntimeId runtimeId;
 	std::shared_ptr<IHost> host;
 	bool multiThread = false;
@@ -1038,6 +1066,12 @@ public:
 	SpinLock lockDrivers;
 	std::unordered_map<DriverType, std::unique_ptr<IDriver>> drivers;
 
+	// Debugger
+	mutable std::mutex lockDebugger;
+	bool paused = false;
+	unsigned previousWorkerThreads = 0;
+	IdPool<debugger::BreakPointId, BreakPoint> breakPoints;
+
 private:
 	void launchStorage();
 	void launchFinalizerThread();
@@ -1090,9 +1124,15 @@ public:
 
 	void outputError(const std::string& message) const;
 
+	Thread* popDebuggableThread(debugger::ThreadId threadId);
+	template <typename ContinueCond>
+	debugger::StepRunResult stepRun(Thread* thread, ContinueCond continueCond);
+	debugger::CodePoint nodeToCodePoint(PackageId packageId, Node* node);
+
 public:
 	explicit RuntimeImp(std::shared_ptr<IHost> host) noexcept;
 
+	void setSelf(std::shared_ptr<RuntimeImp>& self);
 	void initialize(unsigned initialThreadCount);
 	void initialize(unsigned initialThreadCount, const std::vector<uint8_t>& savedState);
 
@@ -1117,6 +1157,16 @@ public:
 	void stop(InstanceId instanceId) override;
 	TimerId addTimer(const std::string& name) override;
 	void increment(TimerId timerId, int64_t step) override;
+	std::shared_ptr<debugger::IDebugger> getDebugger() override;
+
+	void pause() override;
+	void resume() override;
+	debugger::StepRunResult stepOver(debugger::ThreadId threadId) override;
+	debugger::StepRunResult stepInto(debugger::ThreadId threadId) override;
+	debugger::StepRunResult stepOut(debugger::ThreadId threadId) override;
+	std::vector<debugger::InstanceState> getInstancesState() override;
+	debugger::ThreadState getThreadState(debugger::ThreadId threadId) override;
+	debugger::FrameState getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) override;
 
 #ifndef CHATRA_NDEBUG
 	size_t objectCount() { return storage->objectCount(); }

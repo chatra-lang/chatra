@@ -380,6 +380,10 @@ struct IHost {
 	}
 };
 
+// chatra_debugger.h
+namespace debugger {
+struct IDebugger;
+}
 
 class Runtime {
 public:
@@ -437,6 +441,8 @@ public:
 	/// @param step  must be &gt;=0
 	/// @throws IllegalArgumentException
 	virtual void increment(TimerId timerId, int64_t step) = 0;
+
+	virtual std::shared_ptr<debugger::IDebugger> getDebugger() = 0;
 };
 
 

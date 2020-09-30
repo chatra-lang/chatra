@@ -1135,9 +1135,107 @@ void RuntimeImp::outputError(const std::string& message) const {
 	host->console(message);
 }
 
+Thread* RuntimeImp::popDebuggableThread(debugger::ThreadId threadId) {
+	if (!paused)
+		throw UnsupportedOperationException("Runtime is not paused");
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+
+	Thread* thread = threadIds.lockAndRef(requester);
+	if (thread == nullptr)
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+
+	{
+		std::lock_guard<SpinLock> lock0(lockQueue);
+		auto it = std::find(queue.cbegin(), queue.cend(), thread);
+		if (it == queue.cend())
+			return nullptr;
+		queue.erase(it);
+	}
+
+	return thread;
+}
+
+template <typename ContinueCond>
+debugger::StepRunResult RuntimeImp::stepRun(Thread* thread, ContinueCond continueCond) {
+	auto threadId = thread->getId();
+
+	checkGc();
+	thread->captureStringTable();
+
+	while (continueCond()) {
+		try {
+			auto r0 = thread->stepRun();
+			if (r0 == Thread::StepRunResult::Abort) {
+				thread->finish();
+				return debugger::StepRunResult::Finished;
+			}
+			if (r0 == Thread::StepRunResult::Continue)
+				continue;
+		}
+		catch (const BreakPointDuringStepRunException&) {
+			enqueue(thread);  // TODO
+			return debugger::StepRunResult::BreakPoint;
+		}
+
+		if (threadIds.lockAndRef(threadId) == nullptr)
+			return debugger::StepRunResult::Finished;
+
+		{
+			std::lock_guard<SpinLock> lock0(lockQueue);
+			auto it = std::find(queue.cbegin(), queue.cend(), thread);
+			if (it != queue.cend()) {
+				queue.erase(it);
+				continue;
+			}
+		}
+
+		{
+			std::lock_guard<SpinLock> lock1(lockWaitingThreads);
+			auto it = std::find_if(waitingThreads.cbegin(), waitingThreads.cend(), [&](const std::pair<unsigned, Thread*>& e) {
+				return e.second == thread;
+			});
+			if (it != waitingThreads.cend())
+				return debugger::StepRunResult::Blocked;
+		}
+
+		return debugger::StepRunResult::WaitingResources;
+	}
+
+	enqueue(thread);
+	return debugger::StepRunResult::Stopped;
+}
+
+debugger::CodePoint RuntimeImp::nodeToCodePoint(PackageId packageId, Node* node) {
+	if (node == nullptr)
+		return debugger::CodePoint();
+
+	auto line = (node->tokens.empty() ? node->line : node->tokens[0]->line.lock());
+	if (!line)
+		return debugger::CodePoint();
+
+	debugger::CodePoint ret;
+
+	{
+		std::lock_guard<decltype(packageIds)> lock0(packageIds);
+		if (!packageIds.has(packageId))
+			throw IllegalArgumentException();
+		ret.packageName = packageIds.ref(packageId)->name;
+	}
+
+	ret.fileName = line->fileName;
+	ret.lineNo = line->lineNo;
+	return ret;
+}
+
+
 RuntimeImp::RuntimeImp(std::shared_ptr<IHost> host) noexcept
 		: runtimeId(static_cast<RuntimeId>(lastRuntimeId.fetch_add(1))),
 		host(std::move(host)), methods(MethodTable::ForEmbeddedMethods()) {
+}
+
+void RuntimeImp::setSelf(std::shared_ptr<RuntimeImp>& self) {
+	this->self = self;
 }
 
 void RuntimeImp::initialize(unsigned initialThreadCount) {
@@ -1466,6 +1564,184 @@ void RuntimeImp::increment(TimerId timerId, int64_t step) {
 	timer->increment(std::chrono::milliseconds(step));
 }
 
+std::shared_ptr<debugger::IDebugger> RuntimeImp::getDebugger() {
+	return std::static_pointer_cast<debugger::IDebugger>(self.lock());
+}
+
+void RuntimeImp::pause() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (paused)
+		throw UnsupportedOperationException("Runtime is already paused");
+
+	if (multiThread) {
+		{
+			std::unique_lock<std::mutex> lock1(mtQueue);
+			previousWorkerThreads = targetWorkerThreads;
+		}
+		shutdownThreads();
+	}
+	paused = true;
+}
+
+void RuntimeImp::resume() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw UnsupportedOperationException("Runtime is not paused");
+
+	if (multiThread)
+		setWorkers(previousWorkerThreads);
+	paused = false;
+}
+
+debugger::StepRunResult RuntimeImp::stepOver(debugger::ThreadId threadId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	auto* thread = popDebuggableThread(threadId);
+	if (thread == nullptr)
+		return debugger::StepRunResult::NotInRunning;
+
+	auto framesCount = thread->frames.size();
+	auto* node = thread->currentNode();
+	if (node == nullptr) {
+		enqueue(thread);
+		return debugger::StepRunResult::NotTraceable;
+	}
+
+	return stepRun(thread, [&]() {
+		return framesCount <= thread->frames.size()
+				&& node == thread->currentNode(framesCount - 1);
+	});
+}
+
+debugger::StepRunResult RuntimeImp::stepInto(debugger::ThreadId threadId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	auto* thread = popDebuggableThread(threadId);
+	if (thread == nullptr)
+		return debugger::StepRunResult::NotInRunning;
+
+	auto framesCount = thread->frames.size();
+	auto* node = thread->currentNode();
+	if (node == nullptr) {
+		enqueue(thread);
+		return debugger::StepRunResult::NotTraceable;
+	}
+
+	return stepRun(thread, [&]() {
+		return framesCount == thread->frames.size() && node == thread->currentNode();
+	});
+}
+
+debugger::StepRunResult RuntimeImp::stepOut(debugger::ThreadId threadId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	auto* thread = popDebuggableThread(threadId);
+	if (thread == nullptr)
+		return debugger::StepRunResult::NotInRunning;
+
+	auto targetFrameIndex = thread->frames.size() - 1;
+	for (;;) {
+		auto& f = thread->frames[targetFrameIndex];
+		targetFrameIndex -= f.popCount;
+		if (f.scope->getScopeType() != ScopeType::Block)
+			break;
+	}
+
+	return stepRun(thread, [&]() {
+		return targetFrameIndex + 1 < thread->frames.size();
+	});
+}
+
+std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw UnsupportedOperationException();
+
+	std::vector<debugger::InstanceState> ret;
+	instanceIds.forEach([&](const Instance& instance) {
+		auto instanceId = instance.getId();
+		if (instanceId == finalizerInstanceId || instanceId == gcInstance->getId())
+			return;
+
+		ret.emplace_back();
+		auto& v = ret.back();
+
+		v.instanceId = instance.getId();
+		v.primaryPackageId = instance.primaryPackageId;
+
+		std::lock_guard<SpinLock> lock1(instance.lockThreads);
+		v.threadIds.reserve(instance.threads.size());
+		for (auto& e : instance.threads)
+			v.threadIds.emplace_back(static_cast<debugger::ThreadId>(static_cast<size_t>(e.first)));
+	});
+	return ret;
+}
+
+debugger::ThreadState RuntimeImp::getThreadState(debugger::ThreadId threadId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw UnsupportedOperationException();
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+
+	std::lock_guard<decltype(threadIds)> lock1(threadIds);
+	if (!threadIds.has(requester))
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+	auto* thread = threadIds.ref(requester);
+
+	debugger::ThreadState ret;
+	ret.threadId = threadId;
+
+	for (size_t frameIndex = thread->frames.size() - 1; frameIndex + 1 > residentialFrameCount;
+			frameIndex -= thread->frames[frameIndex].popCount) {
+		ret.frameIds.emplace_back(static_cast<debugger::FrameId>(frameIndex));
+	}
+
+	return ret;
+}
+
+debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw UnsupportedOperationException();
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+	auto frameIndex = static_cast<size_t>(frameId);
+
+	std::lock_guard<decltype(threadIds)> lock1(threadIds);
+	if (!threadIds.has(requester))
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+	auto* thread = threadIds.ref(requester);
+
+	if (frameIndex >= thread->frames.size())
+		throw IllegalArgumentException("specified frameId(%zu) is not found", frameIndex);
+	auto& f = thread->frames[frameIndex];
+
+	debugger::FrameState ret;
+	ret.threadId = threadId;
+	ret.frameId = frameId;
+
+	switch (f.scope->getScopeType()) {
+	case ScopeType::Package:  ret.frameType = debugger::FrameType::Package;  break;
+	case ScopeType::ScriptRoot:  ret.frameType = debugger::FrameType::ScriptRoot;  break;
+	case ScopeType::Class:  ret.frameType = debugger::FrameType::Class;  break;
+	case ScopeType::Method:  ret.frameType = debugger::FrameType::Method;  break;
+	case ScopeType::InnerMethod:  ret.frameType = debugger::FrameType::Method;  break;
+	case ScopeType::Block:  ret.frameType = debugger::FrameType::Block;  break;
+	default:
+		throw IllegalArgumentException();
+	}
+
+	ret.current = nodeToCodePoint(f.package.getId(), thread->currentNode(frameIndex));
+
+	for (; frameIndex != SIZE_MAX; frameIndex = thread->frames[frameIndex].parentIndex) {
+		auto scopeType = thread->frames[frameIndex].scope->getScopeType();
+		if (scopeType == ScopeType::Thread || scopeType == ScopeType::Global)
+			continue;
+		ret.scopeFrameIds.emplace_back(static_cast<debugger::FrameId>(frameIndex));
+	}
+
+	return ret;
+}
+
+
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
 
@@ -1493,6 +1769,7 @@ std::shared_ptr<Runtime> Runtime::newInstance(std::shared_ptr<IHost> host,
 	}
 
 	auto runtime = std::make_shared<RuntimeImp>(std::move(host));
+	runtime->setSelf(runtime);
 	if (savedState.empty())
 		runtime->initialize(initialThreadCount);
 	else

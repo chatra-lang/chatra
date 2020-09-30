@@ -3623,6 +3623,306 @@ void Thread::finish() {
 	chatra_assert(transferReq.empty());
 }
 
+Thread::StepRunResult Thread::stepRun() {
+	try {
+		if (!resumeExpression())
+			return StepRunResult::Next;
+
+		if (!parse())
+			return StepRunResult::Next;
+
+		auto& f = frames.back();
+		if (f.exception != nullptr) {
+			consumeException();
+			return StepRunResult::Continue;
+		}
+
+		if (f.phase < f.node->blockNodes.size()) {
+			f.lock->moveTemporaryToSoftLock();
+
+			auto& n = f.node->blockNodes[f.phase];
+			switch (n->type) {
+			case NodeType::Import:
+			case NodeType::Def:
+			case NodeType::DefOperator:
+			case NodeType::Class:
+				f.phase++;
+				return StepRunResult::Continue;
+
+			case NodeType::Expression:
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Sync:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Touch:
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Var:
+				f.phase++;
+				for (auto& nDef : n->subNodes[SubNode::Var_Definitions]->subNodes) {
+					if (nDef->op != Operator::Pair)
+						continue;
+					f.stack.emplace_back(&popValueNode, 0);
+					f.stack.emplace_back(&varStatementMarkerNode, 0);
+					f.stack.emplace_back(nDef.get(), 0);
+				}
+				return StepRunResult::Continue;
+
+			case NodeType::IfGroup:
+				f.phase++;
+				pushBlock(n.get(), Phase::IfGroup_Base0);
+				checkIsValidNode(n->blockNodes[0].get());
+				prepareExpression(n->blockNodes[0]->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::For:
+				f.phase++;
+				pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
+				processFor();
+				return StepRunResult::Continue;
+
+			case NodeType::While:
+				f.phase++;
+				pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
+				prepareExpression(n->subNodes[SubNode::While_Condition].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Switch:
+				f.phase++;
+				pushBlock(n.get(), Phase::Switch_Base0);
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Case:
+				f.phase++;
+				pushBlock(n.get(), Phase::Case_Base);
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Default:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Do:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Catch:
+				f.phase++;
+				return StepRunResult::Continue;
+
+			case NodeType::Finally:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Break:
+				breakStatement(n.get());
+				return StepRunResult::Continue;
+
+			case NodeType::Continue:
+				continueStatement(n.get());
+				return StepRunResult::Continue;
+
+			case NodeType::Return:
+				if (n->subNodes[0]) {
+					f.stack.emplace_back(n.get(), 0);
+					prepareExpression(n->subNodes[0].get());
+				}
+				else {
+					returnStatement(nullptr, true);
+					return StepRunResult::Next;
+				}
+				return StepRunResult::Continue;
+
+			case NodeType::Throw:
+				if (n->subNodes[0]) {
+					f.stack.emplace_back(n.get(), 0);
+					prepareExpression(n->subNodes[0].get());
+				}
+				else {
+					if (f.caughtException == nullptr) {
+						errorAtNode(*this, ErrorLevel::Error, n.get(), "no exception raised to re-throw", {});
+						emitError(StringId::UnsupportedOperationException, n.get());
+						throw AbortThreadException();
+					}
+
+					f.phase++;
+					raiseException(f.caughtException);
+					f.recycle(f.caughtException);
+					f.caughtException = nullptr;
+				}
+				return StepRunResult::Continue;
+
+			case ntFinalizer:
+				processFinalizer();
+				return StepRunResult::Next;
+
+			case ntParserError:
+				checkIsValidNode(n.get());
+				return StepRunResult::Next;
+
+			default:
+				throw InternalError();
+			}
+		}
+
+		switch (f.node->type) {
+		case NodeType::ScriptRoot:
+			if (f.phase == Phase::ScriptRoot_Initial) {
+				f.phase = 0;
+				f.stack.emplace_back(&initializePackageNode, 0);
+				return StepRunResult::Continue;
+			}
+
+			if (f.phase != Phase::ScriptRoot_InitCall1) {
+				f.phase = Phase::ScriptRoot_InitCall0;  // To avoid emitting meaningless exception
+				auto* value = f.pushTemporary();
+				value->setName(nullptr, StringId::Init);
+				if (value->evaluateAsPackageInitCall() == TemporaryObject::EvaluationResult::Succeeded) {
+					auto* method = value->getRefMethod();
+					if (method != nullptr) {
+						f.phase = Phase::ScriptRoot_InitCall1;
+						methodCall(false);
+						return StepRunResult::Next;
+					}
+				}
+			}
+
+			returnStatement(nullptr, false);
+			return StepRunResult::Next;
+
+		case NodeType::Def:
+		case NodeType::DefOperator:
+		case NodeType::Class:
+			returnStatement(nullptr, false);
+			return StepRunResult::Next;
+
+		case NodeType::Sync:
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::IfGroup: {
+			if (f.phase < Phase::IfGroup_Base0) {
+				pop();
+				return StepRunResult::Continue;
+			}
+
+			chatra_assert(f.values.size() == 1);
+			size_t index = f.phase - Phase::IfGroup_Base1;
+			Node* blockNode = f.node->blockNodes[index].get();
+			if (getBoolOrThrow(blockNode, 0)) {
+				f.phase = f.node->blockNodes.size();
+				pushBlock(blockNode, 0);
+			}
+			else {
+				index++;
+				if (index == f.node->blockNodes.size())
+					pop();
+				else {
+					blockNode = f.node->blockNodes[index].get();
+					checkIsValidNode(blockNode);
+					if (blockNode->type == NodeType::Else) {
+						f.phase = f.node->blockNodes.size();
+						pushBlock(blockNode, 0);
+					}
+					else
+						prepareExpression(blockNode->subNodes[0].get());
+				}
+			}
+			return StepRunResult::Continue;
+		}
+
+		case NodeType::If:
+		case NodeType::ElseIf:
+		case NodeType::Else:
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::For:
+			processFor();
+			return StepRunResult::Continue;
+
+		case NodeType::While:
+			if (f.phase <= Phase::While_Continue) {
+				f.phase = Phase::While_Condition0;
+				prepareExpression(f.node->subNodes[SubNode::While_Condition].get());
+				return StepRunResult::Continue;
+			}
+			chatra_assert(f.phase == Phase::While_Condition1 && f.values.size() == 1);
+			if (getBoolOrThrow(f.node, SubNode::While_Condition))
+				f.phase = 0;
+			else
+				pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Switch: {
+			if (f.phase < Phase::Switch_Base0) {
+				pop();
+				return StepRunResult::Continue;
+			}
+
+			chatra_assert(f.phase == Phase::Switch_Base1 && f.values.size() == 1);
+			convertTopToScalar(f.node, 0);
+			auto* value = f.values.back();
+			if (value->hasRef() && value->getRef().valueType() == ReferenceValueType::Bool) {
+				errorAtNode(*this, ErrorLevel::Error, f.node->subNodes[0].get(),
+						"switch statement cannot handle Bool value", {});
+				throw RuntimeException(StringId::UnsupportedOperationException);
+			}
+
+			f.phase = 0;
+			return StepRunResult::Continue;
+		}
+
+		case NodeType::Case:
+			if (!processSwitchCase())
+				return StepRunResult::Next;
+			return StepRunResult::Continue;
+
+		case NodeType::Default:
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Do:
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Catch:
+			f.recycle(f.caughtException);
+			f.caughtException = nullptr;
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Finally:
+			pop();
+			return StepRunResult::Continue;
+
+		default:
+			throw InternalError();
+		}
+	}
+	catch (const RuntimeException& ex) {
+		raiseException(ex);
+	}
+	catch (const AbortThreadException&) {
+		return StepRunResult::Abort;
+	}
+	catch (const std::exception&) {
+		runtime.outputError("fatal: internal error\n");
+		return StepRunResult::Abort;
+	}
+
+	return StepRunResult::Continue;
+}
+
 void Thread::run() {
 	/*{
 		std::lock_guard<SpinLock> lock(lockTransferReq);
@@ -3639,304 +3939,24 @@ void Thread::run() {
 	captureStringTable();
 
 	while (frames.size() > residentialFrameCount) {
-		try {
-			if (!resumeExpression())
-				return;
-
-			if (!parse())
-				return;
-
-			auto& f = frames.back();
-			if (f.exception != nullptr) {
-				consumeException();
-				continue;
-			}
-
-			if (f.phase < f.node->blockNodes.size()) {
-				f.lock->moveTemporaryToSoftLock();
-
-				auto& n = f.node->blockNodes[f.phase];
-				switch (n->type) {
-				case NodeType::Import:
-				case NodeType::Def:
-				case NodeType::DefOperator:
-				case NodeType::Class:
-					f.phase++;
-					continue;
-
-				case NodeType::Expression:
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Sync:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Touch:
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Var:
-					f.phase++;
-					for (auto& nDef : n->subNodes[SubNode::Var_Definitions]->subNodes) {
-						if (nDef->op != Operator::Pair)
-							continue;
-						f.stack.emplace_back(&popValueNode, 0);
-						f.stack.emplace_back(&varStatementMarkerNode, 0);
-						f.stack.emplace_back(nDef.get(), 0);
-					}
-					continue;
-
-				case NodeType::IfGroup:
-					f.phase++;
-					pushBlock(n.get(), Phase::IfGroup_Base0);
-					checkIsValidNode(n->blockNodes[0].get());
-					prepareExpression(n->blockNodes[0]->subNodes[0].get());
-					continue;
-
-				case NodeType::For:
-					f.phase++;
-					pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
-					processFor();
-					continue;
-
-				case NodeType::While:
-					f.phase++;
-					pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
-					prepareExpression(n->subNodes[SubNode::While_Condition].get());
-					continue;
-
-				case NodeType::Switch:
-					f.phase++;
-					pushBlock(n.get(), Phase::Switch_Base0);
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Case:
-					f.phase++;
-					pushBlock(n.get(), Phase::Case_Base);
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Default:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Do:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Catch:
-					f.phase++;
-					continue;
-
-				case NodeType::Finally:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Break:
-					breakStatement(n.get());
-					continue;
-
-				case NodeType::Continue:
-					continueStatement(n.get());
-					continue;
-
-				case NodeType::Return:
-					if (n->subNodes[0]) {
-						f.stack.emplace_back(n.get(), 0);
-						prepareExpression(n->subNodes[0].get());
-					}
-					else {
-						returnStatement(nullptr, true);
-						return;
-					}
-					continue;
-
-				case NodeType::Throw:
-					if (n->subNodes[0]) {
-						f.stack.emplace_back(n.get(), 0);
-						prepareExpression(n->subNodes[0].get());
-					}
-					else {
-						if (f.caughtException == nullptr) {
-							errorAtNode(*this, ErrorLevel::Error, n.get(), "no exception raised to re-throw", {});
-							emitError(StringId::UnsupportedOperationException, n.get());
-							throw AbortThreadException();
-						}
-
-						f.phase++;
-						raiseException(f.caughtException);
-						f.recycle(f.caughtException);
-						f.caughtException = nullptr;
-					}
-					continue;
-
-				case ntFinalizer:
-					processFinalizer();
-					return;
-
-				case ntParserError:
-					checkIsValidNode(n.get());
-					return;
-
-				default:
-					throw InternalError();
-				}
-			}
-
-			switch (f.node->type) {
-			case NodeType::ScriptRoot:
-				if (f.phase == Phase::ScriptRoot_Initial) {
-					f.phase = 0;
-					f.stack.emplace_back(&initializePackageNode, 0);
-					continue;
-				}
-
-				if (f.phase != Phase::ScriptRoot_InitCall1) {
-					f.phase = Phase::ScriptRoot_InitCall0;  // To avoid emitting meaningless exception
-					auto* value = f.pushTemporary();
-					value->setName(nullptr, StringId::Init);
-					if (value->evaluateAsPackageInitCall() == TemporaryObject::EvaluationResult::Succeeded) {
-						auto* method = value->getRefMethod();
-						if (method != nullptr) {
-							f.phase = Phase::ScriptRoot_InitCall1;
-							methodCall(false);
-							return;
-						}
-					}
-				}
-
-				returnStatement(nullptr, false);
-				return;
-
-			case NodeType::Def:
-			case NodeType::DefOperator:
-			case NodeType::Class:
-				returnStatement(nullptr, false);
-				return;
-
-			case NodeType::Sync:
-				pop();
-				continue;
-
-			case NodeType::IfGroup: {
-				if (f.phase < Phase::IfGroup_Base0) {
-					pop();
-					continue;
-				}
-
-				chatra_assert(f.values.size() == 1);
-				size_t index = f.phase - Phase::IfGroup_Base1;
-				Node* blockNode = f.node->blockNodes[index].get();
-				if (getBoolOrThrow(blockNode, 0)) {
-					f.phase = f.node->blockNodes.size();
-					pushBlock(blockNode, 0);
-				}
-				else {
-					index++;
-					if (index == f.node->blockNodes.size())
-						pop();
-					else {
-						blockNode = f.node->blockNodes[index].get();
-						checkIsValidNode(blockNode);
-						if (blockNode->type == NodeType::Else) {
-							f.phase = f.node->blockNodes.size();
-							pushBlock(blockNode, 0);
-						}
-						else
-							prepareExpression(blockNode->subNodes[0].get());
-					}
-				}
-				continue;
-			}
-
-			case NodeType::If:
-			case NodeType::ElseIf:
-			case NodeType::Else:
-				pop();
-				continue;
-
-			case NodeType::For:
-				processFor();
-				continue;
-
-			case NodeType::While:
-				if (f.phase <= Phase::While_Continue) {
-					f.phase = Phase::While_Condition0;
-					prepareExpression(f.node->subNodes[SubNode::While_Condition].get());
-					continue;
-				}
-				chatra_assert(f.phase == Phase::While_Condition1 && f.values.size() == 1);
-				if (getBoolOrThrow(f.node, SubNode::While_Condition))
-					f.phase = 0;
-				else
-					pop();
-				continue;
-
-			case NodeType::Switch: {
-				if (f.phase < Phase::Switch_Base0) {
-					pop();
-					continue;
-				}
-
-				chatra_assert(f.phase == Phase::Switch_Base1 && f.values.size() == 1);
-				convertTopToScalar(f.node, 0);
-				auto* value = f.values.back();
-				if (value->hasRef() && value->getRef().valueType() == ReferenceValueType::Bool) {
-					errorAtNode(*this, ErrorLevel::Error, f.node->subNodes[0].get(),
-							"switch statement cannot handle Bool value", {});
-					throw RuntimeException(StringId::UnsupportedOperationException);
-				}
-
-				f.phase = 0;
-				continue;
-			}
-
-			case NodeType::Case:
-				if (!processSwitchCase())
-					return;
-				continue;
-
-			case NodeType::Default:
-				pop();
-				continue;
-
-			case NodeType::Do:
-				pop();
-				continue;
-
-			case NodeType::Catch:
-				f.recycle(f.caughtException);
-				f.caughtException = nullptr;
-				pop();
-				continue;
-
-			case NodeType::Finally:
-				pop();
-				continue;
-
-			default:
-				throw InternalError();
-			}
-		}
-		catch (const RuntimeException& ex) {
-			raiseException(ex);
-		}
-		catch (const AbortThreadException&) {
+		auto r0 = stepRun();
+		if (r0 == StepRunResult::Abort)
 			break;
-		}
-		catch (const std::exception&) {
-			runtime.outputError("fatal: internal error\n");
-			break;
-		}
+		else if (r0 == StepRunResult::Continue)
+			continue;
+		else
+			return;
 	}
 
 	finish();
+}
+
+Node* Thread::currentNode(size_t frameIndex) const {
+	auto& f = (frameIndex == SIZE_MAX ? frames.back() : frames[frameIndex]);
+	if (f.node == nullptr)
+		return nullptr;
+	auto phase = (f.phase != 0 && !f.stack.empty() ? f.phase - 1 : f.phase);
+	return phase < f.node->blockNodes.size() ? f.node->blockNodes[phase].get() : f.node;
 }
 
 Thread::Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept
