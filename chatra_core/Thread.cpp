@@ -111,27 +111,12 @@ bool Thread::parse() {
 	auto scriptNode = f.package.parseNode(errorReceiverBridge, f.node);
 	scanInnerFunctions(&errorReceiverBridge, runtime.primarySTable.get());
 
-	if (runtime.primarySTable->getVersion() != sTableVersion) {
-		runtime.primarySTable->clearDirty();
-		{
-			std::lock_guard<SpinLock> lock(runtime.lockSTable);
-			runtime.distributedSTable = runtime.primarySTable->copy();
-		}
-		runtime.threadIds.forEach([&](Thread& thread) {
-			thread.hasNewSTable = true;
-		});
+	if (runtime.distributeStringTable(sTableVersion))
 		captureStringTable();
-	}
 
 	// Defer distributing node to each threads because new thread creation during parseBlockNodes() causes MemberNotFoundException
-	if (scriptNode) {
-		std::lock_guard<SpinLock> lock(f.package.lockNode);
-		f.package.node = std::move(scriptNode);
-		auto* nNew = f.package.node.get();
-		for (auto* thread : f.package.threadsWaitingForNode)
-			thread->frames.back().node = nNew;
-		f.package.threadsWaitingForNode.clear();
-	}
+	if (scriptNode)
+		f.package.distributeScriptNode(std::move(scriptNode));
 
 	f.lock->release(parser, LockType::Soft);
 
@@ -2758,6 +2743,7 @@ bool Thread::resumeExpression() {
 				continue;
 			return false;
 
+		case ntBreakPointFor:
 		case NodeType::For:
 			if (assignmentOperator())
 				continue;
@@ -3479,6 +3465,23 @@ void Thread::processFinalizer() {
 	runtime.enqueue(this);
 }
 
+template <typename PhaseCond>
+bool Thread::checkDebugBreak(Node* node0, Thread* thread, size_t& phase, PhaseCond phaseCond) {
+	if (!phaseCond(phase & Phase::PhaseMask)) {
+		phase &= Phase::PhaseMask;
+		return false;
+	}
+
+	if ((phase & Phase::BreakPointFlag) == 0) {
+		phase |= Phase::BreakPointFlag;
+		runtime.debugBreak(node0, thread);
+		return true;
+	}
+
+	phase &= Phase::PhaseMask;
+	return false;
+}
+
 Frame* Thread::findClassFrame() {
 	for (size_t frameIndex = frames.size() - 1; frameIndex != SIZE_MAX; ) {
 		auto& f = frames[frameIndex];
@@ -3680,17 +3683,38 @@ Thread::StepRunResult Thread::stepRun() {
 				prepareExpression(n->blockNodes[0]->subNodes[0].get());
 				return StepRunResult::Continue;
 
+			case ntBreakPointIfGroup:
+				f.phase++;
+				pushBlock(n.get(), Phase::IfGroup_Base0);
+				checkIsValidNode(n->blockNodes[0].get());
+				prepareExpression(n->blockNodes[0]->subNodes[0].get());
+				runtime.debugBreak(n->blockNodes[0].get(), this);
+				return StepRunResult::BreakPoint;
+
 			case NodeType::For:
 				f.phase++;
 				pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
 				processFor();
 				return StepRunResult::Continue;
 
+			case ntBreakPointFor:
+				f.phase++;
+				pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
+				runtime.debugBreak(n.get(), this);
+				return StepRunResult::BreakPoint;
+
 			case NodeType::While:
 				f.phase++;
 				pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
 				prepareExpression(n->subNodes[SubNode::While_Condition].get());
 				return StepRunResult::Continue;
+
+			case ntBreakPointWhile:
+				f.phase++;
+				pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
+				prepareExpression(n->subNodes[SubNode::While_Condition].get());
+				runtime.debugBreak(n.get(), this);
+				return StepRunResult::BreakPoint;
 
 			case NodeType::Switch:
 				f.phase++;
@@ -3769,6 +3793,16 @@ Thread::StepRunResult Thread::stepRun() {
 				checkIsValidNode(n.get());
 				return StepRunResult::Next;
 
+			case ntBreakPointStatement:
+				f.phase++;
+				runtime.debugBreak(f.node->blockNodes[f.phase].get(), this);
+				return StepRunResult::BreakPoint;
+
+			case ntBreakPointInnerBlock:
+				f.phase++;
+				runtime.debugBreak(f.node, this);
+				return StepRunResult::BreakPoint;
+
 			default:
 				throw InternalError();
 			}
@@ -3809,6 +3843,7 @@ Thread::StepRunResult Thread::stepRun() {
 			pop();
 			return StepRunResult::Continue;
 
+		case ntBreakPointIfGroup:
 		case NodeType::IfGroup: {
 			if (f.phase < Phase::IfGroup_Base0) {
 				pop();
@@ -3816,7 +3851,7 @@ Thread::StepRunResult Thread::stepRun() {
 			}
 
 			chatra_assert(f.values.size() == 1);
-			size_t index = f.phase - Phase::IfGroup_Base1;
+			size_t index = f.phase & Phase::IfGroup_IndexMask;
 			Node* blockNode = f.node->blockNodes[index].get();
 			if (getBoolOrThrow(blockNode, 0)) {
 				f.phase = f.node->blockNodes.size();
@@ -3829,12 +3864,29 @@ Thread::StepRunResult Thread::stepRun() {
 				else {
 					blockNode = f.node->blockNodes[index].get();
 					checkIsValidNode(blockNode);
-					if (blockNode->type == NodeType::Else) {
+					switch (blockNode->type) {
+					case ntBreakPointElseIf:
+						if (checkDebugBreak(blockNode, this, f.phase, [](size_t phase) { return true; }))
+							return StepRunResult::BreakPoint;
+						CHATRA_FALLTHROUGH;
+
+					case NodeType::ElseIf:
+						prepareExpression(blockNode->subNodes[0].get());
+						return StepRunResult::Continue;
+
+					case ntBreakPointElse:
+						if (checkDebugBreak(blockNode, this, f.phase, [](size_t phase) { return true; }))
+							return StepRunResult::BreakPoint;
+						CHATRA_FALLTHROUGH;
+
+					case NodeType::Else:
 						f.phase = f.node->blockNodes.size();
 						pushBlock(blockNode, 0);
+						return StepRunResult::Continue;
+
+					default:
+						throw InternalError();
 					}
-					else
-						prepareExpression(blockNode->subNodes[0].get());
 				}
 			}
 			return StepRunResult::Continue;
@@ -3843,12 +3895,26 @@ Thread::StepRunResult Thread::stepRun() {
 		case NodeType::If:
 		case NodeType::ElseIf:
 		case NodeType::Else:
+		case ntBreakPointElseIf:
+		case ntBreakPointElse:
 			pop();
 			return StepRunResult::Continue;
+
+		case ntBreakPointFor:
+			if (checkDebugBreak(f.node, this, f.phase, [](size_t phase) {
+					return phase < Phase::For_Begin || phase == Phase::For_Continue; }))
+				return StepRunResult::BreakPoint;
+			CHATRA_FALLTHROUGH;
 
 		case NodeType::For:
 			processFor();
 			return StepRunResult::Continue;
+
+		case ntBreakPointWhile:
+			if (checkDebugBreak(f.node, this, f.phase, [](size_t phase) {
+					return phase <= Phase::While_Continue; }))
+				return StepRunResult::BreakPoint;
+			CHATRA_FALLTHROUGH;
 
 		case NodeType::While:
 			if (f.phase <= Phase::While_Continue) {
@@ -3923,7 +3989,7 @@ Thread::StepRunResult Thread::stepRun() {
 	return StepRunResult::Continue;
 }
 
-void Thread::run() {
+Thread::RunResult Thread::run() {
 	/*{
 		std::lock_guard<SpinLock> lock(lockTransferReq);
 		std::printf("run: instanceId %u, threadId = %u; packageId = %u, frames.size = %u, transferReq = %u\n",
@@ -3939,22 +4005,46 @@ void Thread::run() {
 	captureStringTable();
 
 	while (frames.size() > residentialFrameCount) {
-		auto r0 = stepRun();
-		if (r0 == StepRunResult::Abort)
-			break;
-		else if (r0 == StepRunResult::Continue)
+		switch (stepRun()) {
+		case Thread::StepRunResult::Abort:
+			finish();
+			return RunResult::Next;
+		case Thread::StepRunResult::Continue:
 			continue;
-		else
-			return;
+		case Thread::StepRunResult::Next:
+			return RunResult::Next;
+		case Thread::StepRunResult::BreakPoint:
+			return RunResult::Stop;
+		}
 	}
 
 	finish();
+	return RunResult::Next;
 }
 
 Node* Thread::currentNode(size_t frameIndex) const {
 	auto& f = (frameIndex == SIZE_MAX ? frames.back() : frames[frameIndex]);
 	if (f.node == nullptr)
 		return nullptr;
+
+	// Special treatment for IfGroup -- IfGroup itself holds no line nor tokens,
+	//   and during execution of "if" statements block, sometimes Frame.node indicates IfGroup
+	//   even if "actual" code points currently running are one of "if", "else if", or "else" statements.
+	if ((f.node->type == NodeType::IfGroup || f.node->type == ntBreakPointIfGroup) &&
+			(f.phase >= Phase::IfGroup_Base0 || f.phase == f.node->blockNodes.size())) {
+		size_t index;
+		if (f.phase == Phase::IfGroup_Base0)
+			index = 0;
+		else if (f.phase >= Phase::IfGroup_Base1) {
+			index = f.phase & Phase::IfGroup_IndexMask;
+			if (f.stack.empty())
+				index++;
+		}
+		else
+			index = f.node->blockNodes.size() - 1;
+		return f.node->blockNodes[index].get();
+	}
+
 	auto phase = (f.phase != 0 && !f.stack.empty() ? f.phase - 1 : f.phase);
 	return phase < f.node->blockNodes.size() ? f.node->blockNodes[phase].get() : f.node;
 }

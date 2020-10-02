@@ -55,7 +55,6 @@ class RuntimeImp;
 
 struct OperatorNotSupportedException : public std::exception {};
 struct AbortThreadException : public std::exception {};
-struct BreakPointDuringStepRunException : public std::exception {};
 
 // Special node types
 constexpr NodeType adhocNodeType(size_t delta) noexcept {
@@ -64,9 +63,13 @@ constexpr NodeType adhocNodeType(size_t delta) noexcept {
 
 constexpr NodeType ntFinalizer = adhocNodeType(0);
 constexpr NodeType ntParserError = adhocNodeType(1);
-constexpr NodeType ntBreakPoint = adhocNodeType(2);
-constexpr NodeType ntBreakPointFor = adhocNodeType(3);
-constexpr NodeType ntBreakPointWhile = adhocNodeType(4);
+constexpr NodeType ntBreakPointStatement = adhocNodeType(2);
+constexpr NodeType ntBreakPointInnerBlock = adhocNodeType(3);
+constexpr NodeType ntBreakPointIfGroup = adhocNodeType(4);
+constexpr NodeType ntBreakPointElseIf = adhocNodeType(5);
+constexpr NodeType ntBreakPointElse = adhocNodeType(6);
+constexpr NodeType ntBreakPointFor = adhocNodeType(7);
+constexpr NodeType ntBreakPointWhile = adhocNodeType(8);
 
 // Special operator types
 constexpr Operator adhocOperator(size_t delta) noexcept {
@@ -561,21 +564,25 @@ public:
 constexpr size_t residentialFrameCount = 2;
 
 namespace Phase {
-	constexpr size_t ScriptRoot_Initial = SIZE_MAX - 3;
-	constexpr size_t ScriptRoot_InitCall0 = SIZE_MAX - 2;
+	constexpr size_t PhaseMask = SIZE_MAX >> 1U;
+	constexpr size_t BreakPointFlag = SIZE_MAX ^ SIZE_MAX >> 1U;
+
+	constexpr size_t ScriptRoot_Initial = PhaseMask - 3;
+	constexpr size_t ScriptRoot_InitCall0 = PhaseMask - 2;
 	constexpr size_t ScriptRoot_InitCall1 = ScriptRoot_InitCall0 + 1;
 
-	constexpr size_t IfGroup_Base0 = SIZE_MAX >> 1U;
-	constexpr size_t IfGroup_Base1 = IfGroup_Base0 + 1;
+	constexpr size_t IfGroup_Base1 = PhaseMask ^ PhaseMask >> 1U;
+	constexpr size_t IfGroup_Base0 = IfGroup_Base1 - 1;
+	constexpr size_t IfGroup_IndexMask = IfGroup_Base1 - 1;
 
-	constexpr size_t Switch_Base0 = SIZE_MAX - 2;
+	constexpr size_t Switch_Base0 = PhaseMask - 2;
 	constexpr size_t Switch_Base1 = Switch_Base0 + 1;
 
-	constexpr size_t Case_Base = SIZE_MAX - 3;
+	constexpr size_t Case_Base = PhaseMask - 3;
 	constexpr size_t Case_Check0 = Case_Base + 1;
 	constexpr size_t Case_Check1 = Case_Base + 2;
 
-	constexpr size_t For_Begin = SIZE_MAX - 6;
+	constexpr size_t For_Begin = PhaseMask - 6;
 	constexpr size_t For_CallIterator = For_Begin + 1;
 	constexpr size_t For_PrepareLoop = For_Begin + 2;
 	constexpr size_t For_BeginLoop = For_Begin + 3;
@@ -583,8 +590,8 @@ namespace Phase {
 	constexpr size_t For_EnterLoop = For_Begin + 5;
 	constexpr size_t For_Continue = For_BeginLoop;
 
-	constexpr size_t While_Continue = SIZE_MAX - 3;
-	constexpr size_t While_Condition0 = SIZE_MAX - 2;
+	constexpr size_t While_Continue = PhaseMask - 3;
+	constexpr size_t While_Condition0 = PhaseMask - 2;
 	constexpr size_t While_Condition1 = While_Condition0 + 1;
 }
 
@@ -856,6 +863,9 @@ private:
 
 	void processFinalizer();
 
+	template <typename PhaseCond>
+	bool checkDebugBreak(Node* node0, Thread* thread, size_t& phase, PhaseCond phaseCond);
+
 public:
 	Frame* findClassFrame();
 
@@ -876,10 +886,14 @@ public:
 	void finish();
 
 	enum class StepRunResult {
-		Abort, Continue, Next
+		Abort, Continue, Next, BreakPoint
 	};
 	StepRunResult stepRun();
-	void run();
+
+	enum class RunResult {
+		Next, Stop
+	};
+	RunResult run();
 
 	Node* currentNode(size_t frameIndex = SIZE_MAX) const;
 
@@ -947,6 +961,7 @@ public:
 	void postInitialize();
 
 	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
+	void distributeScriptNode(std::shared_ptr<Node> scriptNode);
 
 	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
 			bool warnIfDuplicates = true) const;
@@ -979,16 +994,22 @@ public:
 
 
 enum class BreakPointType {
-	BreakPoint,
-	BreakPointFor,
-	BreakPointWhile,
+	Invalid,
+	Statement,
+	InnerBlock,
+	IfGroup,
+	For,
+	While,
+	Case,
+	Default,
 };
 
 struct BreakPoint : public IdType<debugger::BreakPointId, BreakPoint> {
-	BreakPointType type = BreakPointType::BreakPoint;
 	debugger::CodePoint point;
-	Node* node = nullptr;
-	std::vector<Node*> tagNodes;
+	debugger::BreakPointId breakPointId;
+	BreakPointType type = BreakPointType::Invalid;
+	Node* node0 = nullptr;
+	Node* node1 = nullptr;
 };
 
 
@@ -1067,10 +1088,12 @@ public:
 	std::unordered_map<DriverType, std::unique_ptr<IDriver>> drivers;
 
 	// Debugger
+	std::shared_ptr<debugger::IDebuggerHost> debuggerHost;
 	mutable std::mutex lockDebugger;
 	bool paused = false;
 	unsigned previousWorkerThreads = 0;
-	IdPool<debugger::BreakPointId, BreakPoint> breakPoints;
+	std::unordered_map<debugger::BreakPointId, BreakPoint> breakPoints;
+	size_t nextBreakPointId = 0;
 
 private:
 	void launchStorage();
@@ -1103,6 +1126,8 @@ public:
 	size_t stepCountForMarking(size_t totalObjectCount) override;
 	size_t stepCountForSweeping(size_t totalObjectCount) override;
 
+	bool distributeStringTable(unsigned oldVersion = UINT_MAX);
+
 	Thread& createThread(Instance& instance, Package& package, Node* node = nullptr);
 	void enqueue(Thread* thread);
 
@@ -1128,6 +1153,10 @@ public:
 	template <typename ContinueCond>
 	debugger::StepRunResult stepRun(Thread* thread, ContinueCond continueCond);
 	debugger::CodePoint nodeToCodePoint(PackageId packageId, Node* node);
+	void adjustFramePhase(Node* node, size_t baseIndex, ptrdiff_t delta) const;
+	void applyBreakPoint(BreakPoint& bp);
+	void cancelBreakPoint(BreakPoint& bp) const;
+	void debugBreak(Node* node0, Thread* thread);
 
 public:
 	explicit RuntimeImp(std::shared_ptr<IHost> host) noexcept;
@@ -1157,19 +1186,22 @@ public:
 	void stop(InstanceId instanceId) override;
 	TimerId addTimer(const std::string& name) override;
 	void increment(TimerId timerId, int64_t step) override;
-	std::shared_ptr<debugger::IDebugger> getDebugger() override;
+	std::shared_ptr<debugger::IDebugger> getDebugger(
+			std::shared_ptr<debugger::IDebuggerHost> debuggerHost) override;
 
 	void pause() override;
 	void resume() override;
 	debugger::StepRunResult stepOver(debugger::ThreadId threadId) override;
 	debugger::StepRunResult stepInto(debugger::ThreadId threadId) override;
 	debugger::StepRunResult stepOut(debugger::ThreadId threadId) override;
+	debugger::BreakPointId addBreakPoint(const debugger::CodePoint& point) override;
+	void removeBreakPoint(debugger::BreakPointId breakPointId) override;
 	std::vector<debugger::InstanceState> getInstancesState() override;
 	debugger::ThreadState getThreadState(debugger::ThreadId threadId) override;
 	debugger::FrameState getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) override;
 
 #ifndef CHATRA_NDEBUG
-	size_t objectCount() { return storage->objectCount(); }
+	size_t objectCount() const { return storage->objectCount(); }
 	void dump();
 #endif // !CHATRA_NDEBUG
 };

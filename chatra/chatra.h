@@ -382,6 +382,7 @@ struct IHost {
 
 // chatra_debugger.h
 namespace debugger {
+struct IDebuggerHost;
 struct IDebugger;
 }
 
@@ -442,7 +443,8 @@ public:
 	/// @throws IllegalArgumentException
 	virtual void increment(TimerId timerId, int64_t step) = 0;
 
-	virtual std::shared_ptr<debugger::IDebugger> getDebugger() = 0;
+	virtual std::shared_ptr<debugger::IDebugger> getDebugger(
+			std::shared_ptr<debugger::IDebuggerHost> debuggerHost) = 0;
 };
 
 

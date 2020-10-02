@@ -118,6 +118,15 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 	return scriptNode;
 }
 
+void Package::distributeScriptNode(std::shared_ptr<Node> scriptNode) {
+	std::lock_guard<SpinLock> lock0(lockNode);
+	node = std::move(scriptNode);
+	auto* nNew = node.get();
+	for (auto* thread : threadsWaitingForNode)
+		thread->frames.back().node = nNew;
+	threadsWaitingForNode.clear();
+}
+
 bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
 		bool warnIfDuplicates) const {
 	chatra_assert(node->type == NodeType::Import);
@@ -922,6 +931,22 @@ size_t RuntimeImp::stepCountForSweeping(size_t totalObjectCount) {
 	return std::max<size_t>(64, totalObjectCount >> 4U);
 }
 
+bool RuntimeImp::distributeStringTable(unsigned oldVersion) {
+	if (oldVersion != UINT_MAX && oldVersion == primarySTable->getVersion())
+		return false;
+
+	primarySTable->clearDirty();
+	{
+		std::lock_guard<SpinLock> lock0(lockSTable);
+		distributedSTable = primarySTable->copy();
+	}
+	threadIds.forEach([&](Thread& thread) {
+		thread.hasNewSTable = true;
+	});
+
+	return true;
+}
+
 Thread& RuntimeImp::createThread(Instance& instance, Package& package, Node* node) {
 	auto thread = threadIds.lockAndAllocate(*this, instance);
 	thread->postInitialize();
@@ -1137,7 +1162,7 @@ void RuntimeImp::outputError(const std::string& message) const {
 
 Thread* RuntimeImp::popDebuggableThread(debugger::ThreadId threadId) {
 	if (!paused)
-		throw UnsupportedOperationException("Runtime is not paused");
+		throw debugger::IllegalRuntimeStateException("Runtime is not paused");
 
 	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
 
@@ -1164,17 +1189,15 @@ debugger::StepRunResult RuntimeImp::stepRun(Thread* thread, ContinueCond continu
 	thread->captureStringTable();
 
 	while (continueCond()) {
-		try {
-			auto r0 = thread->stepRun();
-			if (r0 == Thread::StepRunResult::Abort) {
-				thread->finish();
-				return debugger::StepRunResult::Finished;
-			}
-			if (r0 == Thread::StepRunResult::Continue)
-				continue;
-		}
-		catch (const BreakPointDuringStepRunException&) {
-			enqueue(thread);  // TODO
+		switch (thread->stepRun()) {
+		case Thread::StepRunResult::Abort:
+			thread->finish();
+			return debugger::StepRunResult::Finished;
+		case Thread::StepRunResult::Continue:
+			continue;
+		case Thread::StepRunResult::Next:
+			break;
+		case Thread::StepRunResult::BreakPoint:
 			return debugger::StepRunResult::BreakPoint;
 		}
 
@@ -1226,6 +1249,251 @@ debugger::CodePoint RuntimeImp::nodeToCodePoint(PackageId packageId, Node* node)
 	ret.fileName = line->fileName;
 	ret.lineNo = line->lineNo;
 	return ret;
+}
+
+static bool findNode(const debugger::CodePoint& point, Node* node, std::vector<Node*>& path_r) {
+	auto line = (node->tokens.empty() ? node->line : node->tokens[0]->line.lock());
+	if (line && line->lineNo == point.lineNo && line->fileName == point.fileName) {
+		path_r.emplace_back(node);
+		return true;
+	}
+
+	for (auto& n : node->blockNodes) {
+		if (findNode(point, n.get(), path_r)) {
+			path_r.emplace_back(node);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void RuntimeImp::adjustFramePhase(Node* node, size_t baseIndex, ptrdiff_t delta) const {
+	threadIds.forEach([&](Thread& thread) {
+		for (auto& f : thread.frames) {
+			if (f.node == node && f.phase <= f.node->blockNodes.size() && f.phase >= baseIndex)
+				f.phase += delta;
+		}
+	});
+}
+
+void RuntimeImp::applyBreakPoint(BreakPoint& bp) {
+	Package* p = nullptr;
+	packageIds.forEach([&](Package& package) {
+		if (package.name != bp.point.packageName)
+			return;
+		for (auto& s : package.scripts) {
+			if (s.name == bp.point.fileName) {
+				p = &package;
+				break;
+			}
+		}
+	});
+	if (p == nullptr)
+		throw IllegalArgumentException();
+
+	IErrorReceiverBridge errorReceiverBridge(*this);
+	unsigned sTableVersion = primarySTable->getVersion();
+
+	if (!p->grouped) {
+		auto scriptNode = p->parseNode(errorReceiverBridge, nullptr);
+		if (errorReceiverBridge.hasError())
+			throw debugger::ParserErrorAroundBreakPointException();
+		p->distributeScriptNode(std::move(scriptNode));
+	}
+
+	Node* node;
+	{
+		std::lock_guard<SpinLock> lock0(p->lockNode);
+		node = p->node.get();
+	}
+
+	std::vector<Node*> path;
+	for (;;) {
+		path.clear();
+		if (!findNode(bp.point, node, path)) {
+			distributeStringTable(sTableVersion);
+			throw debugger::NonBreakableStatementException();
+		}
+
+		auto it = std::find_if(path.crbegin(), path.crend(), [&](Node* n) {
+			return n->blockNodesState != NodeState::Parsed;
+		});
+		if (it == path.crend())
+			break;
+
+		p->parseNode(errorReceiverBridge, *it);
+		if (errorReceiverBridge.hasError())
+			throw debugger::ParserErrorAroundBreakPointException();
+	}
+
+	distributeStringTable(sTableVersion);
+
+	switch (path[0]->type) {
+	case NodeType::Expression:
+	case NodeType::Touch:
+	case NodeType::Switch:
+	case NodeType::Do:
+	case NodeType::Break:
+	case NodeType::Continue:
+	case NodeType::Return:
+	case NodeType::Throw: {
+		bp.type = BreakPointType::Statement;
+		bp.node0 = path[0];
+		bp.node1 = path[1];
+
+		auto it = std::find_if(path[1]->blockNodes.cbegin(), path[1]->blockNodes.cend(), [&](const std::shared_ptr<Node>& n) {
+			return n.get() == path[0];
+		});
+		chatra_assert(it != path[1]->blockNodes.cend());
+
+		adjustFramePhase(path[1], std::distance(path[1]->blockNodes.cbegin(), it), +1);
+
+		auto* n = path[1]->blockNodes.insert(it, std::make_shared<Node>())->get();
+		n->type = ntBreakPointStatement;
+		n->blockNodesState = NodeState::Parsed;
+		break;
+	}
+
+	case NodeType::Def:
+	case NodeType::DefOperator:
+	case NodeType::Class:
+	case NodeType::Case:
+	case NodeType::Default:
+	case NodeType::Catch:
+	case NodeType::Finally: {
+		bp.type = BreakPointType::InnerBlock;
+		bp.node0 = path[0];
+		chatra_assert(path[0]->blockNodesState == NodeState::Parsed);
+
+		adjustFramePhase(path[0], 0, +1);
+
+		auto* n = path[0]->blockNodes.insert(path[0]->blockNodes.cbegin(), std::make_shared<Node>())->get();
+		n->type = ntBreakPointInnerBlock;
+		n->blockNodesState = NodeState::Parsed;
+		break;
+	}
+
+	case NodeType::If:
+	case NodeType::ElseIf:
+	case NodeType::Else: {
+		bp.type = BreakPointType::IfGroup;
+		bp.node0 = path[0];
+		bp.node1 = path[1];  // IfGroup
+
+		switch (path[0]->type) {
+		case NodeType::If:  path[1]->type = ntBreakPointIfGroup;  break;
+		case NodeType::ElseIf:  path[0]->type = ntBreakPointElseIf;  break;
+		case NodeType::Else:  path[0]->type = ntBreakPointElse;  break;
+		default:
+			throw InternalError();
+		}
+		break;
+	}
+
+	default: {
+		NodeType nodeType;
+		switch (path[0]->type) {
+		case NodeType::For:  bp.type = BreakPointType::For;  nodeType = ntBreakPointFor;  break;
+		case NodeType::While:  bp.type = BreakPointType::While;  nodeType = ntBreakPointWhile;  break;
+		default:
+			throw debugger::NonBreakableStatementException();
+		}
+		bp.node0 = path[0];
+		path[0]->type = nodeType;
+		break;
+	}
+	}
+}
+
+void RuntimeImp::cancelBreakPoint(BreakPoint& bp) const {
+	switch (bp.type) {
+	case BreakPointType::Invalid:
+		return;
+	case BreakPointType::Statement: {
+		auto it = std::find_if(bp.node1->blockNodes.cbegin(), bp.node1->blockNodes.cend(), [&](const std::shared_ptr<Node>& n) {
+			return n.get() == bp.node0;
+		});
+		chatra_assert(it != bp.node1->blockNodes.cbegin() && it != bp.node1->blockNodes.cend());
+
+		adjustFramePhase(bp.node1, std::distance(bp.node1->blockNodes.cbegin(), it), -1);
+
+		bp.node1->blockNodes.erase(it - 1);
+		break;
+	}
+
+	case BreakPointType::InnerBlock: {
+		adjustFramePhase(bp.node0, 1, -1);
+		bp.node0->blockNodes.erase(bp.node0->blockNodes.cbegin());
+		break;
+	}
+
+	case BreakPointType::IfGroup: {
+		if (bp.node0->type == NodeType::If)
+			bp.node1->type = NodeType::IfGroup;
+		else if (bp.node0->type == ntBreakPointElseIf)
+			bp.node0->type = NodeType::ElseIf;
+		else if (bp.node0->type == ntBreakPointElse)
+			bp.node0->type = NodeType::Else;
+		else
+			throw InternalError();
+		break;
+	}
+
+	default: {
+		NodeType nodeType;
+		switch (bp.type) {
+		case BreakPointType::For:  nodeType = NodeType::For;  break;
+		case BreakPointType::While:  nodeType = NodeType::While;  break;
+		default:
+			throw InternalError();
+		}
+		bp.node0->type = nodeType;
+		break;
+	}
+	}
+}
+
+void RuntimeImp::debugBreak(Node* node0, Thread* thread) {
+	debugger::BreakPointId breakPointId;
+	debugger::IDebuggerHost* debuggerHost;
+	{
+		std::lock_guard<std::mutex> lock0(lockDebugger);
+		if (paused)
+			throw debugger::IllegalRuntimeStateException();
+
+		auto it = std::find_if(breakPoints.cbegin(), breakPoints.cend(), [&](decltype(breakPoints)::const_reference e) {
+			return e.second.node0 == node0;
+		});
+		if (it == breakPoints.cend())
+			throw InternalError();
+		breakPointId = it->first;
+
+		if (multiThread) {
+			{
+				std::unique_lock<std::mutex> lock1(mtQueue);
+				previousWorkerThreads = targetWorkerThreads;
+			}
+
+			if (previousWorkerThreads != 1) {
+				setWorkers(1);
+				{
+					std::unique_lock<std::mutex> lock(mtQueue);
+					if (!workerThreads.empty())
+						cvShutdown.wait(lock, [&]() { return workerThreads.size() == 1; });
+				}
+			}
+			setWorkers(0);
+		}
+		paused = true;
+		debuggerHost = this->debuggerHost.get();
+	}
+
+	chatra_assert(thread != nullptr);
+	enqueue(thread);
+
+	if (debuggerHost != nullptr)
+		debuggerHost->onBreakPoint(breakPointId);
 }
 
 
@@ -1395,6 +1663,13 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 
 	for (; workerThreads.size() < threadCount; nextId++) {
 		workerThreads.emplace(nextId, std::unique_ptr<std::thread>(new std::thread([&, this](unsigned wsId) {
+			auto detach = [&]() {
+				auto it = workerThreads.find(wsId);
+				it->second->detach();
+				workerThreads.erase(it);
+				cvShutdown.notify_one();
+			};
+
 			for (;;) {
 				Thread* thread;
 				{
@@ -1403,10 +1678,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 						return !queue.empty() || workerThreads.size() > targetWorkerThreads;
 					});
 					if (workerThreads.size() > targetWorkerThreads) {
-						auto it = workerThreads.find(wsId);
-						it->second->detach();
-						workerThreads.erase(it);
-						cvShutdown.notify_one();
+						detach();
 						return;
 					}
 					thread = queue.front();
@@ -1414,7 +1686,10 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 				}
 
 				try {
-					thread->run();
+					if (thread->run() == Thread::RunResult::Stop) {
+						detach();
+						return;
+					}
 				}
 				catch (...) {
 					outputError("fatal: uncaught exception raised\n");
@@ -1564,14 +1839,17 @@ void RuntimeImp::increment(TimerId timerId, int64_t step) {
 	timer->increment(std::chrono::milliseconds(step));
 }
 
-std::shared_ptr<debugger::IDebugger> RuntimeImp::getDebugger() {
+std::shared_ptr<debugger::IDebugger> RuntimeImp::getDebugger(
+		std::shared_ptr<debugger::IDebuggerHost> debuggerHost) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	this->debuggerHost = std::move(debuggerHost);
 	return std::static_pointer_cast<debugger::IDebugger>(self.lock());
 }
 
 void RuntimeImp::pause() {
 	std::lock_guard<std::mutex> lock0(lockDebugger);
 	if (paused)
-		throw UnsupportedOperationException("Runtime is already paused");
+		throw debugger::IllegalRuntimeStateException("Runtime is already paused");
 
 	if (multiThread) {
 		{
@@ -1586,7 +1864,7 @@ void RuntimeImp::pause() {
 void RuntimeImp::resume() {
 	std::lock_guard<std::mutex> lock0(lockDebugger);
 	if (!paused)
-		throw UnsupportedOperationException("Runtime is not paused");
+		throw debugger::IllegalRuntimeStateException("Runtime is not paused");
 
 	if (multiThread)
 		setWorkers(previousWorkerThreads);
@@ -1649,10 +1927,45 @@ debugger::StepRunResult RuntimeImp::stepOut(debugger::ThreadId threadId) {
 	});
 }
 
+debugger::BreakPointId RuntimeImp::addBreakPoint(const debugger::CodePoint& point) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw debugger::IllegalRuntimeStateException();
+
+	auto it = std::find_if(breakPoints.cbegin(), breakPoints.cend(), [&](decltype(breakPoints)::const_reference e) {
+		auto& bp = e.second;
+		return bp.point.packageName == point.packageName && bp.point.fileName == point.fileName
+				&& bp.point.lineNo == point.lineNo;
+	});
+	if (it != breakPoints.cend())
+		throw IllegalArgumentException();
+
+	BreakPoint bp;
+	bp.point = point;
+	applyBreakPoint(bp);
+
+	auto breakPointId = static_cast<debugger::BreakPointId>(nextBreakPointId++);
+	breakPoints.emplace(breakPointId, std::move(bp));
+	return breakPointId;
+}
+
+void RuntimeImp::removeBreakPoint(debugger::BreakPointId breakPointId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw debugger::IllegalRuntimeStateException();
+
+	auto it = breakPoints.find(breakPointId);
+	if (it == breakPoints.cend())
+		throw IllegalArgumentException();
+
+	cancelBreakPoint(it->second);
+	breakPoints.erase(it);
+}
+
 std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
 	std::lock_guard<std::mutex> lock0(lockDebugger);
 	if (!paused)
-		throw UnsupportedOperationException();
+		throw debugger::IllegalRuntimeStateException();
 
 	std::vector<debugger::InstanceState> ret;
 	instanceIds.forEach([&](const Instance& instance) {
@@ -1677,7 +1990,7 @@ std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
 debugger::ThreadState RuntimeImp::getThreadState(debugger::ThreadId threadId) {
 	std::lock_guard<std::mutex> lock0(lockDebugger);
 	if (!paused)
-		throw UnsupportedOperationException();
+		throw debugger::IllegalRuntimeStateException();
 
 	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
 
@@ -1700,7 +2013,7 @@ debugger::ThreadState RuntimeImp::getThreadState(debugger::ThreadId threadId) {
 debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) {
 	std::lock_guard<std::mutex> lock0(lockDebugger);
 	if (!paused)
-		throw UnsupportedOperationException();
+		throw debugger::IllegalRuntimeStateException();
 
 	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
 	auto frameIndex = static_cast<size_t>(frameId);

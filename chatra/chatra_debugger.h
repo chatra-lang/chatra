@@ -30,10 +30,14 @@ enum class ThreadId : size_t {};
 enum class FrameId : size_t {};
 enum class BreakPointId : size_t {};
 
+CHATRA_DEFINE_EXCEPTION(IllegalRuntimeStateException, UnsupportedOperationException);
+CHATRA_DEFINE_EXCEPTION(ParserErrorAroundBreakPointException, UnsupportedOperationException);
+CHATRA_DEFINE_EXCEPTION(NonBreakableStatementException, UnsupportedOperationException);
+
 struct CodePoint {
 	std::string packageName;
 	std::string fileName;
-	unsigned lineNo = 0;
+	unsigned lineNo;
 };
 
 enum class FrameType {
@@ -75,6 +79,12 @@ enum class StepRunResult {
 	BreakPoint,
 };
 
+struct IDebuggerHost {
+	virtual ~IDebuggerHost() = default;
+
+	virtual void onBreakPoint(BreakPointId breakPointId) { (void)breakPointId; }
+};
+
 struct IDebugger {
 	virtual ~IDebugger() = default;
 
@@ -85,7 +95,8 @@ struct IDebugger {
 	virtual StepRunResult stepInto(ThreadId threadId) = 0;
 	virtual StepRunResult stepOut(ThreadId threadId) = 0;
 
-	// TODO BreakPoints
+	virtual BreakPointId addBreakPoint(const CodePoint& point) = 0;
+	virtual void removeBreakPoint(BreakPointId breakPointId) = 0;
 
 	virtual std::vector<InstanceState> getInstancesState() = 0;
 	virtual ThreadState getThreadState(ThreadId threadId) = 0;
