@@ -121,6 +121,8 @@ public:
 	void mapReturns(const TupleType& tuple, Mapper mapper, MapperForContainer mapperForContainer,
 			MapperForNull mapperForNull) const;
 
+	std::string getSignature(const StringTable* sTable) const;
+
 #ifndef CHATRA_NDEBUG
 	void dumpArgumentMatcher(const std::shared_ptr<StringTable>& sTable) const;
 #endif // !CHATRA_NDEBUG
@@ -249,6 +251,8 @@ public:
 			const std::vector<ArgumentSpec>& args, const std::vector<ArgumentSpec>& subArgs) const;
 
 	std::vector<const Method*> findByName(StringId name, StringId subName) const;
+
+	std::vector<const Method*> getAllMethods() const;
 
 	const NativeMethod* findNativeMethod(StringId name, StringId subName) const {
 		auto it = nativeByName.find(std::make_pair(name, subName));

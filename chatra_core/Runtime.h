@@ -1199,6 +1199,7 @@ public:
 	std::vector<debugger::InstanceState> getInstancesState() override;
 	debugger::ThreadState getThreadState(debugger::ThreadId threadId) override;
 	debugger::FrameState getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) override;
+	debugger::ScopeState getScopeState(debugger::ThreadId threadId, debugger::ScopeId scopeId) override;
 
 #ifndef CHATRA_NDEBUG
 	size_t objectCount() const { return storage->objectCount(); }

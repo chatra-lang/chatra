@@ -3866,7 +3866,7 @@ Thread::StepRunResult Thread::stepRun() {
 					checkIsValidNode(blockNode);
 					switch (blockNode->type) {
 					case ntBreakPointElseIf:
-						if (checkDebugBreak(blockNode, this, f.phase, [](size_t phase) { return true; }))
+						if (checkDebugBreak(blockNode, this, f.phase, [](size_t) { return true; }))
 							return StepRunResult::BreakPoint;
 						CHATRA_FALLTHROUGH;
 
@@ -3875,7 +3875,7 @@ Thread::StepRunResult Thread::stepRun() {
 						return StepRunResult::Continue;
 
 					case ntBreakPointElse:
-						if (checkDebugBreak(blockNode, this, f.phase, [](size_t phase) { return true; }))
+						if (checkDebugBreak(blockNode, this, f.phase, [](size_t) { return true; }))
 							return StepRunResult::BreakPoint;
 						CHATRA_FALLTHROUGH;
 

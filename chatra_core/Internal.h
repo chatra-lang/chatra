@@ -30,6 +30,7 @@
 #include <cstddef>
 #include <climits>
 #include <cstdint>
+#include <cstdio>
 #include <cassert>
 #include <type_traits>
 #include <functional>
@@ -396,6 +397,47 @@ public:
 			process(*e.second);
 	}
 };
+
+
+#if defined(__clang__)
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
+
+inline std::string formatTextV(const char *format, va_list args) {
+	va_list args2;
+	va_copy(args2, args);
+	auto length = std::vsnprintf(nullptr, 0, format, args);
+	std::string ret;
+	if (length < 0)
+		ret = "(error)";
+	else {
+		std::vector<char> buffer(static_cast<size_t>(length) + 1);
+		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
+		ret = std::string(buffer.data());
+	}
+	va_end(args2);
+	return ret;
+}
+
+inline std::string formatText(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	auto ret = formatTextV(format, args);
+	va_end(args);
+	return ret;
+}
+
+#if defined(__clang__)
+	#pragma clang diagnostic pop
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic pop
+#endif
 
 
 inline bool startsWith(const std::string& str, size_t index, const char * prefix) {

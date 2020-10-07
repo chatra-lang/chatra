@@ -2010,6 +2010,19 @@ debugger::ThreadState RuntimeImp::getThreadState(debugger::ThreadId threadId) {
 	return ret;
 }
 
+static debugger::ScopeType convertScopeType(ScopeType scopeType) {
+	switch (scopeType) {
+	case ScopeType::Package:  return debugger::FrameType::Package;
+	case ScopeType::ScriptRoot:  return debugger::FrameType::ScriptRoot;
+	case ScopeType::Class:  return debugger::FrameType::Class;
+	case ScopeType::Method:  return debugger::FrameType::Method;
+	case ScopeType::InnerMethod:  return debugger::FrameType::Method;
+	case ScopeType::Block:  return debugger::FrameType::Block;
+	default:
+		throw IllegalArgumentException();
+	}
+}
+
 debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) {
 	std::lock_guard<std::mutex> lock0(lockDebugger);
 	if (!paused)
@@ -2024,31 +2037,138 @@ debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debu
 	auto* thread = threadIds.ref(requester);
 
 	if (frameIndex >= thread->frames.size())
-		throw IllegalArgumentException("specified frameId(%zu) is not found", frameIndex);
+		throw IllegalArgumentException("specified frameId(%zu, threadId = %zu) is not found",
+				frameIndex, static_cast<size_t>(threadId));
 	auto& f = thread->frames[frameIndex];
 
 	debugger::FrameState ret;
 	ret.threadId = threadId;
 	ret.frameId = frameId;
-
-	switch (f.scope->getScopeType()) {
-	case ScopeType::Package:  ret.frameType = debugger::FrameType::Package;  break;
-	case ScopeType::ScriptRoot:  ret.frameType = debugger::FrameType::ScriptRoot;  break;
-	case ScopeType::Class:  ret.frameType = debugger::FrameType::Class;  break;
-	case ScopeType::Method:  ret.frameType = debugger::FrameType::Method;  break;
-	case ScopeType::InnerMethod:  ret.frameType = debugger::FrameType::Method;  break;
-	case ScopeType::Block:  ret.frameType = debugger::FrameType::Block;  break;
-	default:
-		throw IllegalArgumentException();
-	}
-
+	ret.frameType = convertScopeType(f.scope->getScopeType());
 	ret.current = nodeToCodePoint(f.package.getId(), thread->currentNode(frameIndex));
 
 	for (; frameIndex != SIZE_MAX; frameIndex = thread->frames[frameIndex].parentIndex) {
 		auto scopeType = thread->frames[frameIndex].scope->getScopeType();
 		if (scopeType == ScopeType::Thread || scopeType == ScopeType::Global)
 			continue;
-		ret.scopeFrameIds.emplace_back(static_cast<debugger::FrameId>(frameIndex));
+		ret.scopeIds.emplace_back(static_cast<debugger::ScopeId>(frameIndex));
+	}
+
+	return ret;
+}
+
+debugger::ScopeState RuntimeImp::getScopeState(debugger::ThreadId threadId, debugger::ScopeId scopeId) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw debugger::IllegalRuntimeStateException();
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+	auto frameIndex = static_cast<size_t>(scopeId);
+
+	std::lock_guard<decltype(threadIds)> lock1(threadIds);
+	if (!threadIds.has(requester))
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+	auto* thread = threadIds.ref(requester);
+
+	if (frameIndex >= thread->frames.size())
+		throw IllegalArgumentException("specified scopeId(%zu, threadId = %zu) is not found",
+				frameIndex, static_cast<size_t>(threadId));
+	auto& f = thread->frames[frameIndex];
+
+	debugger::ScopeState ret;
+	ret.threadId = threadId;
+	ret.scopeId = scopeId;
+	ret.scopeType = convertScopeType(f.scope->getScopeType());
+
+	std::unordered_map<std::string, unsigned> keys;
+	auto addValue = [&](std::string key, debugger::Value v) {
+		auto it = keys.find(key);
+		if (it == keys.cend()) {
+			keys.emplace(key, 1);
+			ret.values.emplace(std::move(key), std::move(v));
+			return;
+		}
+
+		if (it->second == 1) {
+			auto vFirst = ret.values[key];
+			ret.values.erase(key);
+			ret.values.emplace(key + "[1]", std::move(vFirst));
+		}
+
+		auto count = it->second + 1;
+		ret.values.emplace(key + "[" + std::to_string(count) + "]", std::move(v));
+		keys.emplace(std::move(key), count);
+	};
+
+	for (auto& e : f.scope->getAllRefsWithKey()) {
+		auto key = primarySTable->ref(e.first);
+		auto& ref = e.second;
+
+		debugger::Value v;
+		switch (ref.valueTypeWithoutLock()) {
+		case ReferenceValueType::Bool:
+			v.valueType = debugger::ValueType::Bool;
+			v.vBool = ref.getBoolWithoutLock();
+			break;
+		case ReferenceValueType::Int:
+			v.valueType = debugger::ValueType::Int;
+			v.vInt = ref.getIntWithoutLock();
+			break;
+		case ReferenceValueType::Float:
+			v.valueType = debugger::ValueType::Float;
+			v.vFloat = ref.getFloatWithoutLock();
+			break;
+
+		case ReferenceValueType::Object: {
+			if (ref.isNullWithoutLock())
+				v.valueType = debugger::ValueType::Null;
+			else if (ref.derefWithoutLock<ObjectBase>().getClass() == String::getClassStatic()) {
+				v.valueType = debugger::ValueType::String;
+				v.vString = ref.derefWithoutLock<String>().getValue();
+			}
+			else {
+				v.valueType = debugger::ValueType::Object;
+				auto& object = ref.derefWithoutLock();
+				v.objectId = static_cast<debugger::ObjectId>(object.getObjectIndex());
+
+				switch (object.getTypeId()) {
+				case TypeId::CapturedScope:
+				case TypeId::CapturedScopeObject:
+				case typeId_TemporaryObject:
+				case typeId_WaitContext:
+					v.className = "systemObject";
+					break;
+				case typeId_PackageObject:
+					v.className = "packageObject";
+					break;
+				default:
+					auto* cl = ref.derefWithoutLock<ObjectBase>().getClass();
+					v.className = primarySTable->ref(cl->getName());
+					auto* p = cl->getPackage();
+					if (p != nullptr && !p->name.empty())
+						v.className = p->name + "." + v.className;
+					break;
+				}
+			}
+			break;
+		}
+		}
+
+		addValue(std::move(key), std::move(v));
+	}
+
+	if (f.methods != nullptr) {
+		for (auto* method : f.methods->getAllMethods()) {
+			debugger::Value v;
+			v.valueType = debugger::ValueType::Method;
+			v.methodName = primarySTable->ref(method->name);
+			if (method->subName != StringId::Invalid)
+				v.methodName += "." + primarySTable->ref(method->subName);
+			v.methodArgs = method->getSignature(primarySTable.get());
+
+			auto key = v.methodName;
+			addValue(std::move(key), std::move(v));
+		}
 	}
 
 	return ret;

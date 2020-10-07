@@ -325,25 +325,37 @@ public:
 		return derefWithoutLock<Type>();
 	}
 
+	bool getBoolWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Bool);
+		return node->vBool;
+	}
+
+	int64_t getIntWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Int);
+		return node->vInt;
+	}
+
+	double getFloatWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Float);
+		return node->vFloat;
+	}
+
 	/// [Requires lock]
 	bool getBool() const {
 		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		chatra_assert(node->type == ReferenceValueType::Bool);
-		return node->vBool;
+		return getBoolWithoutLock();
 	}
 
 	/// [Requires lock]
 	int64_t getInt() const {
 		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		chatra_assert(node->type == ReferenceValueType::Int);
-		return node->vInt;
+		return getIntWithoutLock();
 	}
 
 	/// [Requires lock]
 	double getFloat() const {
 		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		chatra_assert(node->type == ReferenceValueType::Float);
-		return node->vFloat;
+		return getFloatWithoutLock();
 	}
 
 	void setWithoutBothLock(const Reference& ref) const {

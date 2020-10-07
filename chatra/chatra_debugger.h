@@ -22,12 +22,15 @@
 #define CHATRA_CHATRA_DEBUGGER_H
 
 #include "chatra.h"
+#include <unordered_map>
 
 namespace chatra {
 namespace debugger {
 
 enum class ThreadId : size_t {};
 enum class FrameId : size_t {};
+enum class ScopeId : size_t {};
+enum class ObjectId : size_t {};
 enum class BreakPointId : size_t {};
 
 CHATRA_DEFINE_EXCEPTION(IllegalRuntimeStateException, UnsupportedOperationException);
@@ -40,7 +43,31 @@ struct CodePoint {
 	unsigned lineNo;
 };
 
-enum class FrameType {
+enum class ValueType {
+	Null,
+	Bool,
+	Int,
+	Float,
+	String,
+	Object,
+	Method,
+};
+
+struct Value {
+	ValueType valueType;
+	union {
+		bool vBool;
+		int64_t vInt;
+		double vFloat;
+		ObjectId objectId;
+	};
+	std::string vString;
+	std::string className;
+	std::string methodName;
+	std::string methodArgs;
+};
+
+enum class ScopeType {
 	Package,
 	ScriptRoot,
 	Class,
@@ -48,14 +75,21 @@ enum class FrameType {
 	Block,
 };
 
+struct ScopeState {
+	ThreadId threadId;
+	ScopeId scopeId;
+	ScopeType scopeType;
+	std::unordered_map<std::string, Value> values;
+};
+
+using FrameType = ScopeType;
+
 struct FrameState {
 	ThreadId threadId;
 	FrameId frameId;
 	FrameType frameType;
 	CodePoint current;
-	std::vector<FrameId> scopeFrameIds;
-
-	// TODO variables & methods
+	std::vector<ScopeId> scopeIds;
 };
 
 struct ThreadState {
@@ -101,6 +135,7 @@ struct IDebugger {
 	virtual std::vector<InstanceState> getInstancesState() = 0;
 	virtual ThreadState getThreadState(ThreadId threadId) = 0;
 	virtual FrameState getFrameState(ThreadId threadId, FrameId frameId) = 0;
+	virtual ScopeState getScopeState(ThreadId threadId, ScopeId scopeId) = 0;
 };
 
 

@@ -129,6 +129,26 @@ bool ArgumentMatcher::matches(const std::vector<ArgumentSpec>& args, const std::
 			matchedCountWithoutDefaults == listCountWithoutDefaults + dictCountWithoutDefaults;
 }
 
+std::string ArgumentMatcher::getSignature(const StringTable* sTable) const {
+	std::string out = "(";
+	for (size_t i = 0; i < args.size(); i++) {
+		if (i != 0)
+			out += ", ";
+		auto& arg = args[i];
+		out += sTable->ref(arg.name);
+		if (arg.cl != nullptr) {
+			out += ":";
+			out += sTable->ref(arg.cl->getName());
+		}
+		if (arg.type == ArgumentDef::Type::ListVarArg || arg.type == ArgumentDef::Type::DictVarArg)
+			out += "...";
+		if (arg.defaultOp != nullptr)
+			out += formatText("=%p", static_cast<void*>(arg.defaultOp->subNodes[1].get()));
+	}
+	out += ")";
+	return out;
+}
+
 Method::Method(Node* node, const Class* cl, StringId name, size_t position, size_t primaryPosition) noexcept
 		: MethodBase(node), cl(cl), name(name), subName(StringId::Invalid), position(position), primaryPosition(primaryPosition) {}
 
@@ -240,6 +260,13 @@ std::vector<const Method*> MethodTable::findByName(StringId name, StringId subNa
 			continue;
 		ret.emplace_back(method);
 	}
+	return ret;
+}
+
+std::vector<const Method*> MethodTable::getAllMethods() const {
+	std::vector<const Method*> ret;
+	for (auto& method : methods)
+		ret.emplace_back(&method);
 	return ret;
 }
 
