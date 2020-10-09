@@ -1871,11 +1871,14 @@ void RuntimeImp::resume() {
 	paused = false;
 }
 
+#define CHATRA_POP_DEBUGGABLE_THREAD  \
+		std::lock_guard<std::mutex> lock0(lockDebugger);  \
+		auto* thread = popDebuggableThread(threadId);  \
+		if (thread == nullptr)  \
+			return debugger::StepRunResult::NotInRunning
+
 debugger::StepRunResult RuntimeImp::stepOver(debugger::ThreadId threadId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	auto* thread = popDebuggableThread(threadId);
-	if (thread == nullptr)
-		return debugger::StepRunResult::NotInRunning;
+	CHATRA_POP_DEBUGGABLE_THREAD;
 
 	auto framesCount = thread->frames.size();
 	auto* node = thread->currentNode();
@@ -1891,10 +1894,7 @@ debugger::StepRunResult RuntimeImp::stepOver(debugger::ThreadId threadId) {
 }
 
 debugger::StepRunResult RuntimeImp::stepInto(debugger::ThreadId threadId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	auto* thread = popDebuggableThread(threadId);
-	if (thread == nullptr)
-		return debugger::StepRunResult::NotInRunning;
+	CHATRA_POP_DEBUGGABLE_THREAD;
 
 	auto framesCount = thread->frames.size();
 	auto* node = thread->currentNode();
@@ -1909,10 +1909,7 @@ debugger::StepRunResult RuntimeImp::stepInto(debugger::ThreadId threadId) {
 }
 
 debugger::StepRunResult RuntimeImp::stepOut(debugger::ThreadId threadId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	auto* thread = popDebuggableThread(threadId);
-	if (thread == nullptr)
-		return debugger::StepRunResult::NotInRunning;
+	CHATRA_POP_DEBUGGABLE_THREAD;
 
 	auto targetFrameIndex = thread->frames.size() - 1;
 	for (;;) {
@@ -1927,10 +1924,13 @@ debugger::StepRunResult RuntimeImp::stepOut(debugger::ThreadId threadId) {
 	});
 }
 
+#define CHATRA_CHECK_RUNTIME_PAUSED  \
+		std::lock_guard<std::mutex> lock0(lockDebugger);  \
+		if (!paused)  \
+			throw debugger::IllegalRuntimeStateException();
+
 debugger::BreakPointId RuntimeImp::addBreakPoint(const debugger::CodePoint& point) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	if (!paused)
-		throw debugger::IllegalRuntimeStateException();
+	CHATRA_CHECK_RUNTIME_PAUSED;
 
 	auto it = std::find_if(breakPoints.cbegin(), breakPoints.cend(), [&](decltype(breakPoints)::const_reference e) {
 		auto& bp = e.second;
@@ -1950,9 +1950,7 @@ debugger::BreakPointId RuntimeImp::addBreakPoint(const debugger::CodePoint& poin
 }
 
 void RuntimeImp::removeBreakPoint(debugger::BreakPointId breakPointId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	if (!paused)
-		throw debugger::IllegalRuntimeStateException();
+	CHATRA_CHECK_RUNTIME_PAUSED;
 
 	auto it = breakPoints.find(breakPointId);
 	if (it == breakPoints.cend())
@@ -1963,9 +1961,7 @@ void RuntimeImp::removeBreakPoint(debugger::BreakPointId breakPointId) {
 }
 
 std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	if (!paused)
-		throw debugger::IllegalRuntimeStateException();
+	CHATRA_CHECK_RUNTIME_PAUSED;
 
 	std::vector<debugger::InstanceState> ret;
 	instanceIds.forEach([&](const Instance& instance) {
@@ -1988,9 +1984,7 @@ std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
 }
 
 debugger::ThreadState RuntimeImp::getThreadState(debugger::ThreadId threadId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	if (!paused)
-		throw debugger::IllegalRuntimeStateException();
+	CHATRA_CHECK_RUNTIME_PAUSED;
 
 	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
 
@@ -2024,9 +2018,7 @@ static debugger::ScopeType convertScopeType(ScopeType scopeType) {
 }
 
 debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	if (!paused)
-		throw debugger::IllegalRuntimeStateException();
+	CHATRA_CHECK_RUNTIME_PAUSED;
 
 	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
 	auto frameIndex = static_cast<size_t>(frameId);
@@ -2057,10 +2049,114 @@ debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debu
 	return ret;
 }
 
+static std::string getClassNameForDebugger(const StringTable* sTable, Object& object) {
+	switch (object.getTypeId()) {
+	case TypeId::CapturedScope:
+	case TypeId::CapturedScopeObject:
+	case typeId_TemporaryObject:
+	case typeId_WaitContext:
+		return "systemObject";
+
+	case typeId_PackageObject:
+		return "packageObject";
+
+	default:
+		auto* cl = static_cast<ObjectBase*>(&object)->getClass();
+		auto className = sTable->ref(cl->getName());
+		auto* p = cl->getPackage();
+		if (p != nullptr && !p->name.empty())
+			className = p->name + "." + className;
+		return className;
+	}
+}
+
+static debugger::Value getValueForDebugger(const StringTable* sTable, Reference ref) {
+	debugger::Value v;
+	switch (ref.valueTypeWithoutLock()) {
+	case ReferenceValueType::Bool:
+		v.valueType = debugger::ValueType::Bool;
+		v.vBool = ref.getBoolWithoutLock();
+		break;
+	case ReferenceValueType::Int:
+		v.valueType = debugger::ValueType::Int;
+		v.vInt = ref.getIntWithoutLock();
+		break;
+	case ReferenceValueType::Float:
+		v.valueType = debugger::ValueType::Float;
+		v.vFloat = ref.getFloatWithoutLock();
+		break;
+
+	case ReferenceValueType::Object: {
+		if (ref.isNullWithoutLock())
+			v.valueType = debugger::ValueType::Null;
+		else if (ref.derefWithoutLock<ObjectBase>().getClass() == String::getClassStatic()) {
+			v.valueType = debugger::ValueType::String;
+			v.vString = ref.derefWithoutLock<String>().getValue();
+		}
+		else {
+			v.valueType = debugger::ValueType::Object;
+			auto& object = ref.derefWithoutLock();
+			v.objectId = static_cast<debugger::ObjectId>(object.getObjectIndex());
+			v.className = getClassNameForDebugger(sTable, object);
+		}
+		break;
+	}
+	}
+	return v;
+}
+
+static debugger::Value getValueForDebugger(const StringTable* sTable, const Method* method) {
+	chatra_assert(method->position == SIZE_MAX);
+
+	debugger::Value v;
+	v.valueType = debugger::ValueType::Method;
+	v.methodName = sTable->ref(method->name);
+	if (method->subName != StringId::Invalid)
+		v.methodName += "." + sTable->ref(method->subName);
+	v.methodArgs = method->getSignature(sTable);
+	return v;
+}
+
+class ValueWriterForDebugger {
+private:
+	std::unordered_map<std::string, debugger::Value>& values;
+	std::unordered_map<std::string, unsigned> keys;
+
+public:
+	explicit ValueWriterForDebugger(std::unordered_map<std::string, debugger::Value>& values) : values(values) {}
+
+	void addValue(std::string key, debugger::Value v) {
+		auto it = keys.find(key);
+		if (it == keys.cend()) {
+			keys.emplace(key, 1);
+			values.emplace(std::move(key), std::move(v));
+			return;
+		}
+
+		if (it->second == 1) {
+			auto vFirst = values[key];
+			values.erase(key);
+			values.emplace(key + "[1]", std::move(vFirst));
+		}
+
+		auto count = it->second + 1;
+		values.emplace(key + "[" + std::to_string(count) + "]", std::move(v));
+		keys.emplace(std::move(key), count);
+	}
+
+	void addRef(const StringTable* sTable, StringId name, Reference ref) {
+		addValue(sTable->ref(name), getValueForDebugger(sTable, ref));
+	}
+
+	void addMethod(const StringTable* sTable, const Method* method) {
+		auto v = getValueForDebugger(sTable, method);
+		auto key = v.methodName;
+		addValue(std::move(key), std::move(v));
+	}
+};
+
 debugger::ScopeState RuntimeImp::getScopeState(debugger::ThreadId threadId, debugger::ScopeId scopeId) {
-	std::lock_guard<std::mutex> lock0(lockDebugger);
-	if (!paused)
-		throw debugger::IllegalRuntimeStateException();
+	CHATRA_CHECK_RUNTIME_PAUSED;
 
 	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
 	auto frameIndex = static_cast<size_t>(scopeId);
@@ -2080,95 +2176,50 @@ debugger::ScopeState RuntimeImp::getScopeState(debugger::ThreadId threadId, debu
 	ret.scopeId = scopeId;
 	ret.scopeType = convertScopeType(f.scope->getScopeType());
 
-	std::unordered_map<std::string, unsigned> keys;
-	auto addValue = [&](std::string key, debugger::Value v) {
-		auto it = keys.find(key);
-		if (it == keys.cend()) {
-			keys.emplace(key, 1);
-			ret.values.emplace(std::move(key), std::move(v));
-			return;
-		}
+	ValueWriterForDebugger writer(ret.values);
 
-		if (it->second == 1) {
-			auto vFirst = ret.values[key];
-			ret.values.erase(key);
-			ret.values.emplace(key + "[1]", std::move(vFirst));
-		}
-
-		auto count = it->second + 1;
-		ret.values.emplace(key + "[" + std::to_string(count) + "]", std::move(v));
-		keys.emplace(std::move(key), count);
-	};
-
-	for (auto& e : f.scope->getAllRefsWithKey()) {
-		auto key = primarySTable->ref(e.first);
-		auto& ref = e.second;
-
-		debugger::Value v;
-		switch (ref.valueTypeWithoutLock()) {
-		case ReferenceValueType::Bool:
-			v.valueType = debugger::ValueType::Bool;
-			v.vBool = ref.getBoolWithoutLock();
-			break;
-		case ReferenceValueType::Int:
-			v.valueType = debugger::ValueType::Int;
-			v.vInt = ref.getIntWithoutLock();
-			break;
-		case ReferenceValueType::Float:
-			v.valueType = debugger::ValueType::Float;
-			v.vFloat = ref.getFloatWithoutLock();
-			break;
-
-		case ReferenceValueType::Object: {
-			if (ref.isNullWithoutLock())
-				v.valueType = debugger::ValueType::Null;
-			else if (ref.derefWithoutLock<ObjectBase>().getClass() == String::getClassStatic()) {
-				v.valueType = debugger::ValueType::String;
-				v.vString = ref.derefWithoutLock<String>().getValue();
-			}
-			else {
-				v.valueType = debugger::ValueType::Object;
-				auto& object = ref.derefWithoutLock();
-				v.objectId = static_cast<debugger::ObjectId>(object.getObjectIndex());
-
-				switch (object.getTypeId()) {
-				case TypeId::CapturedScope:
-				case TypeId::CapturedScopeObject:
-				case typeId_TemporaryObject:
-				case typeId_WaitContext:
-					v.className = "systemObject";
-					break;
-				case typeId_PackageObject:
-					v.className = "packageObject";
-					break;
-				default:
-					auto* cl = ref.derefWithoutLock<ObjectBase>().getClass();
-					v.className = primarySTable->ref(cl->getName());
-					auto* p = cl->getPackage();
-					if (p != nullptr && !p->name.empty())
-						v.className = p->name + "." + v.className;
-					break;
-				}
-			}
-			break;
-		}
-		}
-
-		addValue(std::move(key), std::move(v));
-	}
+	for (auto& e : f.scope->getAllRefsWithKey())
+		writer.addRef(primarySTable.get(), e.first, e.second);
 
 	if (f.methods != nullptr) {
-		for (auto* method : f.methods->getAllMethods()) {
-			debugger::Value v;
-			v.valueType = debugger::ValueType::Method;
-			v.methodName = primarySTable->ref(method->name);
-			if (method->subName != StringId::Invalid)
-				v.methodName += "." + primarySTable->ref(method->subName);
-			v.methodArgs = method->getSignature(primarySTable.get());
+		for (auto* method : f.methods->getAllMethods())
+			writer.addMethod(primarySTable.get(), method);
+	}
 
-			auto key = v.methodName;
-			addValue(std::move(key), std::move(v));
+	return ret;
+}
+
+debugger::ObjectState RuntimeImp::getObjectState(debugger::ObjectId objectId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto& object = storage->derefDirect(static_cast<size_t>(objectId));
+
+	debugger::ObjectState ret;
+	ret.objectId = objectId;
+	ret.className = getClassNameForDebugger(primarySTable.get(), object);
+
+	ValueWriterForDebugger writer(ret.values);
+
+	switch (object.getTypeId()) {
+	case TypeId::CapturedScope:
+	case TypeId::CapturedScopeObject:
+	case typeId_TemporaryObject:
+	case typeId_WaitContext:
+		break;
+
+	default: {
+		auto* cl = storage->derefDirect<ObjectBase>(static_cast<size_t>(objectId)).getClass();
+
+		for (auto* method : cl->refMethods().getAllMethods()) {
+			if (method->position != SIZE_MAX)
+				writer.addRef(primarySTable.get(), method->name, object.ref(method->position));
+			else
+				writer.addMethod(primarySTable.get(), method);
 		}
+
+		for (auto* method : cl->refConstructors().getAllMethods())
+			writer.addMethod(primarySTable.get(), method);
+	}
 	}
 
 	return ret;

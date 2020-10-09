@@ -103,6 +103,12 @@ struct InstanceState {
 	std::vector<ThreadId> threadIds;
 };
 
+struct ObjectState {
+	ObjectId objectId;
+	std::string className;
+	std::unordered_map<std::string, Value> values;
+};
+
 enum class StepRunResult {
 	NotTraceable,
 	NotInRunning,
@@ -136,6 +142,7 @@ struct IDebugger {
 	virtual ThreadState getThreadState(ThreadId threadId) = 0;
 	virtual FrameState getFrameState(ThreadId threadId, FrameId frameId) = 0;
 	virtual ScopeState getScopeState(ThreadId threadId, ScopeId scopeId) = 0;
+	virtual ObjectState getObjectState(ObjectId objectId) = 0;
 };
 
 
