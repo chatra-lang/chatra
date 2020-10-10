@@ -155,6 +155,8 @@ namespace d = debugger;
 
 CHATRA_ENUM_HASH(chatra::debugger::ThreadId)
 CHATRA_ENUM_HASH(chatra::debugger::FrameId)
+CHATRA_ENUM_HASH(chatra::debugger::ScopeId)
+CHATRA_ENUM_HASH(chatra::debugger::ObjectId)
 CHATRA_ENUM_HASH(chatra::debugger::BreakPointId)
 
 
