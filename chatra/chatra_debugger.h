@@ -123,12 +123,15 @@ enum class StepRunResult {
 	Finished,
 	Stopped,
 	BreakPoint,
+	AbortedByHost,
 };
 
 struct IDebuggerHost {
 	virtual ~IDebuggerHost() = default;
 
 	virtual void onBreakPoint(BreakPointId breakPointId) { (void)breakPointId; }
+
+	virtual bool onStepRunLoop() { return true; }
 };
 
 struct IDebugger {

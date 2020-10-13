@@ -22,10 +22,12 @@
 #include "chatra_debugger.h"
 #include <deque>
 #include <thread>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
 #include <unordered_map>
+#include <csignal>
 
 #include <stdio.h>
 #include <unistd.h>
@@ -323,6 +325,15 @@ static std::shared_ptr<cha::Runtime> runtime;
 static std::shared_ptr<DebuggerHost> debuggerHost;
 static std::shared_ptr<cha::d::IDebugger> debugger;
 
+enum class InterruptionState {
+	Masked,
+	Acceptable,
+	Interrupted,
+	Accepted,
+};
+
+static std::atomic<InterruptionState> interruptionState = {InterruptionState::Masked};
+
 static bool lineContinuation = false;
 static bool blockContinuation = false;
 
@@ -343,7 +354,32 @@ static std::mutex mtBreak;
 static std::condition_variable cvBreak;
 
 static void signalHandler(int signal) {
-	// TODO
+	if (signal == SIGINT) {
+		InterruptionState expected = InterruptionState::Acceptable;
+		if (interruptionState.compare_exchange_strong(expected, InterruptionState::Interrupted)) {
+			std::fprintf(stderr, "\n[pause requested - press CTRL-C again to interrupt process]\n");
+			std::fflush(stderr);
+			cvBreak.notify_one();
+		}
+		else {
+			std::fprintf(stderr, "^C\n");
+			std::fflush(stderr);
+			std::exit(-1);
+		}
+	}
+}
+
+template <typename Pred>
+static void interruptible(Pred pred) {
+	interruptionState = InterruptionState::Acceptable;
+	try {
+		pred();
+	}
+	catch (...) {
+		interruptionState = InterruptionState::Masked;
+		throw;
+	}
+	interruptionState = InterruptionState::Masked;
 }
 
 static char* prompt(EditLine*) {
@@ -562,6 +598,7 @@ static void showStepRunResult(cha::d::ThreadId threadId, cha::d::StepRunResult r
 	case cha::d::StepRunResult::WaitingResources:  dLog(0, "[target thread entered in waiting resource state] %s", codePoint.data());  break;
 	case cha::d::StepRunResult::Stopped:  dLog(0, "[paused] %s", codePoint.data());  break;
 	case cha::d::StepRunResult::BreakPoint:  dLog(1, "T%zu %s", static_cast<size_t>(threadId), codePoint.data());  break;
+	case cha::d::StepRunResult::AbortedByHost:  dLog(0, "[paused] %s", codePoint.data());  break;
 	default:
 		break;
 	}
@@ -616,25 +653,50 @@ public:
 
 		cvBreak.notify_one();
 	}
+
+	bool onStepRunLoop() override {
+		InterruptionState expected = InterruptionState::Interrupted;
+		if (interruptionState.compare_exchange_strong(expected, InterruptionState::Accepted))
+			return false;
+		return true;
+	}
 };
+
+static void safePause() {
+	try {
+		debugger->pause();
+	}
+	catch (const cha::d::IllegalRuntimeStateException&) {
+		// do nothing
+	}
+}
+
+static bool checkInterruption() {
+	InterruptionState expected = InterruptionState::Interrupted;
+	if (interruptionState.compare_exchange_strong(expected, InterruptionState::Accepted)) {
+		safePause();
+		dLog(0, "[paused]");
+		return true;
+	}
+	return false;
+}
 
 static void runUntilBreak() {
 	if (optThreads == std::numeric_limits<unsigned>::max()) {
 		while (runtime->handleQueue()) {
 			if (debugger->isPaused())
 				return;
+			if (checkInterruption())
+				return;
 		}
 		dLog(0, "[finished]");
-		try {
-			debugger->pause();
-		}
-		catch (const cha::d::IllegalRuntimeStateException&) {
-			// do nothing
-		}
+		safePause();
 	}
 	else {
 		std::unique_lock<std::mutex> lock0(mtBreak);
-		cvBreak.wait(lock0, [&]() { return debugger->isPaused(); });
+		cvBreak.wait(lock0, [&]() {
+			return debugger->isPaused() || checkInterruption();
+		});
 	}
 }
 
@@ -703,8 +765,10 @@ static void processDebuggerCommand(const std::string& input) {
 			}
 		}
 		else if (cmd == "resume") {
-			debugger->resume();
-			runUntilBreak();
+			interruptible([&]() {
+				debugger->resume();
+				runUntilBreak();
+			});
 		}
 		else if (cmd == "l" || cmd == "ls" || cmd == "list" || cmd == "s" || cmd == "show") {
 			if (args.empty()) {
@@ -900,27 +964,37 @@ static void processDebuggerCommand(const std::string& input) {
 			auto verb = consume<std::string>("step", args);
 			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("step", "thread", args);
 
-			if (verb == "in" || verb == "over")
-				showStepRunResult(threadId, debugger->stepInto(threadId));
-			else if (verb == "over")
-				showStepRunResult(threadId, debugger->stepOver(threadId));
-			else if (verb == "out")
-				showStepRunResult(threadId, debugger->stepOut(threadId));
-			else
-				throw cha::IllegalArgumentException("unknown command: \"step %s\"", verb.data());
+			interruptible([&]() {
+				if (verb == "in" || verb == "over")
+					showStepRunResult(threadId, debugger->stepInto(threadId));
+				else if (verb == "over")
+					showStepRunResult(threadId, debugger->stepOver(threadId));
+				else if (verb == "out")
+					showStepRunResult(threadId, debugger->stepOut(threadId));
+				else
+					throw cha::IllegalArgumentException("unknown command: \"step %s\"", verb.data());
+			});
 		}
 		else if (cmd == "i") {
 			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("step into", "thread", args);
-			showStepRunResult(threadId, debugger->stepInto(threadId));
+			interruptible([&]() {
+				showStepRunResult(threadId, debugger->stepInto(threadId));
+			});
 		}
 		else if (cmd == "o") {
 			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("step over", "thread", args);
-			showStepRunResult(threadId, debugger->stepOver(threadId));
+			interruptible([&]() {
+				showStepRunResult(threadId, debugger->stepOver(threadId));
+			});
 		}
 		else if (cmd == "r") {
 			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("step out", "thread", args);
-			showStepRunResult(threadId, debugger->stepOut(threadId));
+			interruptible([&]() {
+				showStepRunResult(threadId, debugger->stepOut(threadId));
+			});
 		}
+		else
+			throw cha::IllegalArgumentException("unknown command \"%s\"", cmd.data());
 	}
 	catch (const cha::IllegalArgumentException& ex) {
 		dError("debugger: %s", ex.what() == nullptr ? "illegal argument" : ex.what());
@@ -931,21 +1005,18 @@ static void processDebuggerCommand(const std::string& input) {
 	catch (const OptionError&) {
 		// do nothing
 	}
-
-	// TODO ctrl-C → break
-
-
-
 }
 
 static int interactiveMode() {
+	std::signal(SIGINT, signalHandler);
+
 	auto* hist = history_init();
 	HistEvent ev;
 	history(hist, &ev, H_SETSIZE, 1000);
 	auto el = el_init(argv0.data(), stdin, stdout, stderr);
 
 	el_set(el, EL_EDITOR, "emacs");
-	//el_set(el, EL_SIGNAL, 1);
+	el_set(el, EL_SIGNAL, 1);
 	el_set(el, EL_PROMPT_ESC, prompt, '\1');
 	el_set(el, EL_HIST, history, hist);
 	el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
@@ -1033,7 +1104,7 @@ static int interactiveMode() {
 
 		std::printf("input = \"%s\"\n", input.data());
 		input.clear();
-
+		// TODO
 
 
 	}

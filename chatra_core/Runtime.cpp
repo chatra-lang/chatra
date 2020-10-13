@@ -1189,6 +1189,11 @@ debugger::StepRunResult RuntimeImp::stepRun(Thread* thread, ContinueCond continu
 	thread->captureStringTable();
 
 	while (continueCond()) {
+		if (debuggerHost && !debuggerHost->onStepRunLoop()) {
+			enqueue(thread);
+			return debugger::StepRunResult::AbortedByHost;
+		}
+
 		switch (thread->stepRun()) {
 		case Thread::StepRunResult::Abort:
 			thread->finish();
