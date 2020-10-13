@@ -43,6 +43,12 @@ struct CodePoint {
 	unsigned lineNo;
 };
 
+struct PackageState {
+	PackageId packageId;
+	std::string packageName;
+	std::vector<Script> scripts;
+};
+
 enum class ValueType {
 	Null,
 	Bool,
@@ -130,6 +136,7 @@ struct IDebugger {
 
 	virtual void pause() = 0;
 	virtual void resume() = 0;
+	virtual bool isPaused() = 0;
 
 	virtual StepRunResult stepOver(ThreadId threadId) = 0;
 	virtual StepRunResult stepInto(ThreadId threadId) = 0;
@@ -138,6 +145,7 @@ struct IDebugger {
 	virtual BreakPointId addBreakPoint(const CodePoint& point) = 0;
 	virtual void removeBreakPoint(BreakPointId breakPointId) = 0;
 
+	virtual std::vector<PackageState> getPackagesState() = 0;
 	virtual std::vector<InstanceState> getInstancesState() = 0;
 	virtual ThreadState getThreadState(ThreadId threadId) = 0;
 	virtual FrameState getFrameState(ThreadId threadId, FrameId frameId) = 0;

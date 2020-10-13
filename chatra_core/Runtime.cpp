@@ -1871,6 +1871,11 @@ void RuntimeImp::resume() {
 	paused = false;
 }
 
+bool RuntimeImp::isPaused() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	return paused;
+}
+
 #define CHATRA_POP_DEBUGGABLE_THREAD  \
 		std::lock_guard<std::mutex> lock0(lockDebugger);  \
 		auto* thread = popDebuggableThread(threadId);  \
@@ -1958,6 +1963,24 @@ void RuntimeImp::removeBreakPoint(debugger::BreakPointId breakPointId) {
 
 	cancelBreakPoint(it->second);
 	breakPoints.erase(it);
+}
+
+std::vector<debugger::PackageState> RuntimeImp::getPackagesState() {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	std::vector<debugger::PackageState> ret;
+	packageIds.forEach([&](const Package& package) {
+		if (package.getId() == finalizerPackageId)
+			return;
+
+		ret.emplace_back();
+		auto& v = ret.back();
+
+		v.packageId = package.getId();
+		v.packageName = package.name;
+		v.scripts = package.scripts;
+	});
+	return ret;
 }
 
 std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {

@@ -1191,11 +1191,13 @@ public:
 
 	void pause() override;
 	void resume() override;
+	bool isPaused() override;
 	debugger::StepRunResult stepOver(debugger::ThreadId threadId) override;
 	debugger::StepRunResult stepInto(debugger::ThreadId threadId) override;
 	debugger::StepRunResult stepOut(debugger::ThreadId threadId) override;
 	debugger::BreakPointId addBreakPoint(const debugger::CodePoint& point) override;
 	void removeBreakPoint(debugger::BreakPointId breakPointId) override;
+	std::vector<debugger::PackageState> getPackagesState() override;
 	std::vector<debugger::InstanceState> getInstancesState() override;
 	debugger::ThreadState getThreadState(debugger::ThreadId threadId) override;
 	debugger::FrameState getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) override;
