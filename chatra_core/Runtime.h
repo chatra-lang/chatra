@@ -958,7 +958,7 @@ public:
 	std::shared_ptr<Node> node;
 	std::vector<Thread*> threadsWaitingForNode;
 
-	SpinLock lockInstances;
+	mutable SpinLock lockInstances;
 	std::unordered_map<InstanceId, std::unique_ptr<Instance>> instances;
 
 	std::unique_ptr<Class> clPackage;

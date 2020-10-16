@@ -105,10 +105,11 @@ static void help(FILE* stream) {
 			"    add directory of searching scripts\n"
 			"    (This is applied only for \"import\", not for command line)\n"
 			" -c <script>\n"
-			"    script passed by string; can be specified with multiple times\n",
+			"    script passed by string; can be specified with multiple times\n"
+			" !\n"
+			"    enter interactive mode after loading all scripts specified in parameters;\n"
+			"    must be specified at the end of parameters",
 			argv0.data());
-
-	// TODO
 }
 
 static std::string loadScript(const char* fileName) {
@@ -545,6 +546,9 @@ static cha::d::CodePoint parseCodePoint(std::deque<std::string>& args) {
 	if (packages.empty())
 		throw cha::IllegalArgumentException("no packages", packageName.data());
 
+	for (auto& p : packages)
+		sortScripts(p.scripts);
+
 	// verify file name
 	decltype(packages[0].scripts.cbegin()) it1;
 	auto it0 = std::find_if(packages.cbegin(), packages.cend(), [&](const cha::d::PackageState& p) {
@@ -565,6 +569,26 @@ static cha::d::CodePoint parseCodePoint(std::deque<std::string>& args) {
 			});
 			return it1 != p.scripts.cend();
 		});
+	}
+
+	if (it0 == packages.cend() && hasPackageName) {
+		unsigned fileNo;
+		try {
+			fileNo = static_cast<unsigned>(std::stoi(fileName));
+		}
+		catch (const std::exception&) {
+			fileNo = std::numeric_limits<unsigned>::max();
+		}
+		if (fileNo != std::numeric_limits<unsigned>::max()) {
+			it0 = std::find_if(packages.cbegin(), packages.cend(), [&](const cha::d::PackageState& p) {
+				if (p.packageName != packageName)
+					return false;
+				if (fileNo >= p.scripts.size())
+					return false;
+				it1 = p.scripts.cbegin() + fileNo;
+				return true;
+			});
+		}
 	}
 
 	if (it0 == packages.cend())
@@ -771,7 +795,28 @@ static void processDebuggerCommand(const std::string& input) {
 
 	try {
 		if (cmd == "h" || cmd == "help") {
-			// TODO
+			constexpr const char* commands[][3] = {
+					{"run", "[<name>:] <script>", "load script from file <script> and create an instance"},
+					{"resume", "", "switch to running state until any break-point hits or CTRL-C break"},
+					{"list", "package [Pxx]", "show packages information"},
+					{"list", "instance [Pxx] [Ixx]", "show instances information"},
+					{"list", "thread [Pxx] [Ixx]", "show threads information"},
+					{"list", "frame [Pxx] [Ixx] [Txx]", "show frames in threads information"},
+					{"list", "scope Txx Sxx", "show scope information"},
+					{"list", "object Oxx", "show object information"},
+					{"list", "breakpoint", "show breakpoints"},
+					{"break", "@ [<package>:] <file name> (<line#>)", "add breakpoint"},
+					{"del", "Bxx", "delete breakpoint"},
+					{"step", "in|into|over|out Txx", "step run"},
+					{"i", "", "step into"},
+					{"o", "", "step over"},
+					{"r", "", "step out"},
+			};
+			dLog(0, "debugger command:");
+			for (auto& line : commands) {
+				dLog(1, "!%-7s%s", line[0], line[1]);
+				dLog(1, "        %s", line[2]);
+			}
 		}
 		else if (cmd == "run") {  // [name:] script
 			std::string vName;
@@ -800,7 +845,7 @@ static void processDebuggerCommand(const std::string& input) {
 		}
 		else if (cmd == "l" || cmd == "ls" || cmd == "list" || cmd == "s" || cmd == "show") {
 			if (args.empty()) {
-				dLog(0, "packages  instances  threads  frames  scopes  objects  breakpoints");
+				dLog(0, "package  instance  thread  frame  scope  object  breakpoint");
 				return;
 			}
 
@@ -811,13 +856,13 @@ static void processDebuggerCommand(const std::string& input) {
 				auto e = parseTargetId(target);
 				args.push_front(target);
 				switch (std::get<0>(e)) {
-				case Target::Package:  target = "packages";  break;
-				case Target::Instance:  target = "instances";  break;
-				case Target::Thread:  target = "threads";  break;
-				case Target::Frame:  target = "frames";  break;
-				case Target::Scope:  target = "scopes";  break;
-				case Target::Object:  target = "objects";  break;
-				case Target::BreakPoint:  target = "breakpoints";  break;
+				case Target::Package:  target = "package";  break;
+				case Target::Instance:  target = "instance";  break;
+				case Target::Thread:  target = "thread";  break;
+				case Target::Frame:  target = "frame";  break;
+				case Target::Scope:  target = "scope";  break;
+				case Target::Object:  target = "object";  break;
+				case Target::BreakPoint:  target = "breakpoint";  break;
 				}
 			}
 			catch (const cha::IllegalArgumentException&) {
@@ -858,7 +903,7 @@ static void processDebuggerCommand(const std::string& input) {
 					"Package", "ScriptRoot", "Class", "Method", "Block",
 			};
 
-			if (target == "packages") {
+			if (target == "package") {
 				for (auto& v : debugger->getPackagesState()) {
 					FILTER_PACKAGE(v);
 					sortScripts(v.scripts);
@@ -870,7 +915,7 @@ static void processDebuggerCommand(const std::string& input) {
 							}).data());
 				}
 			}
-			else if (target == "instances") {
+			else if (target == "instance") {
 				for (auto& v : debugger->getInstancesState()) {
 					FILTER_PRIMARY_PACKAGE(v);
 					FILTER_INSTANCE(v);
@@ -886,7 +931,7 @@ static void processDebuggerCommand(const std::string& input) {
 							}).data());
 				}
 			}
-			else if (target == "threads") {
+			else if (target == "thread") {
 				for (auto& vi : debugger->getInstancesState()) {
 					FILTER_PRIMARY_PACKAGE(vi);
 					FILTER_INSTANCE(vi);
@@ -903,7 +948,7 @@ static void processDebuggerCommand(const std::string& input) {
 					}
 				}
 			}
-			else if (target == "frames") {
+			else if (target == "frame") {
 				for (auto& vi : debugger->getInstancesState()) {
 					FILTER_PRIMARY_PACKAGE(vi);
 					FILTER_INSTANCE(vi);
@@ -926,7 +971,7 @@ static void processDebuggerCommand(const std::string& input) {
 					}
 				}
 			}
-			else if (target == "scopes") {
+			else if (target == "scope") {
 				if (filters.count(Target::Thread) == 0 || filters.count(Target::Scope) == 0)
 					throw cha::IllegalArgumentException("thread-ID and scope-ID required to show a scope");
 
@@ -947,7 +992,7 @@ static void processDebuggerCommand(const std::string& input) {
 						v.values.size());
 				showValues(1, v.values);
 			}
-			else if (target == "objects") {
+			else if (target == "object") {
 				if (filters.count(Target::Object) == 0)
 					throw cha::IllegalArgumentException("object-ID required");
 
@@ -957,7 +1002,7 @@ static void processDebuggerCommand(const std::string& input) {
 				dLog(0, "[O%zu] class=%s", static_cast<size_t>(objectId), v.className.data());
 				showValues(1, v.values);
 			}
-			else if (target == "breakpoints") {
+			else if (target == "breakpoint") {
 				std::lock_guard<cha::SpinLock> lock0(lockBreak);
 				for (auto& b : breakPoints)
 					dLog(0, "[B%zu] %s", static_cast<size_t>(b.breakPointId), formatCodePoint(b.codePoint).data());
@@ -993,7 +1038,7 @@ static void processDebuggerCommand(const std::string& input) {
 			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("step", "thread", args);
 
 			interruptible([&]() {
-				if (verb == "in" || verb == "over")
+				if (verb == "in" || verb == "into")
 					showStepRunResult(threadId, debugger->stepInto(threadId));
 				else if (verb == "over")
 					showStepRunResult(threadId, debugger->stepOver(threadId));
@@ -1055,6 +1100,9 @@ static int interactiveMode() {
 	el_source(el, nullptr);
 
 	interactiveInstanceId = runtime->createInteractiveInstance();
+
+	dLog(0, "Chatra interactive frontend");
+	dLog(0, "type \"!h\" to show debugger command help");
 
 	std::string input;
 	std::string line;

@@ -2084,6 +2084,15 @@ void RuntimeImp::removeBreakPoint(debugger::BreakPointId breakPointId) {
 	breakPoints.erase(it);
 }
 
+static bool isInteractiveInstance(const Instance& instance) {
+	std::lock_guard<SpinLock> lock0(instance.lockThreads);
+	for (auto& e : instance.threads) {
+		if (e.second->isInteractive)
+			return true;
+	}
+	return false;
+}
+
 std::vector<debugger::PackageState> RuntimeImp::getPackagesState() {
 	CHATRA_CHECK_RUNTIME_PAUSED;
 
@@ -2091,6 +2100,13 @@ std::vector<debugger::PackageState> RuntimeImp::getPackagesState() {
 	packageIds.forEach([&](const Package& package) {
 		if (package.getId() == finalizerPackageId)
 			return;
+
+		// exclude packages which host interactive instances
+		{
+			std::lock_guard<SpinLock> lock1(package.lockInstances);
+			if (package.instances.size() == 1 && isInteractiveInstance(*package.instances.cbegin()->second))
+				return;
+		}
 
 		ret.emplace_back();
 		auto& v = ret.back();
@@ -2109,6 +2125,8 @@ std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
 	instanceIds.forEach([&](const Instance& instance) {
 		auto instanceId = instance.getId();
 		if (instanceId == finalizerInstanceId || instanceId == gcInstance->getId())
+			return;
+		if (isInteractiveInstance(instance))
 			return;
 
 		ret.emplace_back();
