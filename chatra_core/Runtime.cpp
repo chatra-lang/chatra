@@ -303,6 +303,13 @@ void Package::pushNodeFrame(Thread& thread, Package& package, size_t parentIndex
 	thread.frames.emplace_back(thread, package, parentIndex, type, node.get(), popCount);
 }
 
+void Package::pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, Scope* scope, size_t popCount) {
+	std::lock_guard<SpinLock> lock(lockNode);
+	if (node->blockNodesState != NodeState::Parsed)
+		threadsWaitingForNode.emplace_back(&thread);
+	thread.frames.emplace_back(Frame::ForInteractive(), thread, package, parentIndex, scope, node.get(), popCount);
+}
+
 RuntimeId Package::runtimeId() const {
 	return runtime.runtimeId;
 }
@@ -1814,6 +1821,7 @@ InstanceId RuntimeImp::createInteractiveInstance() {
 	auto instanceId = instance->getId();
 
 	auto& thread = createThread(*instance, *package, true);
+	std::swap(thread.scriptScope, thread.frames.back().frameScope);
 	thread.pop();
 	chatra_assert(thread.frames.size() == residentialFrameCount);
 
@@ -1873,7 +1881,7 @@ void RuntimeImp::push(InstanceId interactiveInstanceId, const std::string& scrip
 
 	chatra_assert(thread->frames.size() == residentialFrameCount);
 	thread->frames.emplace_back(*thread, *package, 1, package->scope.get());
-	package->pushNodeFrame(*thread, *package, 2, ScopeType::ScriptRoot, 2);
+	package->pushNodeFrame(*thread, *package, 2, thread->scriptScope.get(), 2);
 
 	package->initialized = false;
 	package->grouped = false;

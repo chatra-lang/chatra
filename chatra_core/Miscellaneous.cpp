@@ -660,6 +660,19 @@ Frame::Frame(Thread& thread, Package& package, size_t parentIndex,
 		hasMethods = true;
 }
 
+Frame::Frame(ForInteractive, Thread& thread, Package& package, size_t parentIndex,
+		Scope* scope, Node* node, size_t popCount) noexcept
+		: thread(thread), package(package), parentIndex(parentIndex), scope(scope), popCount(popCount) {
+
+	chatra_assert(node->type == NodeType::ScriptRoot);
+
+	frameLock.reset(new Lock());
+	frameLock->setFrame(this);
+	lock = frameLock.get();
+
+	this->node = node;
+}
+
 Frame::Frame(Thread& thread, Package& package, size_t parentIndex,
 		const Class* cl, Reference instanceRef, size_t popCount) noexcept
 		: thread(thread), package(package), parentIndex(parentIndex),

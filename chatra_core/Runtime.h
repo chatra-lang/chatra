@@ -554,6 +554,11 @@ public:
 	Frame(Thread& thread, Package& package, size_t parentIndex,
 			ScopeType type, Node* node, size_t popCount = 1) noexcept;
 
+	// Constructor for ScriptRoot on interactive instance
+	struct ForInteractive {};
+	Frame(ForInteractive, Thread& thread, Package& package, size_t parentIndex,
+			Scope* scope, Node* node, size_t popCount = 1) noexcept;
+
 	// Constructor for ScopeType::Class
 	Frame(Thread& thread, Package& package, size_t parentIndex,
 			const Class* cl, Reference instanceRef, size_t popCount = 1) noexcept;
@@ -983,6 +988,7 @@ public:
 	const std::vector<Package*>& refAnonymousImports() const;
 
 	void pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, ScopeType type, size_t popCount = 1);
+	void pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, Scope* scope, size_t popCount = 1);
 
 	RuntimeId runtimeId() const override;
 	std::vector<uint8_t> saveEvent(NativeEventObject* event) const override;
