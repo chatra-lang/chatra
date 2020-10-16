@@ -77,15 +77,16 @@ constexpr Operator adhocOperator(size_t delta) noexcept {
 }
 
 constexpr Operator opInitializePackage = adhocOperator(0);
-constexpr Operator opEvaluateTuple = adhocOperator(1);
-constexpr Operator opInitializeVars = adhocOperator(2);
-constexpr Operator opPopValue = adhocOperator(3);
-constexpr Operator opPostConstructor = adhocOperator(4);
-constexpr Operator opPostPostfixUnaryOperator = adhocOperator(5);
-constexpr Operator opRestoreTemporaryLock = adhocOperator(6);
-constexpr Operator opReturnFromAsync = adhocOperator(7);
-constexpr Operator opProcessFor_CallNext = adhocOperator(8);
-constexpr Operator opVarStatementMarker = adhocOperator(9);
+constexpr Operator opInitializeAdditionalPackage = adhocOperator(1);
+constexpr Operator opEvaluateTuple = adhocOperator(2);
+constexpr Operator opInitializeVars = adhocOperator(3);
+constexpr Operator opPopValue = adhocOperator(4);
+constexpr Operator opPostConstructor = adhocOperator(5);
+constexpr Operator opPostPostfixUnaryOperator = adhocOperator(6);
+constexpr Operator opRestoreTemporaryLock = adhocOperator(7);
+constexpr Operator opReturnFromAsync = adhocOperator(8);
+constexpr Operator opProcessFor_CallNext = adhocOperator(9);
+constexpr Operator opVarStatementMarker = adhocOperator(10);
 
 constexpr PackageId finalizerPackageId = static_cast<PackageId>(0);
 constexpr InstanceId finalizerInstanceId = static_cast<InstanceId>(1);
@@ -567,7 +568,8 @@ namespace Phase {
 	constexpr size_t PhaseMask = SIZE_MAX >> 1U;
 	constexpr size_t BreakPointFlag = SIZE_MAX ^ SIZE_MAX >> 1U;
 
-	constexpr size_t ScriptRoot_Initial = PhaseMask - 3;
+	constexpr size_t ScriptRoot_Initial = PhaseMask - 4;
+	constexpr size_t ScriptRoot_InteractiveInitial = PhaseMask - 3;
 	constexpr size_t ScriptRoot_InitCall0 = PhaseMask - 2;
 	constexpr size_t ScriptRoot_InitCall1 = ScriptRoot_InitCall0 + 1;
 
@@ -657,9 +659,14 @@ public:
 	RuntimeImp& runtime;
 	Instance& instance;
 
+	bool isInteractive = false;
+	std::atomic<bool> readyToNextInteraction = {true};
+	std::unique_ptr<Scope> scriptScope;
+
 	static bool initialized;
 	static Node expressionMarkerNode;
 	static Node initializePackageNode;
+	static Node initializeAdditionalPackageNode;
 	static Node evaluateTupleNode;
 	static Node defaultConstructorNode;
 	static Node initializeVarsNode;
@@ -960,7 +967,7 @@ public:
 	Package(RuntimeImp& runtime, std::string name, PackageInfo packageInfo, bool fromHost) noexcept;
 	void postInitialize();
 
-	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
+	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node, bool processOnlyLast = false);
 	void distributeScriptNode(std::shared_ptr<Node> scriptNode);
 
 	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
@@ -1095,6 +1102,10 @@ public:
 	std::unordered_map<debugger::BreakPointId, BreakPoint> breakPoints;
 	size_t nextBreakPointId = 0;
 
+	// Interactive mode
+	SpinLock lockTrashNodes;
+	std::vector<std::shared_ptr<Node>> trashNodes;
+
 private:
 	void launchStorage();
 	void launchFinalizerThread();
@@ -1128,7 +1139,7 @@ public:
 
 	bool distributeStringTable(unsigned oldVersion = UINT_MAX);
 
-	Thread& createThread(Instance& instance, Package& package, Node* node = nullptr);
+	Thread& createThread(Instance& instance, Package& package, bool isInteractive = false, Node* node = nullptr);
 	void enqueue(Thread* thread);
 
 	unsigned pause(Thread* thread);
@@ -1182,6 +1193,10 @@ public:
 	PackageId loadPackage(const std::vector<Script>& scripts) override;
 	PackageId loadPackage(const std::string& packageName) override;
 	InstanceId run(PackageId packageId) override;
+	InstanceId createInteractiveInstance() override;
+	bool readyToNextInteraction(InstanceId interactiveInstanceId) override;
+	void push(InstanceId interactiveInstanceId, const std::string& scriptName,
+			const std::string& statement) override;
 	bool isRunning(InstanceId instanceId) override;
 	void stop(InstanceId instanceId) override;
 	TimerId addTimer(const std::string& name) override;

@@ -51,6 +51,47 @@ static std::vector<std::tuple<ScriptSourceType, size_t, std::string>> optFiles;
 static std::vector<std::string> optPaths;
 static unsigned optThreads = std::numeric_limits<unsigned>::max();
 
+class Host;
+class DebuggerHost;
+static std::shared_ptr<Host> host;
+static std::shared_ptr<cha::Runtime> runtime;
+static std::shared_ptr<DebuggerHost> debuggerHost;
+static std::shared_ptr<cha::d::IDebugger> debugger;
+
+static cha::InstanceId interactiveInstanceId;
+static std::atomic<bool> interactiveInstanceReady = {false};
+
+enum class InterruptionState {
+	Masked,
+	Acceptable,
+	Interrupted,
+	Accepted,
+};
+
+static std::atomic<InterruptionState> interruptionState = {InterruptionState::Masked};
+
+static bool lineContinuation = false;
+static bool blockContinuation = false;
+static unsigned inputSectionNo = 0;
+static unsigned inputLineNo = 1;
+
+enum class Target {
+	Package, Instance, Thread, Frame, Scope, Object, BreakPoint
+};
+CHATRA_ENUM_HASH(Target);
+
+struct BreakPointState {
+	cha::d::BreakPointId breakPointId = static_cast<cha::d::BreakPointId>(std::numeric_limits<size_t>::max());
+	cha::d::CodePoint codePoint;
+};
+
+static cha::SpinLock lockBreak;
+static std::vector<BreakPointState> breakPoints;
+
+static std::mutex mtBreak;
+static std::condition_variable cvBreak;
+
+
 static void help(FILE* stream) {
 	std::fprintf(stream, "usage: %s [options...] [script files... (or stdin if omitted)]\n"
 			"options:\n"
@@ -317,41 +358,12 @@ public:
 		default:  return nullptr;
 		}
 	}
+
+	void onInteractiveInstanceReady(cha::InstanceId) override {
+		interactiveInstanceReady = true;
+		cvBreak.notify_one();
+	}
 };
-
-class DebuggerHost;
-static std::shared_ptr<Host> host;
-static std::shared_ptr<cha::Runtime> runtime;
-static std::shared_ptr<DebuggerHost> debuggerHost;
-static std::shared_ptr<cha::d::IDebugger> debugger;
-
-enum class InterruptionState {
-	Masked,
-	Acceptable,
-	Interrupted,
-	Accepted,
-};
-
-static std::atomic<InterruptionState> interruptionState = {InterruptionState::Masked};
-
-static bool lineContinuation = false;
-static bool blockContinuation = false;
-
-enum class Target {
-	Package, Instance, Thread, Frame, Scope, Object, BreakPoint
-};
-CHATRA_ENUM_HASH(Target);
-
-struct BreakPointState {
-	cha::d::BreakPointId breakPointId = static_cast<cha::d::BreakPointId>(std::numeric_limits<size_t>::max());
-	cha::d::CodePoint codePoint;
-};
-
-static cha::SpinLock lockBreak;
-static std::vector<BreakPointState> breakPoints;
-
-static std::mutex mtBreak;
-static std::condition_variable cvBreak;
 
 static void signalHandler(int signal) {
 	if (signal == SIGINT) {
@@ -383,10 +395,16 @@ static void interruptible(Pred pred) {
 }
 
 static char* prompt(EditLine*) {
-	static const char* p0 = "\1\033[7m\1chatra>\1\033[0m\1 ";
-	static const char* p1 = "\1>\1 ";
-	static const char* p2 = "\1\033[0m\1chatra>\1\033[0m\1 ";
-	return const_cast<char*>(lineContinuation ? p1 : blockContinuation ? p2 : p0);
+	static std::string ret;
+
+	if (lineContinuation)
+		ret = "\1\033[0m\1:" + std::to_string(inputLineNo) + ">>\1\033[0m\1 ";
+	else if (blockContinuation)
+		ret = "\1\033[0m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
+	else
+		ret = "\1\033[7m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
+
+	return const_cast<char*>(ret.data());
 }
 
 static unsigned char complete(EditLine *el, int) {
@@ -682,12 +700,22 @@ static bool checkInterruption() {
 }
 
 static void runUntilBreak() {
+	interactiveInstanceReady = false;
+	debugger->resume();
+
 	if (optThreads == std::numeric_limits<unsigned>::max()) {
 		while (runtime->handleQueue()) {
 			if (debugger->isPaused())
 				return;
 			if (checkInterruption())
 				return;
+			if (interactiveInstanceReady)
+				break;
+		}
+		if (interactiveInstanceReady) {
+			interactiveInstanceReady = false;
+			safePause();
+			return;
 		}
 		dLog(0, "[finished]");
 		safePause();
@@ -695,8 +723,9 @@ static void runUntilBreak() {
 	else {
 		std::unique_lock<std::mutex> lock0(mtBreak);
 		cvBreak.wait(lock0, [&]() {
-			return debugger->isPaused() || checkInterruption();
+			return debugger->isPaused() || checkInterruption() || interactiveInstanceReady;
 		});
+		interactiveInstanceReady = false;
 	}
 }
 
@@ -766,7 +795,6 @@ static void processDebuggerCommand(const std::string& input) {
 		}
 		else if (cmd == "resume") {
 			interruptible([&]() {
-				debugger->resume();
 				runUntilBreak();
 			});
 		}
@@ -1026,11 +1054,14 @@ static int interactiveMode() {
 
 	el_source(el, nullptr);
 
+	interactiveInstanceId = runtime->createInteractiveInstance();
+
 	std::string input;
 	std::string line;
 	int length;
 	const char *buffer;
 	while ((buffer = el_gets(el, &length)) != nullptr && length != 0) {
+		inputLineNo++;
 
 		unsigned lineIndent = 0;
 		for (int i = 0; i < length; i++) {
@@ -1098,15 +1129,22 @@ static int interactiveMode() {
 		if (input[0] == '!') {
 			processDebuggerCommand(input);
 			input.clear();
+			inputLineNo = 1;
 			continue;
 		}
 
+		try {
+			runtime->push(interactiveInstanceId, "chatra[" + std::to_string(inputSectionNo++) + "]", input);
+			input.clear();
+			inputLineNo = 1;
+		}
+		catch (const cha::NativeException& ex) {
+			dError("interactive mode: %s", ex.what() == nullptr ? "error" : ex.what());
+		}
 
-		std::printf("input = \"%s\"\n", input.data());
-		input.clear();
-		// TODO
-
-
+		interruptible([&]() {
+			runUntilBreak();
+		});
 	}
 
 	el_end(el);
@@ -1119,11 +1157,11 @@ static bool isTTY() {
 }
 
 int main(int argc, char* argv[]) {
-#if 1
+#if 0
 	//const char* args_test[] = {"chatra", "--language-test", "--baseline"};
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize", "1000"};
 	//const char* args_test[] = {"chatra", "--language-test", "--serialize-reproduce", "emb_format: 226 1956 197 787 479 54 709"};
-	const char* args_test[] = {"chatra", "/Users/hosokawa/debug_test.cha", "!"};
+	const char* args_test[] = {"chatra", "debug_test.cha", "!"};
 	//const char* args_test[] = {"chatra", "--help"};
 	//const char* args_test[] = {"chatra", "--language-test", "--parse", "chatra_emb/containers.cha"};
 	argc = sizeof(args_test) / sizeof(args_test[0]);

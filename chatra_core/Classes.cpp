@@ -439,6 +439,30 @@ Class::Class(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFin
 Class::Class(Package* package, Node* node) noexcept : Class(package, node, node->sid, nullptr) {
 }
 
+static void addVariables(IErrorReceiver& errorReceiver, MethodTable& methods,
+		const std::unordered_map<Node*, Node*>& varSyncMap, const Class* cl, Node* n) {
+
+	for (auto& defNode : n->subNodes[SubNode::Var_Definitions]->subNodes) {
+		auto name = (defNode->type == NodeType::Name ? defNode->sid : defNode->subNodes[0]->sid);
+
+		auto duplicatedMethods = methods.findByName(name, StringId::Invalid);
+		for (auto* m : duplicatedMethods) {
+			if (m->position != SIZE_MAX) {
+				errorAtNode(errorReceiver, ErrorLevel::Error, defNode.get(), "duplicated variable name", {});
+				errorAtNode(errorReceiver, ErrorLevel::Error, m->node, "previous declaration is here", {});
+				throw RuntimeException(StringId::ParserErrorException);
+			}
+		}
+
+		Node* syncNode = nullptr;
+		auto it = varSyncMap.find(n);
+		if (it != varSyncMap.end())
+			syncNode = it->second;
+
+		methods.add(defNode.get(), cl, name, syncNode);
+	}
+}
+
 void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
 		ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) {
 	this->objectBuilder = objectBuilder;
@@ -463,27 +487,8 @@ void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable,
 
 	bool hasConstructor = false;
 	for (auto& n : node->symbols) {
-		if (n->type == NodeType::Var) {
-			for (auto& defNode : n->subNodes[SubNode::Var_Definitions]->subNodes) {
-				auto name = (defNode->type == NodeType::Name ? defNode->sid : defNode->subNodes[0]->sid);
-
-				auto duplicatedMethods = methods.findByName(name, StringId::Invalid);
-				for (auto* m : duplicatedMethods) {
-					if (m->position != SIZE_MAX) {
-						errorAtNode(errorReceiver, ErrorLevel::Error, defNode.get(), "duplicated variable name", {});
-						errorAtNode(errorReceiver, ErrorLevel::Error, m->node, "previous declaration is here", {});
-						throw RuntimeException(StringId::ParserErrorException);
-					}
-				}
-
-				Node* syncNode = nullptr;
-				auto it = varSyncMap.find(n.get());
-				if (it != varSyncMap.end())
-					syncNode = it->second;
-
-				methods.add(defNode.get(), this, name, syncNode);
-			}
-		}
+		if (n->type == NodeType::Var)
+			addVariables(errorReceiver, methods, varSyncMap, this, n.get());
 		else if (n->type == NodeType::Def) {
 			if (n->sid == StringId::Init) {
 				hasConstructor = true;
@@ -502,6 +507,29 @@ void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable,
 			constructors.add(method);
 		else
 			methods.add(method);
+	}
+}
+
+void Class::cumulativeInitializeForPackage(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
+		Node* node) {
+
+	chatra_assert(node->blockNodesState == NodeState::Parsed);
+	this->node = node;
+
+	std::unordered_map<Node*, Node*> varSyncMap = getSyncMap(node);
+
+	for (auto& n : node->symbols) {
+		if (n->type == NodeType::Var)
+			addVariables(errorReceiver, methods, varSyncMap, this, n.get());
+		else if (n->type == NodeType::Def) {
+			if (n->sid == StringId::Init) {
+				errorAtNode(errorReceiver, ErrorLevel::Error, n.get(),
+						"package-level init() cannot be defined in interactive mode", {});
+				throw RuntimeException(StringId::ParserErrorException);
+			}
+			else
+				addMethod(methods, errorReceiver, sTable, classFinder, n.get(), nullptr);
+		}
 	}
 }
 

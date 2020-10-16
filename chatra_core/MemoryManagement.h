@@ -457,13 +457,16 @@ private:
 			std::unordered_map<StringId, Reference> refs) noexcept
 			: typeId(typeId), groups(std::move(groups)), nodes(std::move(nodes)), refsMap(std::move(refs)) { (void)storage; }
 
+	void appendElementsAsArray(Storage& storage, const std::vector<size_t>& primaryIndexes,
+			Requester requester);
+
 protected:
 	// Constructor for array-like objects
 	Object(Storage& storage, TypeId typeId, size_t size, Requester requester = InvalidRequester) noexcept;
 
 	// Constructor for container's body
 	struct ElementsAreExclusive {};
-	Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive elementsAreExclusive) noexcept;
+	Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive) noexcept;
 
 	// Constructor for compound types
 	Object(Storage& storage, TypeId typeId, const std::vector<std::vector<StringId>>& references,
@@ -483,6 +486,12 @@ protected:
 	virtual bool hasOnDestroy() const { return false; }
 
 public:
+	// Append elements to this object which was initialized by constructor for classes.
+	// "primaryIndexes" must be super-set of its passed in constructor or prior appendElements() call.
+	// note: this method is not thread-safe
+	void appendElements(Storage& storage, const std::vector<size_t>& primaryIndexes,
+			Requester requester = InvalidRequester) noexcept;
+
 	TypeId getTypeId() const {
 		return typeId;
 	}

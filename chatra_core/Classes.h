@@ -396,7 +396,6 @@ public:
 	void addConvertingConstructor(const Class* sourceCl);
 
 	// Constructor for packages and compound types
-	// Constructor itself does only allocating memory and
 	Class(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
 			Package* package, Node* node,
 			ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) noexcept;
@@ -406,6 +405,10 @@ public:
 
 	void initialize(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
 			ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods);
+
+	// Additional initialization for packages on interactive instance
+	void cumulativeInitializeForPackage(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
+			Node* node);
 
 	Package* getPackage() const {
 		return package;

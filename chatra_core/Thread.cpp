@@ -46,6 +46,7 @@ static constexpr size_t assignmentOperatorProcessPhase = 6;
 bool Thread::initialized = false;
 Node Thread::expressionMarkerNode;
 Node Thread::initializePackageNode;
+Node Thread::initializeAdditionalPackageNode;
 Node Thread::evaluateTupleNode;
 Node Thread::defaultConstructorNode;
 Node Thread::initializeVarsNode;
@@ -108,7 +109,8 @@ bool Thread::parse() {
 	IErrorReceiverBridge errorReceiverBridge(*this);
 	unsigned sTableVersion = runtime.primarySTable->getVersion();
 
-	auto scriptNode = f.package.parseNode(errorReceiverBridge, f.node);
+	auto scriptNode = f.package.parseNode(errorReceiverBridge, f.node,
+			f.phase == Phase::ScriptRoot_InteractiveInitial);
 	scanInnerFunctions(&errorReceiverBridge, runtime.primarySTable.get());
 
 	if (runtime.distributeStringTable(sTableVersion))
@@ -312,10 +314,13 @@ void Thread::consumeException() {
 				throw AbortThreadException();
 			}
 
-			if (!f0.stack.empty() && f0.stack.back().first->op == opInitializePackage) {
-				errorAtNode(*this, ErrorLevel::Error, f.exceptionNode,"unhandled exception raised during package initialization", {});
-				emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode, f.stackTrace.data());
-				throw AbortThreadException();
+			if (!f0.stack.empty()) {
+				auto op = f0.stack.back().first->op;
+				if (op == opInitializePackage || op == opInitializeAdditionalPackage) {
+					errorAtNode(*this, ErrorLevel::Error, f.exceptionNode,"unhandled exception raised during package initialization", {});
+					emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode, f.stackTrace.data());
+					throw AbortThreadException();
+				}
 			}
 		}
 		catch (const AbortThreadException&) {
@@ -2006,7 +2011,7 @@ bool Thread::asyncOperator() {
 		}
 
 		auto& targetThread = runtime.createThread(instance,
-				*(method->cl == nullptr ? &f.package : method->cl->getPackage()), method->node);
+				*(method->cl == nullptr ? &f.package : method->cl->getPackage()), false, method->node);
 		auto& f1 = targetThread.frames.back();
 		f1.stack.emplace_back(&returnFromAsyncNode, 0);
 		auto refAsync = f1.pushTemporary()->setRvalue();
@@ -3190,6 +3195,7 @@ bool Thread::resumeExpression() {
 		case Operator::BitwiseXorAssignment:  shouldContinue = assignmentOperator(Operator::BitwiseXor);  break;
 
 		case opInitializePackage:
+		case opInitializeAdditionalPackage:
 			shouldContinue = initializePackage();
 			break;
 
@@ -3555,6 +3561,7 @@ Thread::Thread(RuntimeImp& runtime, Instance& instance) noexcept
 	if (!initialized) {
 		set(expressionMarkerNode, NodeType::Expression);
 		set(initializePackageNode, opInitializePackage);
+		set(initializeAdditionalPackageNode, opInitializeAdditionalPackage);
 		set(evaluateTupleNode, opEvaluateTuple);
 
 		set(defaultConstructorNode, NodeType::Def);
@@ -3608,12 +3615,19 @@ void Thread::finish() {
 		pop();
 	}
 
-	// Remove returned value and exceptions
-	frames.back().popAll();
-
 	auto parser = runtime.scope->ref(StringId::Parser);
 	if (parser.lockedBy() == getId())
 		parser.unlock();
+
+	if (isInteractive) {
+		checkTransferReq();
+		readyToNextInteraction = true;
+		runtime.host->onInteractiveInstanceReady(instance.getId());
+		return;
+	}
+
+	// Remove returned value and exceptions
+	frames.back().popAll();
 
 	std::unique_ptr<Thread> self;
 	{
@@ -3813,6 +3827,11 @@ Thread::StepRunResult Thread::stepRun() {
 			if (f.phase == Phase::ScriptRoot_Initial) {
 				f.phase = 0;
 				f.stack.emplace_back(&initializePackageNode, 0);
+				return StepRunResult::Continue;
+			}
+			if (f.phase == Phase::ScriptRoot_InteractiveInitial) {
+				f.phase = 0;
+				f.stack.emplace_back(&initializeAdditionalPackageNode, 0);
 				return StepRunResult::Continue;
 			}
 
@@ -4064,6 +4083,10 @@ TemporaryTuple* Thread::restoreTemporaryTuple(Reader& r) const {
 }
 
 void Thread::save(Writer& w) const {
+	w.out(isInteractive);
+	w.out(readyToNextInteraction.load());
+	w.CHATRA_OUT_POINTER(scriptScope.get(), Scope);
+
 	w.CHATRA_OUT_POINTER(scope.get(), Scope);
 	w.out(frames, [&](const Frame& frame) {
 		w.out(&frame.package);
@@ -4083,6 +4106,10 @@ void Thread::save(Writer& w) const {
 }
 
 void Thread::restore(Reader& r) {
+	isInteractive = r.read<bool>();
+	readyToNextInteraction = r.read<bool>();
+	scriptScope = r.CHATRA_READ_UNIQUE(Scope);
+
 	scope = r.CHATRA_READ_UNIQUE(Scope);
 	r.inList([&]() { r.emplaceBack(frames, *this, *r.readValidPackage()); });
 	r.inList([&]() { r.emplaceBack(transferReq); });

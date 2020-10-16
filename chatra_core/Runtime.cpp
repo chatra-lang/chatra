@@ -67,14 +67,14 @@ static bool parseBlockNodes(ParserWorkingSet& ws, IErrorReceiverBridge& errorRec
 	return false;
 }
 
-std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* node) {
+std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* node, bool processOnlyLast) {
 	std::shared_ptr<Node> scriptNode;
 	IErrorReceiverBridge errorReceiverBridge(errorReceiver);
 
 	if (!grouped) {
 		grouped = true;
 
-		for (auto& script : scripts) {
+		auto parseScript = [&](const Script& script) {
 			try {
 				auto fileLines = parseLines(errorReceiverBridge, runtime.primarySTable, script.name, 1, script.script);
 				auto fileNode = groupScript(errorReceiverBridge, runtime.primarySTable, fileLines);
@@ -92,6 +92,13 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 			catch (AbortCompilingException&) {
 				// nothing to do
 			}
+		};
+
+		if (processOnlyLast)
+			parseScript(scripts.back());
+		else {
+			for (auto& script : scripts)
+				parseScript(script);
 		}
 
 		if (!scriptNode) {
@@ -208,6 +215,11 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	// constructor arguments or package-global defs
 	std::unordered_map<StringId, Node*> classNames;
 	std::vector<Class*> classList;
+
+	// Note that in the case of interactive instances, this method can be called multiple times
+	for (auto& e : classes.refClassMap())
+		classNames.emplace(e.first, e.second->getNode());
+
 	for (auto& n : node->symbols) {
 		if (n->type != NodeType::Class)
 			continue;
@@ -224,8 +236,11 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	}
 
 	// Register variables, classes and operator overrides
-	chatra_assert(!clPackage);
-	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
+	if (clPackage)
+		clPackage->cumulativeInitializeForPackage(errorReceiver, sTable, *this, node.get());
+	else
+		clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(),
+				nullptr, filterNativeMethods(sTable, handlers)));
 
 	for (auto* cl : classList)
 		cl->initialize(errorReceiver, sTable, *this, nullptr, filterNativeMethods(sTable, handlers, cl->getName()));
@@ -239,7 +254,13 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 }
 
 void Package::allocatePackageObject() const {
-	scope->addConst(StringId::PackageObject).allocateWithoutLock<PackageObject>(clPackage.get());
+	if (scope->has(StringId::PackageObject)) {
+		// for interactive instances
+		scope->ref(StringId::PackageObject).derefWithoutLock<PackageObject>()
+		        .appendElements(*runtime.storage, clPackage->refMethods().getPrimaryIndexes());
+	}
+	else
+		scope->addConst(StringId::PackageObject).allocateWithoutLock<PackageObject>(clPackage.get());
 }
 
 const Class* Package::findClass(StringId name) {
@@ -947,8 +968,9 @@ bool RuntimeImp::distributeStringTable(unsigned oldVersion) {
 	return true;
 }
 
-Thread& RuntimeImp::createThread(Instance& instance, Package& package, Node* node) {
+Thread& RuntimeImp::createThread(Instance& instance, Package& package, bool isInteractive, Node* node) {
 	auto thread = threadIds.lockAndAllocate(*this, instance);
+	thread->isInteractive = isInteractive;
 	thread->postInitialize();
 	thread->frames.reserve(16);
 	thread->frames.emplace_back(*thread, package, SIZE_MAX, scope.get());
@@ -1777,6 +1799,90 @@ InstanceId RuntimeImp::run(PackageId packageId) {
 	}
 	enqueue(&thread);
 	return instanceId;
+}
+
+InstanceId RuntimeImp::createInteractiveInstance() {
+	auto packageBody = packageIds.lockAndAllocate(*this, "", PackageInfo{{{"", ""}}, {}, nullptr}, false);
+	auto package = packageBody.get();
+	auto packageId = packageBody->getId();
+	{
+		std::lock_guard<SpinLock> lock(lockPackages);
+		packages.emplace(packageId, std::move(packageBody));
+	}
+
+	auto instance = instanceIds.lockAndAllocate(packageId);
+	auto instanceId = instance->getId();
+
+	auto& thread = createThread(*instance, *package, true);
+	thread.pop();
+	chatra_assert(thread.frames.size() == residentialFrameCount);
+
+	{
+		std::lock_guard<SpinLock> lock(package->lockInstances);
+		package->instances.emplace(instanceId, std::move(instance));
+	}
+	return instanceId;
+}
+
+bool RuntimeImp::readyToNextInteraction(InstanceId interactiveInstanceId) {
+	auto* instance = instanceIds.lockAndRef(interactiveInstanceId);
+	if (instance == nullptr)
+		throw IllegalArgumentException();
+
+	std::lock_guard<SpinLock> lock0(instance->lockThreads);
+	for (auto& e : instance->threads) {
+		auto& t = e.second;
+		if (t->isInteractive)
+			return t->readyToNextInteraction.load();
+	}
+	throw IllegalArgumentException();
+}
+
+void RuntimeImp::push(InstanceId interactiveInstanceId, const std::string& scriptName,
+		const std::string& statement) {
+
+	auto* instance = instanceIds.lockAndRef(interactiveInstanceId);
+	if (instance == nullptr)
+		throw IllegalArgumentException();
+
+	Thread* thread = nullptr;
+	{
+		std::lock_guard<SpinLock> lock0(instance->lockThreads);
+		for (auto& e : instance->threads) {
+			auto& t = e.second;
+			if (!t->isInteractive)
+				continue;
+			if (!t->readyToNextInteraction.load())
+				throw UnsupportedOperationException();
+			thread = t.get();
+		}
+	}
+	if (thread == nullptr)
+		throw IllegalArgumentException();
+
+	auto* package = packageIds.lockAndRef(instance->primaryPackageId);
+	package->scripts.emplace_back(scriptName, statement);
+
+	{
+		std::lock_guard<SpinLock> lock0(lockTrashNodes);
+		trashNodes.emplace_back(std::move(package->node));
+		package->node = std::make_shared<Node>();
+		package->node->type = NodeType::ScriptRoot;
+		package->node->flags |= NodeFlags::InitialNode;
+	}
+
+	chatra_assert(thread->frames.size() == residentialFrameCount);
+	thread->frames.emplace_back(*thread, *package, 1, package->scope.get());
+	package->pushNodeFrame(*thread, *package, 2, ScopeType::ScriptRoot, 2);
+
+	package->initialized = false;
+	package->grouped = false;
+
+	auto& f = thread->frames.back();
+	chatra_assert(f.stack.empty());
+	f.phase = Phase::ScriptRoot_InteractiveInitial;
+
+	enqueue(thread);
 }
 
 bool RuntimeImp::isRunning(InstanceId instanceId) {
