@@ -545,7 +545,7 @@ private:
 	std::vector<std::unique_ptr<ReferenceNode>> nodes;
 	std::underlying_type<StringId>::type nextId = static_cast<std::underlying_type<StringId>::type>(StringId::Invalid) - 1;
 
-	SpinLock lockAllocateCapture;
+	mutable SpinLock lockAllocateCapture;
 	std::atomic<bool> captured = {false};
 
 private:

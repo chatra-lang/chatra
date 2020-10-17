@@ -41,13 +41,13 @@ struct NativeData : public INativePtr {
 };
 
 struct FileInputStreamData final : public NativeData {
-	std::mutex mt;
+	mutable std::mutex mt;
 	std::unique_ptr<IFile> file;
 	FileInputStreamData() : NativeData(Type::FileInputStream) {}
 };
 
 struct FileOutputStreamData final : public NativeData {
-	std::mutex mt;
+	mutable std::mutex mt;
 	std::unique_ptr<IFile> file;
 	FileOutputStreamData() : NativeData(Type::FileOutputStream) {}
 };

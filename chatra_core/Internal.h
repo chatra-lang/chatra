@@ -225,7 +225,7 @@ public:
 template <class ValueType>
 class AsyncReadWrite : public AsyncRead<ValueType> {
 private:
-	SpinLock lock;
+	mutable SpinLock lock;
 
 public:
 	template <typename Process>
