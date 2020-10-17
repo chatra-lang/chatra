@@ -1656,6 +1656,9 @@ std::vector<uint8_t> RuntimeImp::doShutdown(bool save) {
 	shutdownTimers();
 
 	if (save) {
+		for (auto& e : breakPoints)
+			cancelBreakPoint(e.second);
+
 		chatra_assert(storage->audit());
 
 		Writer w(*this);
