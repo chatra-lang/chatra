@@ -78,7 +78,8 @@ static unsigned inputLineNo = 1;
 enum class Target {
 	Package, Instance, Thread, Frame, Scope, Object, BreakPoint
 };
-CHATRA_ENUM_HASH(Target);
+CHATRA_ENUM_HASH(Target)
+static constexpr auto invalidTarget = static_cast<Target>(std::numeric_limits<std::underlying_type<Target>::type>::max());
 
 struct BreakPointState {
 	cha::d::BreakPointId breakPointId = static_cast<cha::d::BreakPointId>(std::numeric_limits<size_t>::max());
@@ -403,7 +404,7 @@ static char* prompt(EditLine*) {
 	else if (blockContinuation)
 		ret = "\1\033[0m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
 	else
-		ret = "\1\033[7m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
+		ret = "\1\033[0m\033[7m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
 
 	return const_cast<char*>(ret.data());
 }
@@ -416,20 +417,66 @@ static void dLog(unsigned indent, const char* format, ...) {
 	va_list args;
 	va_start(args, format);
 	std::printf("%s%s\n", std::string(indent * 2, ' ').data(), cha::formatTextV(format, args).data());
+	std::fflush(stdout);
 	va_end(args);
+}
+
+static void dLogC(unsigned indent, const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+
+	auto v = cha::formatTextV(format, args);
+
+	constexpr const char* replaces[][2] = {
+			{"|", "\033[0m\033[2m|\033[0m"},
+			{"<", "\033[0m\033[32m"},
+			{">", "\033[0m"},
+			{"[", "\033[0m\033[2m[\033[0m"},
+			{"]", "\033[0m\033[2m]\033[0m"},
+			{"^", "\033[0m\033[33m"},
+			{"~", "\033[0m\033[2m"},
+			{"$", "\033[0m"},
+	};
+
+	for (size_t i = v.size(); i-- > 0; ) {
+		if (i != 0 && v[i - 1] == '\\') {
+			v.replace(--i, 1, "");
+			continue;
+		}
+		for (auto& r : replaces) {
+			if (v[i] == r[0][0]) {
+				v.replace(i, 1, r[1]);
+				break;
+			}
+		}
+	}
+
+	std::printf("%s\033[0m%s\033[0m\n", std::string(indent * 2, ' ').data(), v.data());
+	std::fflush(stdout);
+	va_end(args);
+}
+
+static std::string escape(const std::string& v) {
+	auto ret = v;
+	for (size_t i = v.size(); i-- > 0; ) {
+		auto c = ret[i];
+		if (c == '|' || c == '<' || c == '>' || c == '[' || c == ']' || c == '^' || c == '~' || c == '$' || c == '\\')
+			ret.insert(i, "\\");
+	}
+	return ret;
 }
 
 static void dError(const char* format, ...) {
 	va_list args;
 	va_start(args, format);
 	std::fprintf(stderr, "%s\n", cha::formatTextV(format, args).data());
+	std::fflush(stderr);
 	va_end(args);
 }
 
 // simplfied version of Parser.cpp::parseStringLiteral()
 static std::string parseSimpleStringLiteral(const std::string& str) {
-	size_t index = 0;
-	char quot = str[index++];
+	size_t index = 1;
 	std::string ret;
 	while (index < str.size()) {
 		if (str[index] != '\\') {
@@ -647,17 +694,23 @@ static void showStepRunResult(cha::d::ThreadId threadId, cha::d::StepRunResult r
 }
 
 static void showValue(unsigned indent, const std::string& name, const cha::d::Value& v) {
-	std::string out = name + ": ";
+	std::string out = escape(name) + ": ";
 	switch(v.valueType) {
 	case cha::d::ValueType::Null:  out += "null";  break;
 	case cha::d::ValueType::Bool:  out += cha::formatText("Bool(%s)", v.vBool ? "true" : "false");  break;
 	case cha::d::ValueType::Int:  out += cha::formatText("Int(%lld)", static_cast<long long>(v.vInt));  break;
 	case cha::d::ValueType::Float:  out += cha::formatText("Float(%g)", v.vFloat);  break;
-	case cha::d::ValueType::String:  out += cha::formatText("String(\"%s\")", v.vString.data());  break;
-	case cha::d::ValueType::Object:  out += cha::formatText("%s(O%zu)", v.className.data(), static_cast<size_t>(v.objectId));  break;
-	case cha::d::ValueType::Method:  out += cha::formatText("method: %s%s", v.methodName.data(), v.methodArgs.data());  break;
+	case cha::d::ValueType::String:
+		out += cha::formatText("String(\"%s\")", escape(v.vString).data());
+		break;
+	case cha::d::ValueType::Object:
+		out += cha::formatText("%s(<O%zu>)", v.className.data(), static_cast<size_t>(v.objectId));
+		break;
+	case cha::d::ValueType::Method:
+		out += cha::formatText("~method:$ %s%s", escape(v.methodName).data(), escape(v.methodArgs).data());
+		break;
 	}
-	dLog(indent, "%s", out.data());
+	dLogC(indent, "%s", out.data());
 }
 
 static void showValues(unsigned indent, const std::unordered_map<std::string, cha::d::Value>& values) {
@@ -753,6 +806,222 @@ static void runUntilBreak() {
 	}
 }
 
+#define FILTER_PACKAGE(v)  if (filters.count(Target::Package) != 0 && \
+				filters.at(Target::Package) != static_cast<size_t>(v.packageId))  \
+			continue
+#define FILTER_PRIMARY_PACKAGE(v)  if (filters.count(Target::Package) != 0 && \
+				filters.at(Target::Package) != static_cast<size_t>(v.primaryPackageId))  \
+			continue
+#define FILTER_INSTANCE(v)  if (filters.count(Target::Instance) != 0 && \
+				filters.at(Target::Instance) != static_cast<size_t>(v.instanceId))  \
+			continue
+#define FILTER_THREAD(v)  if (filters.count(Target::Thread) != 0 && \
+				filters.at(Target::Thread) != static_cast<size_t>(v.threadId))  \
+			continue
+#define FILTER_FRAME(v)  if (filters.count(Target::Thread) != 0 && filters.count(Target::Frame) != 0 && \
+				filters.at(Target::Frame) != static_cast<size_t>(v.frameId))  \
+			continue
+#define FILTER_BREAKPOINT(v)  if (filters.count(Target::BreakPoint) != 0 && \
+				filters.at(Target::BreakPoint) != static_cast<size_t>(v.breakPointId))  \
+			continue
+
+static constexpr const char* scopeFrameTypeName[] = {
+		"Package", "ScriptRoot", "Class", "Method", "Block",
+};
+
+static Target findTarget(const std::deque<std::string>& args) {
+	auto target = invalidTarget;
+	for (auto& arg : args) {
+		try {
+			auto e = parseTargetId(arg);
+			if (target == invalidTarget || static_cast<size_t>(target) < static_cast<size_t>(std::get<0>(e)))
+				target = std::get<0>(e);
+		}
+		catch (const cha::IllegalArgumentException&) {
+			// do nothing
+		}
+	}
+	return target;
+}
+
+static Target parseTarget(const std::string& arg) {
+	if (arg == "package" || arg == "packages")
+		return Target::Package;
+	else if (arg == "instance" || arg == "instances")
+		return Target::Instance;
+	else if (arg == "thread" || arg == "threads")
+		return Target::Thread;
+	else if (arg == "frame" || arg == "frames")
+		return Target::Frame;
+	else if (arg == "scope" || arg == "scopes")
+		return Target::Scope;
+	else if (arg == "object" || arg == "objects")
+		return Target::Object;
+	else if (arg == "breakpoint" || arg == "breakpoints")
+		return Target::BreakPoint;
+	else
+		return invalidTarget;
+}
+
+static std::unordered_map<Target, size_t> parseFilters(std::deque<std::string>& args) {
+	std::unordered_map<Target, size_t> filters;
+	while (!args.empty()) {
+		if (args.front() == "," || args.front() == ":" || args.front() == "/") {
+			args.pop_front();
+			continue;
+		}
+		auto e = parseTargetId(args.front());
+		filters.emplace(std::get<0>(e), std::get<1>(e));
+		args.pop_front();
+	}
+
+	if (!filters.empty()) {
+		dLogC(0, "filtered with %s:", formatList(filters, [](decltype(filters)::const_reference e) {
+			return "<" + formatTargetId(e) + ">";
+		}).data());
+	}
+
+	return filters;
+}
+
+static void showPackages(const std::unordered_map<Target, size_t>& filters) {
+	for (auto& v : debugger->getPackagesState()) {
+		FILTER_PACKAGE(v);
+		sortScripts(v.scripts);
+		size_t scriptIndex = 0;
+		dLogC(0, "[<P%zu>] \"%s\", %ufiles:{%s}",
+				static_cast<size_t>(v.packageId), escape(v.packageName).data(), v.scripts.size(),
+				formatList(v.scripts, [&](const cha::Script& s) {
+					return "<(" + std::to_string(scriptIndex++) + ")>" + escape(s.name);
+				}).data());
+	}
+}
+
+static void showInstances(const std::unordered_map<Target, size_t>& filters) {
+	for (auto& v : debugger->getInstancesState()) {
+		FILTER_PRIMARY_PACKAGE(v);
+		FILTER_INSTANCE(v);
+		if (filters.count(Target::Thread) != 0 && v.threadIds.cend() == std::find(v.threadIds.cbegin(), v.threadIds.cend(),
+				static_cast<cha::d::ThreadId>(filters.at(Target::Thread))))
+			continue;
+
+		dLogC(0, "[<I%zu>] primary=<P%zu>, %uthreads:{%s}",
+				static_cast<size_t>(v.instanceId), static_cast<size_t>(v.primaryPackageId),
+				v.threadIds.size(),
+				formatList(v.threadIds, [](cha::d::ThreadId id) {
+					return "<T" + std::to_string(static_cast<size_t>(id)) + ">";
+				}).data());
+	}
+}
+
+static void showThreads(const std::unordered_map<Target, size_t>& filters) {
+	for (auto& vi : debugger->getInstancesState()) {
+		FILTER_PRIMARY_PACKAGE(vi);
+		FILTER_INSTANCE(vi);
+		for (auto threadId : vi.threadIds) {
+			auto vt = debugger->getThreadState(threadId);
+			FILTER_THREAD(vt);
+			dLogC(0, "[<T%zu>] <I%zu>, primary=<P%zu>, %uframes:{%s} %s",
+					static_cast<size_t>(threadId), static_cast<size_t>(vi.instanceId),
+					static_cast<size_t>(vi.primaryPackageId), vt.frameIds.size(),
+					formatList(vt.frameIds, [&](cha::d::FrameId id) {
+						return "<T" + std::to_string(static_cast<size_t>(threadId)) + ":F" + std::to_string(static_cast<size_t>(id)) + ">" +
+								" type=" + scopeFrameTypeName[static_cast<size_t>(debugger->getFrameState(threadId, id).frameType)];
+					}).data(),
+					escape(formatCodePoint(threadId)).data());
+		}
+	}
+}
+
+static void showFrames(const std::unordered_map<Target, size_t>& filters) {
+	for (auto& vi : debugger->getInstancesState()) {
+		FILTER_PRIMARY_PACKAGE(vi);
+		FILTER_INSTANCE(vi);
+		for (auto threadId : vi.threadIds) {
+			auto vt = debugger->getThreadState(threadId);
+			FILTER_THREAD(vt);
+			for (auto frameId : vt.frameIds) {
+				auto vf = debugger->getFrameState(threadId, frameId);
+				FILTER_FRAME(vf);
+				dLogC(0, "[<T%zu:F%zu>] <I%zu>, primary=<P%zu>, type=%s, %uscopes:{%s} %s",
+						static_cast<size_t>(threadId), static_cast<size_t>(frameId),
+						static_cast<size_t>(vi.instanceId), static_cast<size_t>(vi.primaryPackageId),
+						scopeFrameTypeName[static_cast<size_t>(vf.frameType)],
+						vf.scopeIds.size(),
+						formatList(vf.scopeIds, [&](cha::d::ScopeId id) {
+							return "<T" + std::to_string(static_cast<size_t>(threadId)) + ":S" + std::to_string(static_cast<size_t>(id)) + ">" +
+									" type=" + scopeFrameTypeName[static_cast<size_t>(debugger->getScopeState(threadId, id).scopeType)];
+						}).data(),
+						escape(formatCodePoint(vf.current)).data());
+			}
+		}
+	}
+}
+
+static void showScopes(const std::unordered_map<Target, size_t>& filters) {
+	if (filters.count(Target::Thread) == 0 || filters.count(Target::Scope) == 0)
+		throw cha::IllegalArgumentException("thread-ID and scope-ID required to show a scope");
+
+	auto v = debugger->getScopeState(static_cast<cha::d::ThreadId>(filters.at(Target::Thread)),
+			static_cast<cha::d::ScopeId>(filters.at(Target::Scope)));
+	cha::d::InstanceState vi;
+	for (auto& vt : debugger->getInstancesState()) {
+		if (vt.threadIds.cend() != std::find(vt.threadIds.cbegin(), vt.threadIds.cend(), v.threadId)) {
+			vi = vt;
+			break;
+		}
+	}
+
+	dLogC(0, "[<T%zu:S%zu>] <I%zu>, primary=<P%zu>, type=%s, %uvalues:",
+			static_cast<size_t>(v.threadId), static_cast<size_t>(v.scopeId),
+			static_cast<size_t>(vi.instanceId), static_cast<size_t>(vi.primaryPackageId),
+			scopeFrameTypeName[static_cast<size_t>(v.scopeType)],
+			v.values.size());
+	showValues(1, v.values);
+}
+
+static void showObjects(const std::unordered_map<Target, size_t>& filters) {
+	if (filters.count(Target::Object) == 0)
+		throw cha::IllegalArgumentException("object-ID required");
+
+	auto objectId = static_cast<cha::d::ObjectId>(filters.at(Target::Object));
+	auto v = debugger->getObjectState(objectId);
+
+	dLogC(0, "[<O%zu>] class=%s", static_cast<size_t>(objectId), escape(v.className).data());
+	showValues(1, v.values);
+}
+
+static void showBreakPoints(const std::unordered_map<Target, size_t>& filters) {
+	std::lock_guard<cha::SpinLock> lock0(lockBreak);
+	for (auto& b : breakPoints) {
+		FILTER_BREAKPOINT(b);
+		dLogC(0, "[<B%zu>] %s", static_cast<size_t>(b.breakPointId), escape(formatCodePoint(b.codePoint)).data());
+	}
+}
+
+static void show(std::deque<std::string> args) {
+	auto target = parseTarget(args.front());
+	if (target != invalidTarget)
+		args.pop_front();
+	else
+		target = findTarget(args);
+
+	if (target == invalidTarget)
+		throw cha::IllegalArgumentException("entity \"%s\" is not found", args.front().data());
+
+	auto filters = parseFilters(args);
+
+	switch (target) {
+	case Target::Package:  showPackages(filters);  break;
+	case Target::Instance:  showInstances(filters);  break;
+	case Target::Thread:  showThreads(filters);  break;
+	case Target::Frame:  showFrames(filters);  break;
+	case Target::Scope:  showScopes(filters);  break;
+	case Target::Object:  showObjects(filters);  break;
+	case Target::BreakPoint:  showBreakPoints(filters);  break;
+	}
+}
+
 static void processDebuggerCommand(const std::string& input) {
 
 	auto sTable = cha::StringTable::newInstance();
@@ -796,26 +1065,27 @@ static void processDebuggerCommand(const std::string& input) {
 	try {
 		if (cmd == "h" || cmd == "help") {
 			constexpr const char* commands[][3] = {
-					{"run", "[<name>:] <script>", "load script from file <script> and create an instance"},
-					{"resume", "", "switch to running state until any break-point hits or CTRL-C break"},
-					{"list", "package [Pxx]", "show packages information"},
-					{"list", "instance [Pxx] [Ixx]", "show instances information"},
-					{"list", "thread [Pxx] [Ixx]", "show threads information"},
-					{"list", "frame [Pxx] [Ixx] [Txx]", "show frames in threads information"},
-					{"list", "scope Txx Sxx", "show scope information"},
-					{"list", "object Oxx", "show object information"},
-					{"list", "breakpoint", "show breakpoints"},
-					{"break", "@ [<package>:] <file name> (<line#>)", "add breakpoint"},
-					{"del", "Bxx", "delete breakpoint"},
-					{"step", "in|into|over|out Txx", "step run"},
-					{"i", "", "step into"},
-					{"o", "", "step over"},
-					{"r", "", "step out"},
+					{"^run$", "[<name>:] <script>", "load script from file <script> and create an instance"},
+					{"^resume$", "", "switch to running state until any break-point hits or CTRL-C break"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[package[s]] [<Pxx>]", "show packages information"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[instance[s]] [<Pxx>] [<Ixx>]", "show instances information"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[thread[s]] [<Pxx>] [<Ixx>]", "show threads information"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[frame[s]] [<Pxx>] [<Ixx>] [<Txx>] [<Txx>:<Fxx>]", "show frames in threads information"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[scope[s]] <Txx>:<Sxx>", "show scope information"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[object[s]] <Oxx>", "show object information"},
+					{"[^show$|^s$|^list$|^ls$|^l$]", "[breakpoint[s]] [<Bxx>]", "show breakpoints"},
+					{"^breakpoint$|^break$|^b$", "@ [<package>:] <fileName> (<line#>)", "add breakpoint"},
+					{"^del$", "<Bxx>", "delete breakpoint"},
+					{"^step$", "in|into|over|out <Txx>", "step run"},
+					{"^i$", "<Txx>", "step into"},
+					{"^o$", "<Txx>", "step over"},
+					{"^r$", "<Txx>", "step out"},
 			};
+
 			dLog(0, "debugger command:");
 			for (auto& line : commands) {
-				dLog(1, "!%-7s%s", line[0], line[1]);
-				dLog(1, "        %s", line[2]);
+				dLogC(1, "^!$%s %s", line[0], line[1]);
+				dLog(2, "%s", line[2]);
 			}
 		}
 		else if (cmd == "run") {  // [name:] script
@@ -828,11 +1098,13 @@ static void processDebuggerCommand(const std::string& input) {
 			auto vScript = consume<std::string>(cmd, args);
 
 			try {
-				auto packageId = runtime->loadPackage({{vName.empty() ? vScript : vName, loadScript(vScript.data())}});
+				std::vector<cha::Script> scripts = {{vName.empty() ? vScript : vName, loadScript(vScript.data())}};
+				host->push("", scripts);
+				auto packageId = runtime->loadPackage(scripts);
 				auto instanceId = runtime->run(packageId);
-				dLog(0, "[I%zu] P%zu %s: %s",
+				dLogC(0, "\\[<I%zu>\\] <P%zu> %s %s",
 						static_cast<size_t>(instanceId), static_cast<size_t>(packageId),
-						vName.empty() ? "(file)" : vName.data(), vScript.data());
+						vName.empty() ? "~file:$" : escape(vName + ":").data(), escape(vScript).data());
 			}
 			catch (const cha::PackageNotFoundException&) {
 				dError("\"%s\" is not found", vScript.data());
@@ -848,167 +1120,7 @@ static void processDebuggerCommand(const std::string& input) {
 				dLog(0, "package  instance  thread  frame  scope  object  breakpoint");
 				return;
 			}
-
-			auto target = args.front();
-			args.pop_front();
-
-			try {
-				auto e = parseTargetId(target);
-				args.push_front(target);
-				switch (std::get<0>(e)) {
-				case Target::Package:  target = "package";  break;
-				case Target::Instance:  target = "instance";  break;
-				case Target::Thread:  target = "thread";  break;
-				case Target::Frame:  target = "frame";  break;
-				case Target::Scope:  target = "scope";  break;
-				case Target::Object:  target = "object";  break;
-				case Target::BreakPoint:  target = "breakpoint";  break;
-				}
-			}
-			catch (const cha::IllegalArgumentException&) {
-				// do nothing
-			}
-
-			std::unordered_map<Target, size_t> filters;
-			while (!args.empty()) {
-				if (args.front() == ",") {
-					args.pop_front();
-					continue;
-				}
-				auto e = parseTargetId(args.front());
-				filters.emplace(std::get<0>(e), std::get<1>(e));
-				args.pop_front();
-			}
-
-			if (!filters.empty()) {
-				dLog(0, "<filtered with %s>", formatList(filters, [](decltype(filters)::const_reference e) {
-					return formatTargetId(e);
-				}).data());
-			}
-
-			#define FILTER_PACKAGE(v)  if (filters.count(Target::Package) != 0 && \
-							filters[Target::Package] != static_cast<size_t>(v.packageId))  \
-						continue
-			#define FILTER_PRIMARY_PACKAGE(v)  if (filters.count(Target::Package) != 0 && \
-							filters[Target::Package] != static_cast<size_t>(v.primaryPackageId))  \
-						continue
-			#define FILTER_INSTANCE(v)  if (filters.count(Target::Instance) != 0 && \
-							filters[Target::Instance] != static_cast<size_t>(v.instanceId))  \
-						continue
-			#define FILTER_THREAD(v)  if (filters.count(Target::Thread) != 0 && \
-							filters[Target::Thread] != static_cast<size_t>(v.threadId))  \
-						continue
-
-			constexpr const char* scopeFrameTypeName[] = {
-					"Package", "ScriptRoot", "Class", "Method", "Block",
-			};
-
-			if (target == "package") {
-				for (auto& v : debugger->getPackagesState()) {
-					FILTER_PACKAGE(v);
-					sortScripts(v.scripts);
-					size_t scriptIndex = 0;
-					dLog(0, "[P%zu] \"%s\", %u files: {%s}",
-							static_cast<size_t>(v.packageId), v.packageName.data(), v.scripts.size(),
-							formatList(v.scripts, [&](const cha::Script& s) {
-								return "(" + std::to_string(scriptIndex++) + ") " + s.name;
-							}).data());
-				}
-			}
-			else if (target == "instance") {
-				for (auto& v : debugger->getInstancesState()) {
-					FILTER_PRIMARY_PACKAGE(v);
-					FILTER_INSTANCE(v);
-					if (filters.count(Target::Thread) != 0 && v.threadIds.cend() == std::find(v.threadIds.cbegin(), v.threadIds.cend(),
-							static_cast<cha::d::ThreadId>(filters[Target::Thread])))
-						continue;
-
-					dLog(0, "[I%zu] primary=P%zu, %u threads: {%s}",
-							static_cast<size_t>(v.instanceId), static_cast<size_t>(v.primaryPackageId),
-							v.threadIds.size(),
-							formatList(v.threadIds, [](cha::d::ThreadId id) {
-								return "T" + std::to_string(static_cast<size_t>(id));
-							}).data());
-				}
-			}
-			else if (target == "thread") {
-				for (auto& vi : debugger->getInstancesState()) {
-					FILTER_PRIMARY_PACKAGE(vi);
-					FILTER_INSTANCE(vi);
-					for (auto threadId : vi.threadIds) {
-						auto vt = debugger->getThreadState(threadId);
-						dLog(0, "[T%zu] I%zu, primary=P%zu, %u frames: {%s} %s",
-								static_cast<size_t>(threadId), static_cast<size_t>(vi.instanceId),
-								static_cast<size_t>(vi.primaryPackageId), vt.frameIds.size(),
-								formatList(vt.frameIds, [&](cha::d::FrameId id) {
-									return "F" + std::to_string(static_cast<size_t>(id)) +
-											"(type=" + scopeFrameTypeName[static_cast<size_t>(debugger->getFrameState(threadId, id).frameType)] + ")";
-								}).data(),
-								formatCodePoint(threadId).data());
-					}
-				}
-			}
-			else if (target == "frame") {
-				for (auto& vi : debugger->getInstancesState()) {
-					FILTER_PRIMARY_PACKAGE(vi);
-					FILTER_INSTANCE(vi);
-					for (auto threadId : vi.threadIds) {
-						auto vt = debugger->getThreadState(threadId);
-						FILTER_THREAD(vt);
-						for (auto frameId : vt.frameIds) {
-							auto vf = debugger->getFrameState(threadId, frameId);
-							dLog(0, "[T%zu, F%zu] I%zu, primary=P%zu, type=%s, %u scopes: {%s} %s",
-									static_cast<size_t>(threadId), static_cast<size_t>(frameId),
-									static_cast<size_t>(vi.instanceId), static_cast<size_t>(vi.primaryPackageId),
-									scopeFrameTypeName[static_cast<size_t>(vf.frameType)],
-									vf.scopeIds.size(),
-									formatList(vf.scopeIds, [&](cha::d::ScopeId id) {
-										return "S" + std::to_string(static_cast<size_t>(id)) +
-												"(type=" + scopeFrameTypeName[static_cast<size_t>(debugger->getScopeState(threadId, id).scopeType)] + ")";
-									}).data(),
-									formatCodePoint(vf.current).data());
-						}
-					}
-				}
-			}
-			else if (target == "scope") {
-				if (filters.count(Target::Thread) == 0 || filters.count(Target::Scope) == 0)
-					throw cha::IllegalArgumentException("thread-ID and scope-ID required to show a scope");
-
-				auto v = debugger->getScopeState(static_cast<cha::d::ThreadId>(filters[Target::Thread]),
-						static_cast<cha::d::ScopeId>(filters[Target::Scope]));
-				cha::d::InstanceState vi;
-				for (auto& vt : debugger->getInstancesState()) {
-					if (vt.threadIds.cend() != std::find(vt.threadIds.cbegin(), vt.threadIds.cend(), v.threadId)) {
-						vi = vt;
-						break;
-					}
-				}
-
-				dLog(0, "[T%zu, S%zu] I%zu, primary=P%zu, type=%s, %u values:",
-						static_cast<size_t>(v.threadId), static_cast<size_t>(v.scopeId),
-						static_cast<size_t>(vi.instanceId), static_cast<size_t>(vi.primaryPackageId),
-						scopeFrameTypeName[static_cast<size_t>(v.scopeType)],
-						v.values.size());
-				showValues(1, v.values);
-			}
-			else if (target == "object") {
-				if (filters.count(Target::Object) == 0)
-					throw cha::IllegalArgumentException("object-ID required");
-
-				auto objectId = static_cast<cha::d::ObjectId>(filters[Target::Object]);
-				auto v = debugger->getObjectState(objectId);
-
-				dLog(0, "[O%zu] class=%s", static_cast<size_t>(objectId), v.className.data());
-				showValues(1, v.values);
-			}
-			else if (target == "breakpoint") {
-				std::lock_guard<cha::SpinLock> lock0(lockBreak);
-				for (auto& b : breakPoints)
-					dLog(0, "[B%zu] %s", static_cast<size_t>(b.breakPointId), formatCodePoint(b.codePoint).data());
-			}
-			else
-				throw cha::IllegalArgumentException("entity \"%s\" is not found", target.data());
+			show(std::move(args));
 		}
 		else if (cmd == "b" || cmd == "break" || cmd == "breakpoint") {
 			auto codePoint = parseCodePoint(args);
@@ -1066,8 +1178,10 @@ static void processDebuggerCommand(const std::string& input) {
 				showStepRunResult(threadId, debugger->stepOut(threadId));
 			});
 		}
-		else
-			throw cha::IllegalArgumentException("unknown command \"%s\"", cmd.data());
+		else {
+			args.push_front(cmd);
+			show(std::move(args));
+		}
 	}
 	catch (const cha::IllegalArgumentException& ex) {
 		dError("debugger: %s", ex.what() == nullptr ? "illegal argument" : ex.what());
@@ -1182,7 +1296,9 @@ static int interactiveMode() {
 		}
 
 		try {
-			runtime->push(interactiveInstanceId, "chatra[" + std::to_string(inputSectionNo++) + "]", input);
+			auto scriptName = "chatra[" + std::to_string(inputSectionNo++) + "]";
+			host->push("", {{scriptName, input}});
+			runtime->push(interactiveInstanceId, scriptName, input);
 			input.clear();
 			inputLineNo = 1;
 		}

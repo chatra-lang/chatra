@@ -2101,18 +2101,17 @@ std::vector<debugger::PackageState> RuntimeImp::getPackagesState() {
 		if (package.getId() == finalizerPackageId)
 			return;
 
-		// exclude packages which host interactive instances
-		{
-			std::lock_guard<SpinLock> lock1(package.lockInstances);
-			if (package.instances.size() == 1 && isInteractiveInstance(*package.instances.cbegin()->second))
-				return;
-		}
-
 		ret.emplace_back();
 		auto& v = ret.back();
 
 		v.packageId = package.getId();
 		v.packageName = package.name;
+
+		{
+			std::lock_guard<SpinLock> lock1(package.lockInstances);
+			if (package.instances.size() == 1 && isInteractiveInstance(*package.instances.cbegin()->second))
+				return;
+		}
 		v.scripts = package.scripts;
 	});
 	return ret;
@@ -2125,8 +2124,6 @@ std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
 	instanceIds.forEach([&](const Instance& instance) {
 		auto instanceId = instance.getId();
 		if (instanceId == finalizerInstanceId || instanceId == gcInstance->getId())
-			return;
-		if (isInteractiveInstance(instance))
 			return;
 
 		ret.emplace_back();
