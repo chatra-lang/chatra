@@ -122,8 +122,8 @@ void Timer::cancelAll() {
 class SystemTimer final : public Timer {
 private:
 	bool stop = false;
-	std::mutex mt;
-	std::condition_variable cv;
+	mutable std::mutex mt;
+	mutable std::condition_variable cv;
 	std::thread th;
 
 private:
@@ -168,7 +168,7 @@ public:
 	~EmulatedTimer() override = default;
 
 private:
-	SpinLock lockTime;
+	mutable SpinLock lockTime;
 	Time time;
 
 protected:

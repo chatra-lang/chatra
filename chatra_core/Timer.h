@@ -40,7 +40,7 @@ public:
 	virtual ~Timer() = default;
 
 private:
-	SpinLock lockMap;
+	mutable SpinLock lockMap;
 	std::deque<Time> timeQueue;
 	std::map<Time, TimerElement> map;
 	std::unordered_map<unsigned, Time> idToTime;

@@ -767,7 +767,7 @@ using EventWatcher = bool (*)(void* tag);
 
 class EventObject {
 private:
-	SpinLock lockWatchers;
+	mutable SpinLock lockWatchers;
 	std::unordered_map<void*, EventWatcher> registered;
 	std::unordered_map<void*, EventWatcher> activated;
 	unsigned count = 0;

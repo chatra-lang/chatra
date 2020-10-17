@@ -408,7 +408,7 @@ private:
 	unsigned waitingId = 0;
 	size_t callerFrame = 0;
 
-	SpinLock lockTriggered;
+	mutable SpinLock lockTriggered;
 	std::vector<std::unique_ptr<Target>> targets;
 	size_t remainingCount = 0;
 
@@ -708,7 +708,7 @@ public:
 	std::vector<Frame> frames;
 
 	std::atomic<bool> hasTransferReq = {false};
-	SpinLock lockTransferReq;
+	mutable SpinLock lockTransferReq;
 	std::deque<TransferRequest> transferReq;
 	std::deque<TransferRequest> transferReqCopy;
 
@@ -716,7 +716,7 @@ public:
 	ObjectPool<TemporaryTuple> temporaryTuplePool;
 
 	std::thread::id nativeCallThreadId;
-	SpinLock lockNative;
+	mutable SpinLock lockNative;
 	size_t callerFrame = 0;
 	bool pauseRequested = false;
 
@@ -954,7 +954,7 @@ public:
 	bool grouped = false;
 	bool hasDefOperator = false;  // contains "def operator"
 
-	SpinLock lockNode;
+	mutable SpinLock lockNode;
 	std::shared_ptr<Node> node;
 	std::vector<Thread*> threadsWaitingForNode;
 
@@ -1039,14 +1039,14 @@ public:
 	std::atomic<bool> attemptToShutdown = {false};
 
 	std::shared_ptr<StringTable> primarySTable;  // locked by #parser
-	SpinLock lockSTable;
+	mutable SpinLock lockSTable;
 	std::shared_ptr<StringTable> distributedSTable;
 
 	ParserWorkingSet parserWs;  // locked by #parser
 
 	std::shared_ptr<Storage> storage;
 	std::atomic<int> gcWaitCount = {0};
-	std::mutex mtGc;
+	mutable std::mutex mtGc;
 	std::unique_ptr<Instance> gcInstance;
 	std::unique_ptr<Thread> gcThread;
 
@@ -1054,12 +1054,12 @@ public:
 	IdPool<InstanceId, Instance> instanceIds;
 	IdPool<Requester, Thread> threadIds;
 
-	SpinLock lockScope;  // only used for adding WaitContexts
+	mutable SpinLock lockScope;  // only used for adding WaitContexts
 	std::unique_ptr<Scope> scope;  // Parser, FinalizerObjects, FinalizerTemporary, {WaitContext}
 	std::vector<Reference> recycledRefs;
 
-	std::mutex mtLoadPackage;
-	SpinLock lockPackages;
+	mutable std::mutex mtLoadPackage;
+	mutable SpinLock lockPackages;
 	std::unordered_map<PackageId, std::unique_ptr<Package>> packages;
 	std::unordered_map<std::string, PackageId> packageIdByName;
 
@@ -1070,34 +1070,34 @@ public:
 	std::deque<Thread*> queue;
 
 	// [Single thread]
-	SpinLock lockQueue;
+	mutable SpinLock lockQueue;
 
 	// [Multi-thread]
-	std::mutex mtQueue;
-	std::condition_variable cvQueue;
-	std::condition_variable cvShutdown;
+	mutable std::mutex mtQueue;
+	mutable std::condition_variable cvQueue;
+	mutable std::condition_variable cvShutdown;
 	unsigned targetWorkerThreads = 0;
 	unsigned nextId = 0;
 	std::unordered_map<unsigned, std::unique_ptr<std::thread>> workerThreads;
 
 	std::atomic<bool> hasWaitingThreads = {false};
-	SpinLock lockWaitingThreads;
+	mutable SpinLock lockWaitingThreads;
 	std::unordered_map<unsigned, Thread*> waitingThreads;
 	std::vector<unsigned> recycledWaitingIds;
 
-	SpinLock lockTimers;
+	mutable SpinLock lockTimers;
 	std::unordered_map<std::string, std::unique_ptr<Timer>> timers;
 	std::vector<Timer*> idToTimer;
 	std::unordered_map<unsigned, std::tuple<std::string, int64_t>> sleepRequests;  // [waitingId]
 
 	// Finalizer
 	Thread* finalizerThread = nullptr;
-	SpinLock lockFinalizerTemporary;
+	mutable SpinLock lockFinalizerTemporary;
 
 	MethodTableCache methodTableCache;  // by restoreEntities() only
 
 	// Drivers
-	SpinLock lockDrivers;
+	mutable SpinLock lockDrivers;
 	std::unordered_map<DriverType, std::unique_ptr<IDriver>> drivers;
 
 	// Debugger
@@ -1109,8 +1109,8 @@ public:
 	size_t nextBreakPointId = 0;
 
 	// Interactive mode
-	SpinLock lockTrashNodes;
-	std::vector<std::shared_ptr<Node>> trashNodes;
+	mutable SpinLock lockTrashNodes;
+	std::forward_list<std::shared_ptr<Node>> trashNodes;
 
 private:
 	void launchStorage();

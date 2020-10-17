@@ -1738,8 +1738,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 }
 
 bool RuntimeImp::handleQueue() {
-	if (multiThread)
-		return false;
+	chatra_assert(!multiThread);
 	Thread* thread;
 	{
 		std::lock_guard<SpinLock> lock(lockQueue);
@@ -1876,7 +1875,7 @@ void RuntimeImp::push(InstanceId interactiveInstanceId, const std::string& scrip
 
 	{
 		std::lock_guard<SpinLock> lock0(lockTrashNodes);
-		trashNodes.emplace_back(std::move(package->node));
+		trashNodes.emplace_front(std::move(package->node));
 		package->node = std::make_shared<Node>();
 		package->node->type = NodeType::ScriptRoot;
 		package->node->flags |= NodeFlags::InitialNode;
@@ -2054,7 +2053,7 @@ debugger::StepRunResult RuntimeImp::stepOut(debugger::ThreadId threadId) {
 #define CHATRA_CHECK_RUNTIME_PAUSED  \
 		std::lock_guard<std::mutex> lock0(lockDebugger);  \
 		if (!paused)  \
-			throw debugger::IllegalRuntimeStateException();
+			throw debugger::IllegalRuntimeStateException()
 
 debugger::BreakPointId RuntimeImp::addBreakPoint(const debugger::CodePoint& point) {
 	CHATRA_CHECK_RUNTIME_PAUSED;
