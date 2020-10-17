@@ -22,6 +22,34 @@
 
 namespace chatra {
 
+void Object::appendElementsAsArray(Storage& storage, const std::vector<size_t>& primaryIndexes,
+		Requester requester) {
+	chatra_assert(refsArray.size() <= primaryIndexes.size());
+
+	groups.reserve(primaryIndexes.size());
+	nodes.reserve(primaryIndexes.size());
+	refsArray.reserve(primaryIndexes.size());
+
+	std::unordered_map<size_t, size_t> indexMap;  // primaryIndex -> index of groups
+	for (size_t i = refsArray.size(); i < primaryIndexes.size(); i++) {
+		auto primaryIndex = primaryIndexes[i];
+		chatra_assert(primaryIndex < primaryIndexes.size());
+
+		ReferenceGroup* group;
+		auto it = indexMap.find(primaryIndex);
+		if (it == indexMap.end()) {
+			indexMap.emplace(primaryIndex, groups.size());
+			groups.emplace_back(new ReferenceGroup(storage, requester));
+			group = groups.back().get();
+		}
+		else
+			group = groups[it->second].get();
+
+		nodes.emplace_back(new ReferenceNode(*group));
+		refsArray.push_back(Reference(*nodes.back()));
+	}
+}
+
 Object::Object(Storage& storage, TypeId typeId, size_t size, Requester requester) noexcept : typeId(typeId) {
 	groups.reserve(size);
 	nodes.reserve(size);
@@ -33,10 +61,7 @@ Object::Object(Storage& storage, TypeId typeId, size_t size, Requester requester
 	}
 }
 
-Object::Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive elementsAreExclusive) noexcept
-		: typeId(typeId) {
-	(void)elementsAreExclusive;
-
+Object::Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive) noexcept : typeId(typeId) {
 	groups.reserve(size);
 	nodes.reserve(size);
 	refsArray.reserve(size);
@@ -65,27 +90,7 @@ Object::Object(Storage& storage, TypeId typeId, const std::vector<std::vector<St
 
 Object::Object(Storage& storage, TypeId typeId, const std::vector<size_t>& primaryIndexes,
 		Requester requester) noexcept : typeId(typeId) {
-	groups.reserve(primaryIndexes.size());
-	nodes.reserve(primaryIndexes.size());
-	refsArray.reserve(primaryIndexes.size());
-
-	std::unordered_map<size_t, size_t> indexMap;  // primaryIndex -> index of groups
-	for (size_t primaryIndex : primaryIndexes) {
-		chatra_assert(primaryIndex < primaryIndexes.size());
-
-		ReferenceGroup* group;
-		auto it = indexMap.find(primaryIndex);
-		if (it == indexMap.end()) {
-			indexMap.emplace(primaryIndex, groups.size());
-			groups.emplace_back(new ReferenceGroup(storage, requester));
-			group = groups.back().get();
-		}
-		else
-			group = groups[it->second].get();
-
-		nodes.emplace_back(new ReferenceNode(*group));
-		refsArray.push_back(Reference(*nodes.back()));
-	}
+	appendElementsAsArray(storage, primaryIndexes, requester);
 }
 
 void Object::restoreReferencesForClass() {
@@ -93,6 +98,11 @@ void Object::restoreReferencesForClass() {
 	refsArray.reserve(nodes.size());
 	for (auto& n : nodes)
 		refsArray.push_back(Reference(*n));
+}
+
+void Object::appendElements(Storage& storage, const std::vector<size_t>& primaryIndexes,
+		Requester requester) noexcept {
+	appendElementsAsArray(storage, primaryIndexes, requester);
 }
 
 Scope::Scope(Storage& storage, ScopeType type) noexcept : storage(storage), type(type) {

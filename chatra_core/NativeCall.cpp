@@ -19,8 +19,6 @@
  */
 
 #include "Runtime.h"
-#include <cstdio>
-#include <cstdarg>
 
 namespace chatra {
 
@@ -30,7 +28,7 @@ class NativeCallContextImp;
 NativeException::NativeException(const char* format, ...) {
 	va_list args;
 	va_start(args, format);
-	setMessage(format, args);
+	message = formatTextV(format, args);
 	va_end(args);
 }
 
@@ -44,17 +42,7 @@ NativeException::NativeException(const char* format, ...) {
 #endif
 
 void NativeException::setMessage(const char *format, va_list args) {
-	va_list args2;
-	va_copy(args2, args);
-	auto length = std::vsnprintf(nullptr, 0, format, args);
-	if (length < 0)
-		message = "(error)";
-	else {
-		std::vector<char> buffer(static_cast<size_t>(length) + 1);
-		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
-		message = std::string(buffer.data());
-	}
-	va_end(args2);
+	message = formatTextV(format, args);
 }
 
 #if defined(__clang__)

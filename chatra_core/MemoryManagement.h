@@ -325,25 +325,37 @@ public:
 		return derefWithoutLock<Type>();
 	}
 
+	bool getBoolWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Bool);
+		return node->vBool;
+	}
+
+	int64_t getIntWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Int);
+		return node->vInt;
+	}
+
+	double getFloatWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Float);
+		return node->vFloat;
+	}
+
 	/// [Requires lock]
 	bool getBool() const {
 		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		chatra_assert(node->type == ReferenceValueType::Bool);
-		return node->vBool;
+		return getBoolWithoutLock();
 	}
 
 	/// [Requires lock]
 	int64_t getInt() const {
 		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		chatra_assert(node->type == ReferenceValueType::Int);
-		return node->vInt;
+		return getIntWithoutLock();
 	}
 
 	/// [Requires lock]
 	double getFloat() const {
 		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		chatra_assert(node->type == ReferenceValueType::Float);
-		return node->vFloat;
+		return getFloatWithoutLock();
 	}
 
 	void setWithoutBothLock(const Reference& ref) const {
@@ -445,13 +457,16 @@ private:
 			std::unordered_map<StringId, Reference> refs) noexcept
 			: typeId(typeId), groups(std::move(groups)), nodes(std::move(nodes)), refsMap(std::move(refs)) { (void)storage; }
 
+	void appendElementsAsArray(Storage& storage, const std::vector<size_t>& primaryIndexes,
+			Requester requester);
+
 protected:
 	// Constructor for array-like objects
 	Object(Storage& storage, TypeId typeId, size_t size, Requester requester = InvalidRequester) noexcept;
 
 	// Constructor for container's body
 	struct ElementsAreExclusive {};
-	Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive elementsAreExclusive) noexcept;
+	Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive) noexcept;
 
 	// Constructor for compound types
 	Object(Storage& storage, TypeId typeId, const std::vector<std::vector<StringId>>& references,
@@ -471,6 +486,12 @@ protected:
 	virtual bool hasOnDestroy() const { return false; }
 
 public:
+	// Append elements to this object which was initialized by constructor for classes.
+	// "primaryIndexes" must be super-set of its passed in constructor or prior appendElements() call.
+	// note: this method is not thread-safe
+	void appendElements(Storage& storage, const std::vector<size_t>& primaryIndexes,
+			Requester requester = InvalidRequester) noexcept;
+
 	TypeId getTypeId() const {
 		return typeId;
 	}
@@ -697,6 +718,9 @@ public:
 
 	std::unique_ptr<Scope> add(ScopeType type);
 
+	template <class Type = Object>
+	Type& derefDirect(size_t objectIndex) const;
+
 	/// Step concurrent GC; returns whether GC was completed.
 	/// Once this was called and until this returns true, collect() cannot be called.
 	bool tidy(IConcurrentGcConfiguration& conf);
@@ -875,6 +899,18 @@ inline void Storage::registerObject(Object* object) {
 		}
 	}
 	object->gcGeneration = gcGeneration;
+}
+
+template <class Type>
+Type& Storage::derefDirect(size_t objectIndex) const {
+	static_assert(std::is_base_of<Object, Type>::value, "Type should be derived class of Object");
+	std::lock_guard<SpinLock> lock0(lockObjects);
+
+	if (objectIndex >= objects.size() ||
+			std::find(recycledObjectIndexes.cbegin(), recycledObjectIndexes.cend(), objectIndex) != recycledObjectIndexes.cend())
+		throw IllegalArgumentException();
+
+	return *static_cast<Type*>(objects[objectIndex]);
 }
 
 template<typename WriteObject, typename WriteObjectReferences>

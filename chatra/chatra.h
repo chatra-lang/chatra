@@ -378,8 +378,15 @@ struct IHost {
 		(void)driverType;
 		return nullptr;  // or getStandardFileSystem() etc.
 	}
+
+	virtual void onInteractiveInstanceReady(InstanceId interactiveInstanceId) { (void)interactiveInstanceId; }
 };
 
+// chatra_debugger.h
+namespace debugger {
+struct IDebuggerHost;
+struct IDebugger;
+}
 
 class Runtime {
 public:
@@ -420,6 +427,16 @@ public:
 	/// @throws PackageNotFoundException
 	virtual InstanceId run(PackageId packageId) = 0;
 
+	/// Start interactive instance
+	virtual InstanceId createInteractiveInstance() = 0;
+
+	/// Check whether the specified interactive instance can accept next push() call
+	virtual bool readyToNextInteraction(InstanceId interactiveInstanceId) = 0;
+
+	/// Request to process next statement to an interactive instance
+	virtual void push(InstanceId interactiveInstanceId, const std::string& scriptName,
+			const std::string& statement) = 0;
+
 	/// Check whether at least one thread remains or not
 	/// @throws IllegalArgumentException  instance is not found
 	virtual bool isRunning(InstanceId instanceId) = 0;
@@ -437,6 +454,12 @@ public:
 	/// @param step  must be &gt;=0
 	/// @throws IllegalArgumentException
 	virtual void increment(TimerId timerId, int64_t step) = 0;
+
+	/// Get a debugger interface corresponding to this Runtime instance.
+	/// You can call this method multiple times, but each Runtime has only single IDebugger instance and
+	/// specified IDebuggerHost specified in past invocation will be overwritten by last specified value.
+	virtual std::shared_ptr<debugger::IDebugger> getDebugger(
+			std::shared_ptr<debugger::IDebuggerHost> debuggerHost) = 0;
 };
 
 

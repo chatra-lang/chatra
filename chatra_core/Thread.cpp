@@ -46,6 +46,7 @@ static constexpr size_t assignmentOperatorProcessPhase = 6;
 bool Thread::initialized = false;
 Node Thread::expressionMarkerNode;
 Node Thread::initializePackageNode;
+Node Thread::initializeAdditionalPackageNode;
 Node Thread::evaluateTupleNode;
 Node Thread::defaultConstructorNode;
 Node Thread::initializeVarsNode;
@@ -108,30 +109,16 @@ bool Thread::parse() {
 	IErrorReceiverBridge errorReceiverBridge(*this);
 	unsigned sTableVersion = runtime.primarySTable->getVersion();
 
-	auto scriptNode = f.package.parseNode(errorReceiverBridge, f.node);
+	auto scriptNode = f.package.parseNode(errorReceiverBridge, f.node,
+			f.phase == Phase::ScriptRoot_InteractiveInitial);
 	scanInnerFunctions(&errorReceiverBridge, runtime.primarySTable.get());
 
-	if (runtime.primarySTable->getVersion() != sTableVersion) {
-		runtime.primarySTable->clearDirty();
-		{
-			std::lock_guard<SpinLock> lock(runtime.lockSTable);
-			runtime.distributedSTable = runtime.primarySTable->copy();
-		}
-		runtime.threadIds.forEach([&](Thread& thread) {
-			thread.hasNewSTable = true;
-		});
+	if (runtime.distributeStringTable(sTableVersion))
 		captureStringTable();
-	}
 
 	// Defer distributing node to each threads because new thread creation during parseBlockNodes() causes MemberNotFoundException
-	if (scriptNode) {
-		std::lock_guard<SpinLock> lock(f.package.lockNode);
-		f.package.node = std::move(scriptNode);
-		auto* nNew = f.package.node.get();
-		for (auto* thread : f.package.threadsWaitingForNode)
-			thread->frames.back().node = nNew;
-		f.package.threadsWaitingForNode.clear();
-	}
+	if (scriptNode)
+		f.package.distributeScriptNode(std::move(scriptNode));
 
 	f.lock->release(parser, LockType::Soft);
 
@@ -327,10 +314,13 @@ void Thread::consumeException() {
 				throw AbortThreadException();
 			}
 
-			if (!f0.stack.empty() && f0.stack.back().first->op == opInitializePackage) {
-				errorAtNode(*this, ErrorLevel::Error, f.exceptionNode,"unhandled exception raised during package initialization", {});
-				emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode, f.stackTrace.data());
-				throw AbortThreadException();
+			if (!f0.stack.empty()) {
+				auto op = f0.stack.back().first->op;
+				if (op == opInitializePackage || op == opInitializeAdditionalPackage) {
+					errorAtNode(*this, ErrorLevel::Error, f.exceptionNode,"unhandled exception raised during package initialization", {});
+					emitError(getReferClass(f.exception->getRef())->getName(), f.exceptionNode, f.stackTrace.data());
+					throw AbortThreadException();
+				}
 			}
 		}
 		catch (const AbortThreadException&) {
@@ -2021,7 +2011,7 @@ bool Thread::asyncOperator() {
 		}
 
 		auto& targetThread = runtime.createThread(instance,
-				*(method->cl == nullptr ? &f.package : method->cl->getPackage()), method->node);
+				*(method->cl == nullptr ? &f.package : method->cl->getPackage()), false, method->node);
 		auto& f1 = targetThread.frames.back();
 		f1.stack.emplace_back(&returnFromAsyncNode, 0);
 		auto refAsync = f1.pushTemporary()->setRvalue();
@@ -2758,6 +2748,7 @@ bool Thread::resumeExpression() {
 				continue;
 			return false;
 
+		case ntBreakPointFor:
 		case NodeType::For:
 			if (assignmentOperator())
 				continue;
@@ -3204,6 +3195,7 @@ bool Thread::resumeExpression() {
 		case Operator::BitwiseXorAssignment:  shouldContinue = assignmentOperator(Operator::BitwiseXor);  break;
 
 		case opInitializePackage:
+		case opInitializeAdditionalPackage:
 			shouldContinue = initializePackage();
 			break;
 
@@ -3479,6 +3471,23 @@ void Thread::processFinalizer() {
 	runtime.enqueue(this);
 }
 
+template <typename PhaseCond>
+bool Thread::checkDebugBreak(Node* node0, Thread* thread, size_t& phase, PhaseCond phaseCond) {
+	if (!phaseCond(phase & Phase::PhaseMask)) {
+		phase &= Phase::PhaseMask;
+		return false;
+	}
+
+	if ((phase & Phase::BreakPointFlag) == 0) {
+		phase |= Phase::BreakPointFlag;
+		runtime.debugBreak(node0, thread);
+		return true;
+	}
+
+	phase &= Phase::PhaseMask;
+	return false;
+}
+
 Frame* Thread::findClassFrame() {
 	for (size_t frameIndex = frames.size() - 1; frameIndex != SIZE_MAX; ) {
 		auto& f = frames[frameIndex];
@@ -3552,6 +3561,7 @@ Thread::Thread(RuntimeImp& runtime, Instance& instance) noexcept
 	if (!initialized) {
 		set(expressionMarkerNode, NodeType::Expression);
 		set(initializePackageNode, opInitializePackage);
+		set(initializeAdditionalPackageNode, opInitializeAdditionalPackage);
 		set(evaluateTupleNode, opEvaluateTuple);
 
 		set(defaultConstructorNode, NodeType::Def);
@@ -3605,12 +3615,19 @@ void Thread::finish() {
 		pop();
 	}
 
-	// Remove returned value and exceptions
-	frames.back().popAll();
-
 	auto parser = runtime.scope->ref(StringId::Parser);
 	if (parser.lockedBy() == getId())
 		parser.unlock();
+
+	if (isInteractive) {
+		checkTransferReq();
+		readyToNextInteraction = true;
+		runtime.host->onInteractiveInstanceReady(instance.getId());
+		return;
+	}
+
+	// Remove returned value and exceptions
+	frames.back().popAll();
 
 	std::unique_ptr<Thread> self;
 	{
@@ -3623,7 +3640,375 @@ void Thread::finish() {
 	chatra_assert(transferReq.empty());
 }
 
-void Thread::run() {
+Thread::StepRunResult Thread::stepRun() {
+	try {
+		if (!resumeExpression())
+			return StepRunResult::Next;
+
+		if (!parse())
+			return StepRunResult::Next;
+
+		auto& f = frames.back();
+		if (f.exception != nullptr) {
+			consumeException();
+			return StepRunResult::Continue;
+		}
+
+		if (f.phase < f.node->blockNodes.size()) {
+			f.lock->moveTemporaryToSoftLock();
+
+			auto& n = f.node->blockNodes[f.phase];
+			switch (n->type) {
+			case NodeType::Import:
+			case NodeType::Def:
+			case NodeType::DefOperator:
+			case NodeType::Class:
+				f.phase++;
+				return StepRunResult::Continue;
+
+			case NodeType::Expression:
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Sync:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Touch:
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Var:
+				f.phase++;
+				for (auto& nDef : n->subNodes[SubNode::Var_Definitions]->subNodes) {
+					if (nDef->op != Operator::Pair)
+						continue;
+					f.stack.emplace_back(&popValueNode, 0);
+					f.stack.emplace_back(&varStatementMarkerNode, 0);
+					f.stack.emplace_back(nDef.get(), 0);
+				}
+				return StepRunResult::Continue;
+
+			case NodeType::IfGroup:
+				f.phase++;
+				pushBlock(n.get(), Phase::IfGroup_Base0);
+				checkIsValidNode(n->blockNodes[0].get());
+				prepareExpression(n->blockNodes[0]->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case ntBreakPointIfGroup:
+				f.phase++;
+				pushBlock(n.get(), Phase::IfGroup_Base0);
+				checkIsValidNode(n->blockNodes[0].get());
+				prepareExpression(n->blockNodes[0]->subNodes[0].get());
+				runtime.debugBreak(n->blockNodes[0].get(), this);
+				return StepRunResult::BreakPoint;
+
+			case NodeType::For:
+				f.phase++;
+				pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
+				processFor();
+				return StepRunResult::Continue;
+
+			case ntBreakPointFor:
+				f.phase++;
+				pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
+				runtime.debugBreak(n.get(), this);
+				return StepRunResult::BreakPoint;
+
+			case NodeType::While:
+				f.phase++;
+				pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
+				prepareExpression(n->subNodes[SubNode::While_Condition].get());
+				return StepRunResult::Continue;
+
+			case ntBreakPointWhile:
+				f.phase++;
+				pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
+				prepareExpression(n->subNodes[SubNode::While_Condition].get());
+				runtime.debugBreak(n.get(), this);
+				return StepRunResult::BreakPoint;
+
+			case NodeType::Switch:
+				f.phase++;
+				pushBlock(n.get(), Phase::Switch_Base0);
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Case:
+				f.phase++;
+				pushBlock(n.get(), Phase::Case_Base);
+				prepareExpression(n->subNodes[0].get());
+				return StepRunResult::Continue;
+
+			case NodeType::Default:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Do:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Catch:
+				f.phase++;
+				return StepRunResult::Continue;
+
+			case NodeType::Finally:
+				f.phase++;
+				pushBlock(n.get(), 0);
+				return StepRunResult::Continue;
+
+			case NodeType::Break:
+				breakStatement(n.get());
+				return StepRunResult::Continue;
+
+			case NodeType::Continue:
+				continueStatement(n.get());
+				return StepRunResult::Continue;
+
+			case NodeType::Return:
+				if (n->subNodes[0]) {
+					f.stack.emplace_back(n.get(), 0);
+					prepareExpression(n->subNodes[0].get());
+				}
+				else {
+					returnStatement(nullptr, true);
+					return StepRunResult::Next;
+				}
+				return StepRunResult::Continue;
+
+			case NodeType::Throw:
+				if (n->subNodes[0]) {
+					f.stack.emplace_back(n.get(), 0);
+					prepareExpression(n->subNodes[0].get());
+				}
+				else {
+					if (f.caughtException == nullptr) {
+						errorAtNode(*this, ErrorLevel::Error, n.get(), "no exception raised to re-throw", {});
+						emitError(StringId::UnsupportedOperationException, n.get());
+						throw AbortThreadException();
+					}
+
+					f.phase++;
+					raiseException(f.caughtException);
+					f.recycle(f.caughtException);
+					f.caughtException = nullptr;
+				}
+				return StepRunResult::Continue;
+
+			case ntFinalizer:
+				processFinalizer();
+				return StepRunResult::Next;
+
+			case ntParserError:
+				checkIsValidNode(n.get());
+				return StepRunResult::Next;
+
+			case ntBreakPointStatement:
+				f.phase++;
+				runtime.debugBreak(f.node->blockNodes[f.phase].get(), this);
+				return StepRunResult::BreakPoint;
+
+			case ntBreakPointInnerBlock:
+				f.phase++;
+				runtime.debugBreak(f.node, this);
+				return StepRunResult::BreakPoint;
+
+			default:
+				throw InternalError();
+			}
+		}
+
+		switch (f.node->type) {
+		case NodeType::ScriptRoot:
+			if (f.phase == Phase::ScriptRoot_Initial) {
+				f.phase = 0;
+				f.stack.emplace_back(&initializePackageNode, 0);
+				return StepRunResult::Continue;
+			}
+			if (f.phase == Phase::ScriptRoot_InteractiveInitial) {
+				f.phase = 0;
+				f.stack.emplace_back(&initializeAdditionalPackageNode, 0);
+				return StepRunResult::Continue;
+			}
+
+			if (f.phase != Phase::ScriptRoot_InitCall1) {
+				f.phase = Phase::ScriptRoot_InitCall0;  // To avoid emitting meaningless exception
+				auto* value = f.pushTemporary();
+				value->setName(nullptr, StringId::Init);
+				if (value->evaluateAsPackageInitCall() == TemporaryObject::EvaluationResult::Succeeded) {
+					auto* method = value->getRefMethod();
+					if (method != nullptr) {
+						f.phase = Phase::ScriptRoot_InitCall1;
+						methodCall(false);
+						return StepRunResult::Next;
+					}
+				}
+			}
+
+			returnStatement(nullptr, false);
+			return StepRunResult::Next;
+
+		case NodeType::Def:
+		case NodeType::DefOperator:
+		case NodeType::Class:
+			returnStatement(nullptr, false);
+			return StepRunResult::Next;
+
+		case NodeType::Sync:
+			pop();
+			return StepRunResult::Continue;
+
+		case ntBreakPointIfGroup:
+		case NodeType::IfGroup: {
+			if (f.phase < Phase::IfGroup_Base0) {
+				pop();
+				return StepRunResult::Continue;
+			}
+
+			chatra_assert(f.values.size() == 1);
+			size_t index = f.phase & Phase::IfGroup_IndexMask;
+			Node* blockNode = f.node->blockNodes[index].get();
+			if (getBoolOrThrow(blockNode, 0)) {
+				f.phase = f.node->blockNodes.size();
+				pushBlock(blockNode, 0);
+			}
+			else {
+				index++;
+				if (index == f.node->blockNodes.size())
+					pop();
+				else {
+					blockNode = f.node->blockNodes[index].get();
+					checkIsValidNode(blockNode);
+					switch (blockNode->type) {
+					case ntBreakPointElseIf:
+						if (checkDebugBreak(blockNode, this, f.phase, [](size_t) { return true; }))
+							return StepRunResult::BreakPoint;
+						CHATRA_FALLTHROUGH;
+
+					case NodeType::ElseIf:
+						prepareExpression(blockNode->subNodes[0].get());
+						return StepRunResult::Continue;
+
+					case ntBreakPointElse:
+						if (checkDebugBreak(blockNode, this, f.phase, [](size_t) { return true; }))
+							return StepRunResult::BreakPoint;
+						CHATRA_FALLTHROUGH;
+
+					case NodeType::Else:
+						f.phase = f.node->blockNodes.size();
+						pushBlock(blockNode, 0);
+						return StepRunResult::Continue;
+
+					default:
+						throw InternalError();
+					}
+				}
+			}
+			return StepRunResult::Continue;
+		}
+
+		case NodeType::If:
+		case NodeType::ElseIf:
+		case NodeType::Else:
+		case ntBreakPointElseIf:
+		case ntBreakPointElse:
+			pop();
+			return StepRunResult::Continue;
+
+		case ntBreakPointFor:
+			if (checkDebugBreak(f.node, this, f.phase, [](size_t phase) {
+					return phase < Phase::For_Begin || phase == Phase::For_Continue; }))
+				return StepRunResult::BreakPoint;
+			CHATRA_FALLTHROUGH;
+
+		case NodeType::For:
+			processFor();
+			return StepRunResult::Continue;
+
+		case ntBreakPointWhile:
+			if (checkDebugBreak(f.node, this, f.phase, [](size_t phase) {
+					return phase <= Phase::While_Continue; }))
+				return StepRunResult::BreakPoint;
+			CHATRA_FALLTHROUGH;
+
+		case NodeType::While:
+			if (f.phase <= Phase::While_Continue) {
+				f.phase = Phase::While_Condition0;
+				prepareExpression(f.node->subNodes[SubNode::While_Condition].get());
+				return StepRunResult::Continue;
+			}
+			chatra_assert(f.phase == Phase::While_Condition1 && f.values.size() == 1);
+			if (getBoolOrThrow(f.node, SubNode::While_Condition))
+				f.phase = 0;
+			else
+				pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Switch: {
+			if (f.phase < Phase::Switch_Base0) {
+				pop();
+				return StepRunResult::Continue;
+			}
+
+			chatra_assert(f.phase == Phase::Switch_Base1 && f.values.size() == 1);
+			convertTopToScalar(f.node, 0);
+			auto* value = f.values.back();
+			if (value->hasRef() && value->getRef().valueType() == ReferenceValueType::Bool) {
+				errorAtNode(*this, ErrorLevel::Error, f.node->subNodes[0].get(),
+						"switch statement cannot handle Bool value", {});
+				throw RuntimeException(StringId::UnsupportedOperationException);
+			}
+
+			f.phase = 0;
+			return StepRunResult::Continue;
+		}
+
+		case NodeType::Case:
+			if (!processSwitchCase())
+				return StepRunResult::Next;
+			return StepRunResult::Continue;
+
+		case NodeType::Default:
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Do:
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Catch:
+			f.recycle(f.caughtException);
+			f.caughtException = nullptr;
+			pop();
+			return StepRunResult::Continue;
+
+		case NodeType::Finally:
+			pop();
+			return StepRunResult::Continue;
+
+		default:
+			throw InternalError();
+		}
+	}
+	catch (const RuntimeException& ex) {
+		raiseException(ex);
+	}
+	catch (const AbortThreadException&) {
+		return StepRunResult::Abort;
+	}
+	catch (const std::exception&) {
+		runtime.outputError("fatal: internal error\n");
+		return StepRunResult::Abort;
+	}
+
+	return StepRunResult::Continue;
+}
+
+Thread::RunResult Thread::run() {
 	/*{
 		std::lock_guard<SpinLock> lock(lockTransferReq);
 		std::printf("run: instanceId %u, threadId = %u; packageId = %u, frames.size = %u, transferReq = %u\n",
@@ -3639,304 +4024,48 @@ void Thread::run() {
 	captureStringTable();
 
 	while (frames.size() > residentialFrameCount) {
-		try {
-			if (!resumeExpression())
-				return;
-
-			if (!parse())
-				return;
-
-			auto& f = frames.back();
-			if (f.exception != nullptr) {
-				consumeException();
-				continue;
-			}
-
-			if (f.phase < f.node->blockNodes.size()) {
-				f.lock->moveTemporaryToSoftLock();
-
-				auto& n = f.node->blockNodes[f.phase];
-				switch (n->type) {
-				case NodeType::Import:
-				case NodeType::Def:
-				case NodeType::DefOperator:
-				case NodeType::Class:
-					f.phase++;
-					continue;
-
-				case NodeType::Expression:
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Sync:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Touch:
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Var:
-					f.phase++;
-					for (auto& nDef : n->subNodes[SubNode::Var_Definitions]->subNodes) {
-						if (nDef->op != Operator::Pair)
-							continue;
-						f.stack.emplace_back(&popValueNode, 0);
-						f.stack.emplace_back(&varStatementMarkerNode, 0);
-						f.stack.emplace_back(nDef.get(), 0);
-					}
-					continue;
-
-				case NodeType::IfGroup:
-					f.phase++;
-					pushBlock(n.get(), Phase::IfGroup_Base0);
-					checkIsValidNode(n->blockNodes[0].get());
-					prepareExpression(n->blockNodes[0]->subNodes[0].get());
-					continue;
-
-				case NodeType::For:
-					f.phase++;
-					pushBlock(n.get(), Phase::For_Begin, n->sid, Phase::For_Continue);
-					processFor();
-					continue;
-
-				case NodeType::While:
-					f.phase++;
-					pushBlock(n.get(), Phase::While_Condition0, n->sid, Phase::While_Continue);
-					prepareExpression(n->subNodes[SubNode::While_Condition].get());
-					continue;
-
-				case NodeType::Switch:
-					f.phase++;
-					pushBlock(n.get(), Phase::Switch_Base0);
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Case:
-					f.phase++;
-					pushBlock(n.get(), Phase::Case_Base);
-					prepareExpression(n->subNodes[0].get());
-					continue;
-
-				case NodeType::Default:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Do:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Catch:
-					f.phase++;
-					continue;
-
-				case NodeType::Finally:
-					f.phase++;
-					pushBlock(n.get(), 0);
-					continue;
-
-				case NodeType::Break:
-					breakStatement(n.get());
-					continue;
-
-				case NodeType::Continue:
-					continueStatement(n.get());
-					continue;
-
-				case NodeType::Return:
-					if (n->subNodes[0]) {
-						f.stack.emplace_back(n.get(), 0);
-						prepareExpression(n->subNodes[0].get());
-					}
-					else {
-						returnStatement(nullptr, true);
-						return;
-					}
-					continue;
-
-				case NodeType::Throw:
-					if (n->subNodes[0]) {
-						f.stack.emplace_back(n.get(), 0);
-						prepareExpression(n->subNodes[0].get());
-					}
-					else {
-						if (f.caughtException == nullptr) {
-							errorAtNode(*this, ErrorLevel::Error, n.get(), "no exception raised to re-throw", {});
-							emitError(StringId::UnsupportedOperationException, n.get());
-							throw AbortThreadException();
-						}
-
-						f.phase++;
-						raiseException(f.caughtException);
-						f.recycle(f.caughtException);
-						f.caughtException = nullptr;
-					}
-					continue;
-
-				case ntFinalizer:
-					processFinalizer();
-					return;
-
-				case ntParserError:
-					checkIsValidNode(n.get());
-					return;
-
-				default:
-					throw InternalError();
-				}
-			}
-
-			switch (f.node->type) {
-			case NodeType::ScriptRoot:
-				if (f.phase == Phase::ScriptRoot_Initial) {
-					f.phase = 0;
-					f.stack.emplace_back(&initializePackageNode, 0);
-					continue;
-				}
-
-				if (f.phase != Phase::ScriptRoot_InitCall1) {
-					f.phase = Phase::ScriptRoot_InitCall0;  // To avoid emitting meaningless exception
-					auto* value = f.pushTemporary();
-					value->setName(nullptr, StringId::Init);
-					if (value->evaluateAsPackageInitCall() == TemporaryObject::EvaluationResult::Succeeded) {
-						auto* method = value->getRefMethod();
-						if (method != nullptr) {
-							f.phase = Phase::ScriptRoot_InitCall1;
-							methodCall(false);
-							return;
-						}
-					}
-				}
-
-				returnStatement(nullptr, false);
-				return;
-
-			case NodeType::Def:
-			case NodeType::DefOperator:
-			case NodeType::Class:
-				returnStatement(nullptr, false);
-				return;
-
-			case NodeType::Sync:
-				pop();
-				continue;
-
-			case NodeType::IfGroup: {
-				if (f.phase < Phase::IfGroup_Base0) {
-					pop();
-					continue;
-				}
-
-				chatra_assert(f.values.size() == 1);
-				size_t index = f.phase - Phase::IfGroup_Base1;
-				Node* blockNode = f.node->blockNodes[index].get();
-				if (getBoolOrThrow(blockNode, 0)) {
-					f.phase = f.node->blockNodes.size();
-					pushBlock(blockNode, 0);
-				}
-				else {
-					index++;
-					if (index == f.node->blockNodes.size())
-						pop();
-					else {
-						blockNode = f.node->blockNodes[index].get();
-						checkIsValidNode(blockNode);
-						if (blockNode->type == NodeType::Else) {
-							f.phase = f.node->blockNodes.size();
-							pushBlock(blockNode, 0);
-						}
-						else
-							prepareExpression(blockNode->subNodes[0].get());
-					}
-				}
-				continue;
-			}
-
-			case NodeType::If:
-			case NodeType::ElseIf:
-			case NodeType::Else:
-				pop();
-				continue;
-
-			case NodeType::For:
-				processFor();
-				continue;
-
-			case NodeType::While:
-				if (f.phase <= Phase::While_Continue) {
-					f.phase = Phase::While_Condition0;
-					prepareExpression(f.node->subNodes[SubNode::While_Condition].get());
-					continue;
-				}
-				chatra_assert(f.phase == Phase::While_Condition1 && f.values.size() == 1);
-				if (getBoolOrThrow(f.node, SubNode::While_Condition))
-					f.phase = 0;
-				else
-					pop();
-				continue;
-
-			case NodeType::Switch: {
-				if (f.phase < Phase::Switch_Base0) {
-					pop();
-					continue;
-				}
-
-				chatra_assert(f.phase == Phase::Switch_Base1 && f.values.size() == 1);
-				convertTopToScalar(f.node, 0);
-				auto* value = f.values.back();
-				if (value->hasRef() && value->getRef().valueType() == ReferenceValueType::Bool) {
-					errorAtNode(*this, ErrorLevel::Error, f.node->subNodes[0].get(),
-							"switch statement cannot handle Bool value", {});
-					throw RuntimeException(StringId::UnsupportedOperationException);
-				}
-
-				f.phase = 0;
-				continue;
-			}
-
-			case NodeType::Case:
-				if (!processSwitchCase())
-					return;
-				continue;
-
-			case NodeType::Default:
-				pop();
-				continue;
-
-			case NodeType::Do:
-				pop();
-				continue;
-
-			case NodeType::Catch:
-				f.recycle(f.caughtException);
-				f.caughtException = nullptr;
-				pop();
-				continue;
-
-			case NodeType::Finally:
-				pop();
-				continue;
-
-			default:
-				throw InternalError();
-			}
-		}
-		catch (const RuntimeException& ex) {
-			raiseException(ex);
-		}
-		catch (const AbortThreadException&) {
-			break;
-		}
-		catch (const std::exception&) {
-			runtime.outputError("fatal: internal error\n");
-			break;
+		switch (stepRun()) {
+		case Thread::StepRunResult::Abort:
+			finish();
+			return RunResult::Next;
+		case Thread::StepRunResult::Continue:
+			continue;
+		case Thread::StepRunResult::Next:
+			return RunResult::Next;
+		case Thread::StepRunResult::BreakPoint:
+			return RunResult::Stop;
 		}
 	}
 
 	finish();
+	return RunResult::Next;
+}
+
+Node* Thread::currentNode(size_t frameIndex) const {
+	auto& f = (frameIndex == SIZE_MAX ? frames.back() : frames[frameIndex]);
+	if (f.node == nullptr)
+		return nullptr;
+
+	// Special treatment for IfGroup -- IfGroup itself holds no line nor tokens,
+	//   and during execution of "if" statements block, sometimes Frame.node indicates IfGroup
+	//   even if "actual" code points currently running are one of "if", "else if", or "else" statements.
+	if ((f.node->type == NodeType::IfGroup || f.node->type == ntBreakPointIfGroup) &&
+			(f.phase >= Phase::IfGroup_Base0 || f.phase == f.node->blockNodes.size())) {
+		size_t index;
+		if (f.phase == Phase::IfGroup_Base0)
+			index = 0;
+		else if (f.phase >= Phase::IfGroup_Base1) {
+			index = f.phase & Phase::IfGroup_IndexMask;
+			if (f.stack.empty())
+				index++;
+		}
+		else
+			index = f.node->blockNodes.size() - 1;
+		return f.node->blockNodes[index].get();
+	}
+
+	auto phase = (f.phase != 0 && !f.stack.empty() ? f.phase - 1 : f.phase);
+	return phase < f.node->blockNodes.size() ? f.node->blockNodes[phase].get() : f.node;
 }
 
 Thread::Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept
@@ -3954,6 +4083,10 @@ TemporaryTuple* Thread::restoreTemporaryTuple(Reader& r) const {
 }
 
 void Thread::save(Writer& w) const {
+	w.out(isInteractive);
+	w.out(readyToNextInteraction.load());
+	w.CHATRA_OUT_POINTER(scriptScope.get(), Scope);
+
 	w.CHATRA_OUT_POINTER(scope.get(), Scope);
 	w.out(frames, [&](const Frame& frame) {
 		w.out(&frame.package);
@@ -3973,6 +4106,10 @@ void Thread::save(Writer& w) const {
 }
 
 void Thread::restore(Reader& r) {
+	isInteractive = r.read<bool>();
+	readyToNextInteraction = r.read<bool>();
+	scriptScope = r.CHATRA_READ_UNIQUE(Scope);
+
 	scope = r.CHATRA_READ_UNIQUE(Scope);
 	r.inList([&]() { r.emplaceBack(frames, *this, *r.readValidPackage()); });
 	r.inList([&]() { r.emplaceBack(transferReq); });

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(Chatra CXX)
+project(Chatra CXX C)
 
 set(CMAKE_CXX_STANDARD 11)
 find_package(Threads REQUIRED)
@@ -42,6 +42,8 @@ add_subdirectory(chatra_core)
 # Adds embedded libraries
 add_subdirectory(chatra_emb)
 
+add_subdirectory(editline)
+
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CHATRA_ENABLE_LANGUAGE_TESTS "true")
 else()
@@ -54,11 +56,11 @@ if (CHATRA_ENABLE_LANGUAGE_TESTS)
 endif()
 
 add_executable(chatra main.cpp)
+target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(chatra editline -lcurses)
 
 if (CHATRA_ENABLE_LANGUAGE_TESTS)
-    target_link_libraries(chatra chatra_core chatra_emb chatra_language_test ${CMAKE_THREAD_LIBS_INIT})
-else()
-    target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
+    target_link_libraries(chatra chatra_language_test)
 endif()
 
 if (CHATRA_ENABLE_LANGUAGE_TESTS)
