@@ -32,7 +32,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "histedit.h"
+#include <readline/readline.h>
+#include <readline/history.h>
+
 #include "chatra_core/CharacterClass.h"
 #include "chatra_core/LexicalAnalyzer.h"
 
@@ -69,11 +71,6 @@ enum class InterruptionState {
 };
 
 static std::atomic<InterruptionState> interruptionState = {InterruptionState::Masked};
-
-static bool lineContinuation = false;
-static bool blockContinuation = false;
-static unsigned inputSectionNo = 0;
-static unsigned inputLineNo = 1;
 
 enum class Target {
 	Package, Instance, Thread, Frame, Scope, Object, BreakPoint
@@ -376,7 +373,7 @@ static void signalHandler(int signal) {
 			cvBreak.notify_one();
 		}
 		else {
-			std::fprintf(stderr, "^C\n");
+			std::fprintf(stderr, "\n");
 			std::fflush(stderr);
 			std::exit(-1);
 		}
@@ -396,21 +393,19 @@ static void interruptible(Pred pred) {
 	interruptionState = InterruptionState::Masked;
 }
 
-static char* prompt(EditLine*) {
+static char* prompt(bool blockContinuation, bool lineContinuation,
+		unsigned sectionNo, unsigned lineNo) {
+
 	static std::string ret;
 
 	if (lineContinuation)
-		ret = "\1\033[0m\1:" + std::to_string(inputLineNo) + ">>\1\033[0m\1 ";
+		ret = "\1\033[0m\2:" + std::to_string(lineNo) + ">>\1\033[0m\2 ";
 	else if (blockContinuation)
-		ret = "\1\033[0m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
+		ret = "\1\033[0m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
 	else
-		ret = "\1\033[0m\033[7m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
+		ret = "\1\033[0m\033[7m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
 
 	return const_cast<char*>(ret.data());
-}
-
-static unsigned char complete(EditLine *el, int) {
-	return el_insertstr(el, "\t") == -1? CC_ERROR : CC_REFRESH;
 }
 
 static void dLog(unsigned indent, const char* format, ...) {
@@ -1194,36 +1189,28 @@ static void processDebuggerCommand(const std::string& input) {
 	}
 }
 
-static int interactiveMode() {
+[[noreturn]] static void interactiveMode() {
 	std::signal(SIGINT, signalHandler);
 
-	auto* hist = history_init();
-	HistEvent ev;
-	history(hist, &ev, H_SETSIZE, 1000);
-	auto el = el_init(argv0.data(), stdin, stdout, stderr);
-
-	el_set(el, EL_EDITOR, "emacs");
-	el_set(el, EL_SIGNAL, 1);
-	el_set(el, EL_PROMPT_ESC, prompt, '\1');
-	el_set(el, EL_HIST, history, hist);
-	el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
-	el_set(el, EL_BIND, "^I", "ed-complete", nullptr);
-	el_set(el, EL_BIND, "-a", "k", "ed-prev-line", nullptr);
-	el_set(el, EL_BIND, "-a", "j", "ed-next-line", nullptr);
-
-	el_source(el, nullptr);
+	rl_bind_key('\t', rl_insert);
+	stifle_history(1000);
 
 	interactiveInstanceId = runtime->createInteractiveInstance();
 
 	dLog(0, "Chatra interactive frontend");
 	dLog(0, "type \"!h\" to show debugger command help");
 
-	std::string input;
+	unsigned sectionNo = 0;
+	unsigned lineNo = 1;
+	std::string lines;
 	std::string line;
-	int length;
-	const char *buffer;
-	while ((buffer = el_gets(el, &length)) != nullptr && length != 0) {
-		inputLineNo++;
+	bool lineContinuation = false;
+	bool blockContinuation = false;
+
+	for (;;) {
+		auto buffer = readline(prompt(blockContinuation, lineContinuation, sectionNo, lineNo));
+		auto length = std::strlen(buffer);
+		lineNo++;
 
 		unsigned lineIndent = 0;
 		for (int i = 0; i < length; i++) {
@@ -1241,9 +1228,13 @@ static int interactiveMode() {
 			for (unsigned i = 0; i < lineIndent + 2; i++)
 				subLine.insert(subLine.cbegin(), '\t');
 		}
-		history(hist, &ev, lineContinuation ? H_APPEND : H_ENTER, subLine.data());
 
-		if (length >= 2 && buffer[length - 2] == '\\') {
+		add_history(subLine.data());
+
+		if (subLine.empty() || subLine.back() != '\n')  // may be always true
+			subLine += '\n';
+
+		if (subLine.size() >= 2 && subLine[subLine.size() - 2] == '\\') {
 			lineContinuation = true;
 			line += subLine.substr(0, subLine.size() - 2) + '\n';
 			continue;
@@ -1262,7 +1253,7 @@ static int interactiveMode() {
 			line.erase(pos, 1);
 		}
 
-		input += line;
+		lines += line;
 		if (blockContinuation) {
 			if (line.size() <= 1)
 				blockContinuation = false;
@@ -1280,40 +1271,34 @@ static int interactiveMode() {
 			}
 		}
 		line.clear();
-		input = input.substr(std::distance(input.cbegin(), std::find_if(input.cbegin(), input.cend(), cha::isNotSpace)));
+		auto input = lines.substr(std::distance(lines.cbegin(), std::find_if(lines.cbegin(), lines.cend(), cha::isNotSpace)));
+		lines.clear();
+		lineNo = 1;
 
 		if (input.cend() == std::find_if(input.cbegin(), input.cend(), [](char c) {
 				return cha::isNotSpace(c) && c != '\n';  })) {
-			input.clear();
 			continue;
 		}
 
 		if (input[0] == '!') {
 			processDebuggerCommand(input);
-			input.clear();
-			inputLineNo = 1;
 			continue;
 		}
 
 		try {
-			auto scriptName = "chatra[" + std::to_string(inputSectionNo++) + "]";
+			auto scriptName = "chatra[" + std::to_string(sectionNo++) + "]";
 			host->push("", {{scriptName, input}});
 			runtime->push(interactiveInstanceId, scriptName, input);
-			input.clear();
-			inputLineNo = 1;
 		}
 		catch (const cha::NativeException& ex) {
 			dError("interactive mode: %s", ex.what() == nullptr ? "error" : ex.what());
+			continue;
 		}
 
 		interruptible([&]() {
 			runUntilBreak();
 		});
 	}
-
-	el_end(el);
-	history_end(hist);
-	return 0;
 }
 
 static bool isTTY() {
@@ -1448,7 +1433,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (isInteractive && ret == 0)
-		ret = interactiveMode();
+		interactiveMode();
 
 	while (!instanceIds.empty()) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
