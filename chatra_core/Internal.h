@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cassert>
+#include <cstdarg>
 #include <type_traits>
 #include <functional>
 

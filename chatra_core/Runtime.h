@@ -471,7 +471,7 @@ public:
 #endif
 
 public:
-	Lock() noexcept = default;
+	Lock() noexcept {}
 
 #ifdef CHATRA_DEBUG_LOCK
 	~Lock();

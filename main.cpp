@@ -30,7 +30,11 @@
 #include <csignal>
 
 #include <stdio.h>
-#include <unistd.h>
+#ifdef _WIN32
+	#include <io.h>
+#else
+	#include <unistd.h>
+#endif
 
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -1213,7 +1217,7 @@ static void processDebuggerCommand(const std::string& input) {
 		lineNo++;
 
 		unsigned lineIndent = 0;
-		for (int i = 0; i < length; i++) {
+		for (size_t i = 0; i < length; i++) {
 			if (buffer[i] == '\t')
 				lineIndent++;
 			else if (i + 3 < length && buffer[i] == ' ' && buffer[i + 1] == ' ' && buffer[i + 2] == ' ' && buffer[i + 3] == ' ') {
@@ -1229,7 +1233,7 @@ static void processDebuggerCommand(const std::string& input) {
 				subLine.insert(subLine.cbegin(), '\t');
 		}
 
-		add_history(subLine.data());
+		add_history(const_cast<char*>(subLine.data()));
 
 		if (subLine.empty() || subLine.back() != '\n')  // may be always true
 			subLine += '\n';

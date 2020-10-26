@@ -26,7 +26,8 @@ set(CMAKE_CXX_FLAGS "-pedantic -Wall -Wextra \
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 /W4 /wd4458 /wd4063 /wd4996")
+set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 \
+/W4 /wd4458 /wd4063 /wd4996 /DNOMINMAX")
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
