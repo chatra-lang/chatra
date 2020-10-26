@@ -1270,7 +1270,10 @@ static void processDebuggerCommand(const std::string& input) {
 				subLine.insert(subLine.cbegin(), '\t');
 		}
 
-		add_history(const_cast<char*>(subLine.data()));
+		if (subLine.cend() != std::find_if(subLine.cbegin(), subLine.cend(), [](char c) {
+				return cha::isNotSpace(c) && c != '\n';  })) {
+			add_history(const_cast<char*>(subLine.data()));
+		}
 
 		if (subLine.empty() || subLine.back() != '\n')  // may be always true
 			subLine += '\n';

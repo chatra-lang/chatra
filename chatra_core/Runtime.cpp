@@ -1091,7 +1091,7 @@ IDriver* RuntimeImp::getDriver(DriverType driverType) {
 	auto it = drivers.find(driverType);
 	IDriver* driver = nullptr;
 	if (it == drivers.cend())
-		driver = drivers.emplace(driverType, host->queryDriver(driverType)).first->second.get();
+		driver = drivers.emplace(driverType, std::unique_ptr<IDriver>(host->queryDriver(driverType))).first->second.get();
 	else
 		driver = it->second.get();
 	if (driver == nullptr)
