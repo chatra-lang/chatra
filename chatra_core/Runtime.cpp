@@ -1863,7 +1863,7 @@ void RuntimeImp::push(InstanceId interactiveInstanceId, const std::string& scrip
 			if (!t->isInteractive)
 				continue;
 			if (!t->readyToNextInteraction.load())
-				throw UnsupportedOperationException("Interaction instance (I%zu) is busy",
+				throw UnsupportedOperationException("interaction instance (I%zu) is busy",
 						static_cast<size_t>(interactiveInstanceId));
 			thread = t.get();
 		}

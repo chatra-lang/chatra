@@ -123,8 +123,10 @@ static void help(FILE* stream) {
 			"    (This is applied only for \"import\", not for command line)\n"
 			" -c <script>\n"
 			"    script passed by string; can be specified with multiple times\n"
+#ifndef CHATRA_FRONTEND_DISABLE_COLOR
 			" --no-color\n"
 			"    force disable text highlighting\n"
+#endif // !CHATRA_FRONTEND_DISABLE_COLOR
 			" !\n"
 			"    enter interactive mode after loading all scripts specified in parameters;\n"
 			"    must be specified at the end of parameters",
