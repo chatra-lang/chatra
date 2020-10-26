@@ -36,8 +36,18 @@
 	#include <unistd.h>
 #endif
 
+#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
+	#define CHATRA_MAYBE_GCC   __GNUC__
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wredundant-decls"
+#endif
 #include <readline/readline.h>
 #include <readline/history.h>
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic pop
+#endif
 
 #include "chatra_core/CharacterClass.h"
 #include "chatra_core/LexicalAnalyzer.h"
