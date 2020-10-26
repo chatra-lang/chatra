@@ -173,7 +173,7 @@ static size_t findToken(const std::string& str, size_t offset = 0) {
 	if (it == str.cend() || !cha::isBeginningOfName(*it))
 		return 0;
 	while (++it != str.cend()) {
-		if (!cha::isPartOfName(*it))
+		if (!cha::isPartOfName(*it) || *it == '\n')
 			break;
 	}
 	return std::distance(str.cbegin(), it) - offset;
@@ -1329,6 +1329,15 @@ static void processDebuggerCommand(const std::string& input) {
 		if (input[0] == '!') {
 			processDebuggerCommand(input);
 			continue;
+		}
+
+		auto t0Length = findToken(input);
+		if (t0Length != 0) {
+			auto firstToken = input.substr(0, t0Length);
+			if (firstToken == "catch" || firstToken == "finally") {
+				dError("%s block on top-level was ignored since it has no effect in interactive mode.");
+				continue;
+			}
 		}
 
 		try {
