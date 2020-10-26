@@ -30,9 +30,25 @@
 #include <csignal>
 
 #include <stdio.h>
-#include <unistd.h>
+#ifdef _WIN32
+	#include <io.h>
+#else
+	#include <unistd.h>
+#endif
 
-#include "histedit.h"
+#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
+	#define CHATRA_MAYBE_GCC   __GNUC__
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wredundant-decls"
+#endif
+#include <readline/readline.h>
+#include <readline/history.h>
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic pop
+#endif
+
 #include "chatra_core/CharacterClass.h"
 #include "chatra_core/LexicalAnalyzer.h"
 
@@ -50,6 +66,11 @@ static std::string argv0;
 static std::vector<std::tuple<ScriptSourceType, size_t, std::string>> optFiles;
 static std::vector<std::string> optPaths;
 static unsigned optThreads = std::numeric_limits<unsigned>::max();
+#ifdef CHATRA_FRONTEND_DISABLE_COLOR
+	static bool optEnableColor = false;
+#else
+	static bool optEnableColor = true;
+#endif
 
 class Host;
 class DebuggerHost;
@@ -69,11 +90,6 @@ enum class InterruptionState {
 };
 
 static std::atomic<InterruptionState> interruptionState = {InterruptionState::Masked};
-
-static bool lineContinuation = false;
-static bool blockContinuation = false;
-static unsigned inputSectionNo = 0;
-static unsigned inputLineNo = 1;
 
 enum class Target {
 	Package, Instance, Thread, Frame, Scope, Object, BreakPoint
@@ -107,6 +123,10 @@ static void help(FILE* stream) {
 			"    (This is applied only for \"import\", not for command line)\n"
 			" -c <script>\n"
 			"    script passed by string; can be specified with multiple times\n"
+#ifndef CHATRA_FRONTEND_DISABLE_COLOR
+			" --no-color\n"
+			"    force disable text highlighting\n"
+#endif // !CHATRA_FRONTEND_DISABLE_COLOR
 			" !\n"
 			"    enter interactive mode after loading all scripts specified in parameters;\n"
 			"    must be specified at the end of parameters",
@@ -376,7 +396,7 @@ static void signalHandler(int signal) {
 			cvBreak.notify_one();
 		}
 		else {
-			std::fprintf(stderr, "^C\n");
+			std::fprintf(stderr, "\n");
 			std::fflush(stderr);
 			std::exit(-1);
 		}
@@ -396,21 +416,27 @@ static void interruptible(Pred pred) {
 	interruptionState = InterruptionState::Masked;
 }
 
-static char* prompt(EditLine*) {
+static char* prompt(bool blockContinuation, bool lineContinuation,
+		unsigned sectionNo, unsigned lineNo) {
+
 	static std::string ret;
 
-	if (lineContinuation)
-		ret = "\1\033[0m\1:" + std::to_string(inputLineNo) + ">>\1\033[0m\1 ";
-	else if (blockContinuation)
-		ret = "\1\033[0m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
-	else
-		ret = "\1\033[0m\033[7m\1chatra[" + std::to_string(inputSectionNo) + "]:" + std::to_string(inputLineNo) + ">\1\033[0m\1 ";
+	if (optEnableColor) {
+		if (lineContinuation)
+			ret = "\1\033[0m\2:" + std::to_string(lineNo) + ">>\1\033[0m\2 ";
+		else if (blockContinuation)
+			ret = "\1\033[0m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
+		else
+			ret = "\1\033[0m\033[7m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
+	}
+	else {
+		if (lineContinuation)
+			ret = ":" + std::to_string(lineNo) + ">> ";
+		else
+			ret = "chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + "> ";
+	}
 
 	return const_cast<char*>(ret.data());
-}
-
-static unsigned char complete(EditLine *el, int) {
-	return el_insertstr(el, "\t") == -1? CC_ERROR : CC_REFRESH;
 }
 
 static void dLog(unsigned indent, const char* format, ...) {
@@ -427,7 +453,7 @@ static void dLogC(unsigned indent, const char* format, ...) {
 
 	auto v = cha::formatTextV(format, args);
 
-	constexpr const char* replaces[][2] = {
+	constexpr const char* replaces0[][2] = {
 			{"|", "\033[0m\033[2m|\033[0m"},
 			{"<", "\033[0m\033[32m"},
 			{">", "\033[0m"},
@@ -437,13 +463,25 @@ static void dLogC(unsigned indent, const char* format, ...) {
 			{"~", "\033[0m\033[2m"},
 			{"$", "\033[0m"},
 	};
+	constexpr const char* replaces1[][2] = {
+			{"|", "|"},
+			{"<", "<"},
+			{">", ">"},
+			{"[", "["},
+			{"]", "]"},
+			{"^", ""},
+			{"~", ""},
+			{"$", ""},
+	};
 
 	for (size_t i = v.size(); i-- > 0; ) {
 		if (i != 0 && v[i - 1] == '\\') {
 			v.replace(--i, 1, "");
 			continue;
 		}
-		for (auto& r : replaces) {
+		auto& replaces = (optEnableColor ? replaces0 : replaces1);
+		for (size_t j = 0; j < 8; j++) {
+			auto& r = replaces[j];
 			if (v[i] == r[0][0]) {
 				v.replace(i, 1, r[1]);
 				break;
@@ -1194,39 +1232,31 @@ static void processDebuggerCommand(const std::string& input) {
 	}
 }
 
-static int interactiveMode() {
+[[noreturn]] static void interactiveMode() {
 	std::signal(SIGINT, signalHandler);
 
-	auto* hist = history_init();
-	HistEvent ev;
-	history(hist, &ev, H_SETSIZE, 1000);
-	auto el = el_init(argv0.data(), stdin, stdout, stderr);
-
-	el_set(el, EL_EDITOR, "emacs");
-	el_set(el, EL_SIGNAL, 1);
-	el_set(el, EL_PROMPT_ESC, prompt, '\1');
-	el_set(el, EL_HIST, history, hist);
-	el_set(el, EL_ADDFN, "ed-complete", "Complete argument", complete);
-	el_set(el, EL_BIND, "^I", "ed-complete", nullptr);
-	el_set(el, EL_BIND, "-a", "k", "ed-prev-line", nullptr);
-	el_set(el, EL_BIND, "-a", "j", "ed-next-line", nullptr);
-
-	el_source(el, nullptr);
+	rl_bind_key('\t', rl_insert);
+	stifle_history(1000);
 
 	interactiveInstanceId = runtime->createInteractiveInstance();
 
 	dLog(0, "Chatra interactive frontend");
 	dLog(0, "type \"!h\" to show debugger command help");
 
-	std::string input;
+	unsigned sectionNo = 0;
+	unsigned lineNo = 1;
+	std::string lines;
 	std::string line;
-	int length;
-	const char *buffer;
-	while ((buffer = el_gets(el, &length)) != nullptr && length != 0) {
-		inputLineNo++;
+	bool lineContinuation = false;
+	bool blockContinuation = false;
+
+	for (;;) {
+		auto buffer = readline(prompt(blockContinuation, lineContinuation, sectionNo, lineNo));
+		auto length = std::strlen(buffer);
+		lineNo++;
 
 		unsigned lineIndent = 0;
-		for (int i = 0; i < length; i++) {
+		for (size_t i = 0; i < length; i++) {
 			if (buffer[i] == '\t')
 				lineIndent++;
 			else if (i + 3 < length && buffer[i] == ' ' && buffer[i + 1] == ' ' && buffer[i + 2] == ' ' && buffer[i + 3] == ' ') {
@@ -1241,9 +1271,16 @@ static int interactiveMode() {
 			for (unsigned i = 0; i < lineIndent + 2; i++)
 				subLine.insert(subLine.cbegin(), '\t');
 		}
-		history(hist, &ev, lineContinuation ? H_APPEND : H_ENTER, subLine.data());
 
-		if (length >= 2 && buffer[length - 2] == '\\') {
+		if (subLine.cend() != std::find_if(subLine.cbegin(), subLine.cend(), [](char c) {
+				return cha::isNotSpace(c) && c != '\n';  })) {
+			add_history(const_cast<char*>(subLine.data()));
+		}
+
+		if (subLine.empty() || subLine.back() != '\n')  // may be always true
+			subLine += '\n';
+
+		if (subLine.size() >= 2 && subLine[subLine.size() - 2] == '\\') {
 			lineContinuation = true;
 			line += subLine.substr(0, subLine.size() - 2) + '\n';
 			continue;
@@ -1262,7 +1299,7 @@ static int interactiveMode() {
 			line.erase(pos, 1);
 		}
 
-		input += line;
+		lines += line;
 		if (blockContinuation) {
 			if (line.size() <= 1)
 				blockContinuation = false;
@@ -1280,40 +1317,34 @@ static int interactiveMode() {
 			}
 		}
 		line.clear();
-		input = input.substr(std::distance(input.cbegin(), std::find_if(input.cbegin(), input.cend(), cha::isNotSpace)));
+		auto input = lines.substr(std::distance(lines.cbegin(), std::find_if(lines.cbegin(), lines.cend(), cha::isNotSpace)));
+		lines.clear();
+		lineNo = 1;
 
 		if (input.cend() == std::find_if(input.cbegin(), input.cend(), [](char c) {
 				return cha::isNotSpace(c) && c != '\n';  })) {
-			input.clear();
 			continue;
 		}
 
 		if (input[0] == '!') {
 			processDebuggerCommand(input);
-			input.clear();
-			inputLineNo = 1;
 			continue;
 		}
 
 		try {
-			auto scriptName = "chatra[" + std::to_string(inputSectionNo++) + "]";
+			auto scriptName = "chatra[" + std::to_string(sectionNo++) + "]";
 			host->push("", {{scriptName, input}});
 			runtime->push(interactiveInstanceId, scriptName, input);
-			input.clear();
-			inputLineNo = 1;
 		}
 		catch (const cha::NativeException& ex) {
 			dError("interactive mode: %s", ex.what() == nullptr ? "error" : ex.what());
+			continue;
 		}
 
 		interruptible([&]() {
 			runUntilBreak();
 		});
 	}
-
-	el_end(el);
-	history_end(hist);
-	return 0;
 }
 
 static bool isTTY() {
@@ -1360,6 +1391,8 @@ int main(int argc, char* argv[]) {
 				optThreads = consume<unsigned>(arg, args);
 			else if (arg == "-I")
 				optPaths.emplace_back(consume<std::string>(arg, args));
+			else if (arg == "--no-color")
+				optEnableColor = false;
 			else if (arg == "-c")
 				optFiles.emplace_back(ScriptSourceType::Arg, argSourceIndex++, consume<std::string>(arg, args));
 			else if (arg == "-")
@@ -1378,6 +1411,9 @@ int main(int argc, char* argv[]) {
 	if (optFiles.empty())
 		optFiles.emplace_back(isTTY() ? ScriptSourceType::Interactive
 				: ScriptSourceType::Stdin, 0, "");
+
+	if (!isTTY())
+		optEnableColor = false;
 
 	bool isInteractive = (std::get<0>(optFiles.back()) == ScriptSourceType::Interactive);
 	if (isInteractive && !isTTY()) {
@@ -1448,7 +1484,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (isInteractive && ret == 0)
-		ret = interactiveMode();
+		interactiveMode();
 
 	while (!instanceIds.empty()) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));

@@ -1,0 +1,4 @@
+#ifndef CHATRA_HISTORY_H
+#define CHATRA_HISTORY_H
+
+#endif //CHATRA_HISTORY_H

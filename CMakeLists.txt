@@ -26,7 +26,8 @@ set(CMAKE_CXX_FLAGS "-pedantic -Wall -Wextra \
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 /W4 /wd4458 /wd4063 /wd4996")
+set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 \
+/W4 /wd4458 /wd4063 /wd4996 /DNOMINMAX")
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -42,8 +43,6 @@ add_subdirectory(chatra_core)
 # Adds embedded libraries
 add_subdirectory(chatra_emb)
 
-add_subdirectory(editline)
-
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CHATRA_ENABLE_LANGUAGE_TESTS "true")
 else()
@@ -57,7 +56,12 @@ endif()
 
 add_executable(chatra main.cpp)
 target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
-target_link_libraries(chatra editline -lcurses)
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/modules/")
+
+find_package(Readline)
+target_include_directories(chatra PRIVATE ${Readline_INCLUDE_DIR})
+target_link_libraries(chatra ${Readline_LIBRARY})
 
 if (CHATRA_ENABLE_LANGUAGE_TESTS)
     target_link_libraries(chatra chatra_language_test)
