@@ -1335,7 +1335,8 @@ static void processDebuggerCommand(const std::string& input) {
 		if (t0Length != 0) {
 			auto firstToken = input.substr(0, t0Length);
 			if (firstToken == "catch" || firstToken == "finally") {
-				dError("warning: %s block on top-level was ignored since it has no effect in interactive mode.");
+				dError("warning: %s block on top-level was ignored since it has no effect in interactive mode.",
+						firstToken.data());
 				continue;
 			}
 		}
