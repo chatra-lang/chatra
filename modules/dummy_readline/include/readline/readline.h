@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <vector>
 
+#define CHATRA_FRONTEND_DISABLE_COLOR
+
 static inline int rl_bind_key(int, int (*)()) {
 	return 0;
 }

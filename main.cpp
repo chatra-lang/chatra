@@ -66,6 +66,11 @@ static std::string argv0;
 static std::vector<std::tuple<ScriptSourceType, size_t, std::string>> optFiles;
 static std::vector<std::string> optPaths;
 static unsigned optThreads = std::numeric_limits<unsigned>::max();
+#ifdef CHATRA_FRONTEND_DISABLE_COLOR
+	static bool optEnableColor = false;
+#else
+	static bool optEnableColor = true;
+#endif
 
 class Host;
 class DebuggerHost;
@@ -118,6 +123,8 @@ static void help(FILE* stream) {
 			"    (This is applied only for \"import\", not for command line)\n"
 			" -c <script>\n"
 			"    script passed by string; can be specified with multiple times\n"
+			" --no-color\n"
+			"    force disable text highlighting\n"
 			" !\n"
 			"    enter interactive mode after loading all scripts specified in parameters;\n"
 			"    must be specified at the end of parameters",
@@ -412,12 +419,20 @@ static char* prompt(bool blockContinuation, bool lineContinuation,
 
 	static std::string ret;
 
-	if (lineContinuation)
-		ret = "\1\033[0m\2:" + std::to_string(lineNo) + ">>\1\033[0m\2 ";
-	else if (blockContinuation)
-		ret = "\1\033[0m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
-	else
-		ret = "\1\033[0m\033[7m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
+	if (optEnableColor) {
+		if (lineContinuation)
+			ret = "\1\033[0m\2:" + std::to_string(lineNo) + ">>\1\033[0m\2 ";
+		else if (blockContinuation)
+			ret = "\1\033[0m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
+		else
+			ret = "\1\033[0m\033[7m\2chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + ">\1\033[0m\2 ";
+	}
+	else {
+		if (lineContinuation)
+			ret = ":" + std::to_string(lineNo) + ">> ";
+		else
+			ret = "chatra[" + std::to_string(sectionNo) + "]:" + std::to_string(lineNo) + "> ";
+	}
 
 	return const_cast<char*>(ret.data());
 }
@@ -436,7 +451,7 @@ static void dLogC(unsigned indent, const char* format, ...) {
 
 	auto v = cha::formatTextV(format, args);
 
-	constexpr const char* replaces[][2] = {
+	constexpr const char* replaces0[][2] = {
 			{"|", "\033[0m\033[2m|\033[0m"},
 			{"<", "\033[0m\033[32m"},
 			{">", "\033[0m"},
@@ -446,13 +461,25 @@ static void dLogC(unsigned indent, const char* format, ...) {
 			{"~", "\033[0m\033[2m"},
 			{"$", "\033[0m"},
 	};
+	constexpr const char* replaces1[][2] = {
+			{"|", "|"},
+			{"<", "<"},
+			{">", ">"},
+			{"[", "["},
+			{"]", "]"},
+			{"^", ""},
+			{"~", ""},
+			{"$", ""},
+	};
 
 	for (size_t i = v.size(); i-- > 0; ) {
 		if (i != 0 && v[i - 1] == '\\') {
 			v.replace(--i, 1, "");
 			continue;
 		}
-		for (auto& r : replaces) {
+		auto& replaces = (optEnableColor ? replaces0 : replaces1);
+		for (size_t j = 0; j < 8; j++) {
+			auto& r = replaces[j];
 			if (v[i] == r[0][0]) {
 				v.replace(i, 1, r[1]);
 				break;
@@ -1359,6 +1386,8 @@ int main(int argc, char* argv[]) {
 				optThreads = consume<unsigned>(arg, args);
 			else if (arg == "-I")
 				optPaths.emplace_back(consume<std::string>(arg, args));
+			else if (arg == "--no-color")
+				optEnableColor = false;
 			else if (arg == "-c")
 				optFiles.emplace_back(ScriptSourceType::Arg, argSourceIndex++, consume<std::string>(arg, args));
 			else if (arg == "-")
@@ -1377,6 +1406,9 @@ int main(int argc, char* argv[]) {
 	if (optFiles.empty())
 		optFiles.emplace_back(isTTY() ? ScriptSourceType::Interactive
 				: ScriptSourceType::Stdin, 0, "");
+
+	if (!isTTY())
+		optEnableColor = false;
 
 	bool isInteractive = (std::get<0>(optFiles.back()) == ScriptSourceType::Interactive);
 	if (isInteractive && !isTTY()) {
