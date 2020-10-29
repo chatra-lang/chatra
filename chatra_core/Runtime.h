@@ -769,6 +769,7 @@ private:
 	Frame& pushBlock(Node* node, size_t phase);
 	Frame& pushBlock(Node* node, size_t phase, StringId label, size_t phaseOnContinue);
 	void pop();
+	void popForFinish();
 
 	enum class FinallyBlockScheme {
 		Through, Run, IncludesLast
@@ -1156,6 +1157,8 @@ public:
 	IDriver* getDriver(DriverType driverType);
 
 	static std::string formatOrigin(const std::string& fileName, unsigned lineNo);
+	static std::string formatMessage(ErrorLevel level,
+			const std::string& message, const std::vector<std::string>& args);
 	static std::string formatError(ErrorLevel level,
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args, bool outputExtraMessagePlaceholder = false);
@@ -1163,6 +1166,9 @@ public:
 	void error(ErrorLevel level,
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args) override;
+
+	void systemMessage(ErrorLevel level,
+			const std::string& message, const std::vector<std::string>& args) const;
 
 	void outputError(const std::string& message) const;
 
@@ -1224,6 +1230,7 @@ public:
 	debugger::FrameState getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) override;
 	debugger::ScopeState getScopeState(debugger::ThreadId threadId, debugger::ScopeId scopeId) override;
 	debugger::ObjectState getObjectState(debugger::ObjectId objectId) override;
+	void killThread(debugger::ThreadId threadId) override;
 
 #ifndef CHATRA_NDEBUG
 	size_t objectCount() const { return storage->objectCount(); }

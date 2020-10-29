@@ -1118,6 +1118,7 @@ static void processDebuggerCommand(const std::string& input) {
 					{"^i$", "<Txx>", "step into"},
 					{"^o$", "<Txx>", "step over"},
 					{"^r$", "<Txx>", "step out"},
+					{"^kill$", "<Txx>", "force kill specified thread"},
 			};
 
 			dLog(0, "debugger command:");
@@ -1215,6 +1216,10 @@ static void processDebuggerCommand(const std::string& input) {
 			interruptible([&]() {
 				showStepRunResult(threadId, debugger->stepOut(threadId));
 			});
+		}
+		else if (cmd == "kill") {
+			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("kill", "thread", args);
+			debugger->killThread(threadId);
 		}
 		else {
 			args.push_front(cmd);
