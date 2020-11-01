@@ -1051,7 +1051,12 @@ void RuntimeImp::resume(unsigned waitingId) {
 	{
 		std::lock_guard<SpinLock> lock(lockWaitingThreads);
 		auto it = waitingThreads.find(waitingId);
-		chatra_assert(it != waitingThreads.end());
+		if (it == waitingThreads.end()) {
+			systemMessage(ErrorLevel::Info, "resume: specified waitingId = ${0} is not valid; "
+					"this is not likely to be error if killThread() has been called on the thread in waiting state",
+					{std::to_string(waitingId)});
+			return;
+		}
 		thread = it->second;
 	}
 
@@ -1114,12 +1119,16 @@ std::string RuntimeImp::formatOrigin(const std::string& fileName, unsigned lineN
 	return out;
 }
 
-std::string RuntimeImp::formatError(ErrorLevel level,
-		const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
-		const std::string& message, const std::vector<std::string>& args, bool outputExtraMessagePlaceholder) {
+std::string RuntimeImp::formatMessage(ErrorLevel level,
+		const std::string& message, const std::vector<std::string>& args) {
 
-	std::string out = formatOrigin(fileName, lineNo);
-	out.append(":");
+	std::string out;
+	switch (level) {
+	case ErrorLevel::Info:  out = "info";  break;
+	case ErrorLevel::Warning:  out = "warning";  break;
+	case ErrorLevel::Error:  out = "error";  break;
+	case ErrorLevel::Fatal:  out = "fatal";  break;
+	}
 
 	std::string outMessage = message;
 	if (!args.empty()) {
@@ -1135,15 +1144,19 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 			}
 		}
 	}
-
-	out.append(" ");
-	switch (level) {
-	case ErrorLevel::Info:  out.append("info");  break;
-	case ErrorLevel::Warning:  out.append("warning");  break;
-	case ErrorLevel::Error:  out.append("error");  break;
-	}
-
 	out.append(": ").append(outMessage);
+
+	return out;
+}
+
+std::string RuntimeImp::formatError(ErrorLevel level,
+		const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
+		const std::string& message, const std::vector<std::string>& args, bool outputExtraMessagePlaceholder) {
+
+	std::string out = formatOrigin(fileName, lineNo);
+	out.append(": ");
+	out.append(formatMessage(level, message, args));
+
 	if (outputExtraMessagePlaceholder)
 		out.append("${0}");  // Placeholder for "+extra N errors"
 
@@ -1183,6 +1196,11 @@ void RuntimeImp::error(ErrorLevel level,
 		const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 		const std::string& message, const std::vector<std::string>& args) {
 	outputError(formatError(level, fileName, lineNo, line, first, last, message, args));
+}
+
+void RuntimeImp::systemMessage(ErrorLevel level,
+		const std::string& message, const std::vector<std::string>& args) const {
+	outputError("system " + formatMessage(level, message, args) + "\n");
 }
 
 void RuntimeImp::outputError(const std::string& message) const {
@@ -1729,7 +1747,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 					}
 				}
 				catch (...) {
-					outputError("fatal: uncaught exception raised\n");
+					systemMessage(ErrorLevel::Fatal, "uncaught exception raised", {});
 				}
 			}
 		}, nextId)));
@@ -2385,6 +2403,51 @@ debugger::ObjectState RuntimeImp::getObjectState(debugger::ObjectId objectId) {
 	}
 
 	return ret;
+}
+
+void RuntimeImp::killThread(debugger::ThreadId threadId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+	Thread* thread = nullptr;
+	auto waitingId = std::numeric_limits<unsigned>::max();
+
+	{
+		std::lock_guard<SpinLock> lock1(lockQueue);
+		auto it = std::find_if(queue.cbegin(), queue.cend(), [&](Thread* t) {
+			return t->getId() == requester;
+		});
+		if (it != queue.cend()) {
+			thread = *it;
+			queue.erase(it);
+		}
+	}
+
+	if (thread == nullptr) {
+		std::lock_guard<SpinLock> lock2(lockWaitingThreads);
+		auto it = std::find_if(waitingThreads.cbegin(), waitingThreads.cend(), [&](const std::pair<unsigned, Thread*>& e) {
+			return e.second->getId() == requester;
+		});
+		if (it != waitingThreads.cend()) {
+			waitingId = it->first;
+			thread = it->second;
+			waitingThreads.erase(it);
+			recycledWaitingIds.emplace_back(waitingId);
+			hasWaitingThreads = !waitingThreads.empty();
+		}
+	}
+
+	if (thread == nullptr)
+		throw IllegalArgumentException("specified threadId = %zu is not exist", static_cast<size_t>(threadId));
+
+	thread->finish();
+
+	if (waitingId == std::numeric_limits<unsigned>::max())
+		systemMessage(ErrorLevel::Info, "threadId = ${0} was killed",
+				{std::to_string(static_cast<size_t>(threadId))});
+	else
+		systemMessage(ErrorLevel::Info, "threadId = ${0} (waitingId = ${1}) was killed",
+				{std::to_string(static_cast<size_t>(threadId)), std::to_string(waitingId)});
 }
 
 

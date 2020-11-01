@@ -101,6 +101,7 @@ enum class ErrorLevel {
 	Info,
 	Warning,
 	Error,
+	Fatal,
 };
 
 struct AbortCompilingException : public std::exception {};

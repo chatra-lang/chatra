@@ -572,6 +572,28 @@ void Thread::pop() {
 		f.stack.emplace_back(&restoreTemporaryLockNode, 0);
 }
 
+void Thread::popForFinish() {
+	size_t popCount = frames.back().popCount;
+	for (size_t i = 0; i < popCount; i++) {
+		auto& f = frames.back();
+
+		if (f.lock != nullptr)
+			f.lock->releaseAll();
+
+		f.clearAllTemporaries();
+		chatra_assert(f.exception == nullptr);
+		chatra_assert(f.caughtException == nullptr);
+
+		frames.pop_back();
+	}
+
+	checkTransferReq();
+
+	auto& f = frames.back();
+	if (f.lock != nullptr && f.lock->isInMethodCallState())
+		f.stack.emplace_back(&restoreTemporaryLockNode, 0);
+}
+
 void Thread::pop(size_t targetSize, FinallyBlockScheme scheme) {
 	if (scheme == FinallyBlockScheme::Through) {
 		while (targetSize < frames.size())
@@ -3503,7 +3525,7 @@ void Thread::error(ErrorLevel level,
 		const std::string& message, const std::vector<std::string>& args) {
 
 	if (level == ErrorLevel::Warning) {
-		runtime.outputError(RuntimeImp::formatError(level, fileName, lineNo, line, first, last, message, args));
+		runtime.error(level, fileName, lineNo, line, first, last, message, args);
 		return;
 	}
 
@@ -3612,7 +3634,8 @@ void Thread::finish() {
 
 		if (frames.size() <= residentialFrameCount)
 			break;
-		pop();
+
+		popForFinish();
 	}
 
 	auto parser = runtime.scope->ref(StringId::Parser);
@@ -4001,7 +4024,7 @@ Thread::StepRunResult Thread::stepRun() {
 		return StepRunResult::Abort;
 	}
 	catch (const std::exception&) {
-		runtime.outputError("fatal: internal error\n");
+		runtime.systemMessage(ErrorLevel::Fatal, "internal error", {});
 		return StepRunResult::Abort;
 	}
 

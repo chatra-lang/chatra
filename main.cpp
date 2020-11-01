@@ -173,7 +173,7 @@ static size_t findToken(const std::string& str, size_t offset = 0) {
 	if (it == str.cend() || !cha::isBeginningOfName(*it))
 		return 0;
 	while (++it != str.cend()) {
-		if (!cha::isPartOfName(*it))
+		if (!cha::isPartOfName(*it) || *it == '\n')
 			break;
 	}
 	return std::distance(str.cbegin(), it) - offset;
@@ -1118,6 +1118,7 @@ static void processDebuggerCommand(const std::string& input) {
 					{"^i$", "<Txx>", "step into"},
 					{"^o$", "<Txx>", "step over"},
 					{"^r$", "<Txx>", "step out"},
+					{"^kill$", "<Txx>", "force kill specified thread"},
 			};
 
 			dLog(0, "debugger command:");
@@ -1215,6 +1216,10 @@ static void processDebuggerCommand(const std::string& input) {
 			interruptible([&]() {
 				showStepRunResult(threadId, debugger->stepOut(threadId));
 			});
+		}
+		else if (cmd == "kill") {
+			auto threadId = consumeTargetId<cha::d::ThreadId, Target::Thread>("kill", "thread", args);
+			debugger->killThread(threadId);
 		}
 		else {
 			args.push_front(cmd);
@@ -1329,6 +1334,16 @@ static void processDebuggerCommand(const std::string& input) {
 		if (input[0] == '!') {
 			processDebuggerCommand(input);
 			continue;
+		}
+
+		auto t0Length = findToken(input);
+		if (t0Length != 0) {
+			auto firstToken = input.substr(0, t0Length);
+			if (firstToken == "catch" || firstToken == "finally") {
+				dError("warning: %s block on top-level was ignored since it has no effect in interactive mode.",
+						firstToken.data());
+				continue;
+			}
 		}
 
 		try {

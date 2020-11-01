@@ -154,6 +154,8 @@ struct IDebugger {
 	virtual FrameState getFrameState(ThreadId threadId, FrameId frameId) = 0;
 	virtual ScopeState getScopeState(ThreadId threadId, ScopeId scopeId) = 0;
 	virtual ObjectState getObjectState(ObjectId objectId) = 0;
+
+	virtual void killThread(ThreadId threadId) = 0;
 };
 
 
