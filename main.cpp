@@ -1063,8 +1063,8 @@ static void show(std::deque<std::string> args) {
 static void processDebuggerCommand(const std::string& input) {
 
 	auto sTable = cha::StringTable::newInstance();
-	auto nullErrorReceiver = cha::INullErrorReceiver();
-	auto errorReceiver = cha::IErrorReceiverBridge(nullErrorReceiver);
+	cha::INullErrorReceiver nullErrorReceiver;
+	cha::IErrorReceiverBridge errorReceiver(nullErrorReceiver);
 	auto lines = cha::parseLines(errorReceiver, sTable, "(debugger-command)", 1, input);
 
 	if (errorReceiver.hasError() || lines.empty() ||

@@ -333,6 +333,10 @@ public:
 		return read<const OperatorMethod*>([&](const OperatorTable& table) { return table.find(op, argCl0, argCl1); });
 	}
 
+	void import(const AsyncOperatorTable& r) {
+		AsyncReadWrite<OperatorTable>::import(r);
+	}
+
 #ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
 #endif // !CHATRA_NDEBUG
