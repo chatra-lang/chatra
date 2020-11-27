@@ -143,7 +143,7 @@ void initializeEmbeddedFunctions() {
 
 void registerEmbeddedFunctions(MethodTable& methods, AsyncOperatorTable& operators) {
 	methods = embeddedMethods;
-	operators = embeddedOperators;
+	operators.import(embeddedOperators);
 }
 
 const std::unordered_map<StringId, Node*>& refNodeMapForEmbeddedFunctions() {

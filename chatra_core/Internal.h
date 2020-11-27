@@ -97,6 +97,16 @@ struct remove_pointer_cv {
 	using type = typename std::remove_cv<typename std::remove_pointer<Type>::type>::type*;
 };
 
+template <class Type>
+class NonCopyable {
+protected:
+	NonCopyable() noexcept = default;
+	~NonCopyable() = default;
+public:
+	NonCopyable(const NonCopyable&) = delete;
+	Type& operator=(const Type &) = delete;
+};
+
 enum class ErrorLevel {
 	Info,
 	Warning,
@@ -156,7 +166,7 @@ struct IAssertionNullErrorReceiver final : public IErrorReceiver {
 };
 
 
-class SpinLock final {
+class SpinLock final : public NonCopyable<SpinLock> {
 private:
 	std::atomic_flag flag = ATOMIC_FLAG_INIT;
 
@@ -173,7 +183,7 @@ public:
 
 
 template <class ValueType>
-class AsyncRead {
+class AsyncRead : public NonCopyable<AsyncRead<ValueType>> {
 private:
 	ValueType values[2];
 	size_t index = 0;
@@ -211,15 +221,14 @@ public:
 		return readCount;
 	}
 
-	AsyncRead& operator=(const AsyncRead<ValueType>& r) {
+	void import(const AsyncRead<ValueType>& r) {
 		if (&r == this)
-			return *this;
+			return;
 		r.read([&](const ValueType& rValue) {
 			write([&](ValueType& lValue) {
 				lValue = rValue;
 			});
 		});
-		return *this;
 	}
 };
 
@@ -236,13 +245,12 @@ public:
 		AsyncRead<ValueType>::write(std::move(process));
 	}
 
-	AsyncReadWrite& operator=(const AsyncReadWrite<ValueType>& r) {
+	void import(const AsyncReadWrite<ValueType>& r) {
 		r.read([&](const ValueType& rValue) {
 			writeAsync([&](ValueType& lValue) {
 				lValue = rValue;
 			});
 		});
-		return *this;
 	}
 };
 
@@ -269,7 +277,7 @@ template <class KeyType, class ValueType> class IdPool;
 class IdTypeBase {};
 
 template <class KeyType, class ValueType>
-class IdType : public IdTypeBase {
+class IdType : public IdTypeBase, public NonCopyable<IdType<KeyType, ValueType>> {
 	friend class IdPool<KeyType, ValueType>;
 
 private:
