@@ -1043,8 +1043,6 @@ public:
 	mutable SpinLock lockSTable;
 	std::shared_ptr<StringTable> distributedSTable;
 
-	ParserWorkingSet parserWs;  // locked by #parser
-
 	std::shared_ptr<Storage> storage;
 	std::atomic<int> gcWaitCount = {0};
 	mutable std::mutex mtGc;
@@ -1251,6 +1249,7 @@ void native_sleep(CHATRA_NATIVE_ARGS);
 // void native_wait(CHATRA_NATIVE_ARGS);  // -> Classes.h
 void native_type(CHATRA_NATIVE_ARGS);
 void native_objectId(CHATRA_NATIVE_ARGS);
+void native_compile(CHATRA_NATIVE_ARGS);
 
 #ifndef CHATRA_NDEBUG
 void enableStdout(bool enabled);

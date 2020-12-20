@@ -337,10 +337,9 @@ static void parseFile(const std::string& fileName) {
 			cha::dump(sTable, line);
 
 		printf("\n\n");
-		cha::ParserWorkingSet ws;
 		auto node = cha::groupScript(*errorReceiver, sTable, lines);
 		cha::structureInnerNode(*errorReceiver, sTable, node.get(), true);
-		cha::parseInnerNode(ws, *errorReceiver, sTable, node.get(), true);
+		cha::parseInnerNode(*errorReceiver, sTable, node.get(), true);
 		cha::dump(sTable, node);
 	}
 	catch (const cha::PackageNotFoundException&) {

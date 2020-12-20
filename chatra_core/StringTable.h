@@ -240,6 +240,7 @@ enum class StringId : uint_least32_t {
 	wait,
 	type,
 	objectId,
+	_native_compile,
 	_check,
 	_checkCmd,
 	_incrementTestTimer,

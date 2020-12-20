@@ -25,9 +25,9 @@ namespace chatra {
 
 class ParserContext final {
 private:
-	ParserWorkingSet* ws;
 	IErrorReceiver& errorReceiver;
 	std::shared_ptr<StringTable>& sTable;
+	unsigned generatedVarCount = 0;
 
 private:
 	static std::shared_ptr<Line> getLine(const Token& token) {
@@ -38,17 +38,16 @@ private:
 	}
 
 public:
-	explicit ParserContext(ParserWorkingSet* ws, IErrorReceiver& errorReceiver,
-			std::shared_ptr<StringTable>& sTable) : ws(ws), errorReceiver(errorReceiver), sTable(sTable) {
-	}
-
-	ParserWorkingSet& getWs() {
-		chatra_assert(ws != nullptr);
-		return *ws;
+	explicit ParserContext(IErrorReceiver& errorReceiver,
+			std::shared_ptr<StringTable>& sTable) : errorReceiver(errorReceiver), sTable(sTable) {
 	}
 
 	std::shared_ptr<StringTable>& getSt() {
 		return sTable;
+	}
+
+	std::string allocateGeneratedVar() {
+		return "#" + std::to_string(generatedVarCount++);
 	}
 
 	void errorAtLine(ErrorLevel level, const std::shared_ptr<Line>& line,
@@ -140,7 +139,7 @@ static const Token* nextTokenFromNodes(NodePtrIterator first, NodePtrIterator la
 std::shared_ptr<Node> groupScript(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, const std::vector<std::shared_ptr<Line>> &lines) {
 
-	ParserContext ct(nullptr, errorReceiver, sTable);
+	ParserContext ct(errorReceiver, sTable);
 
 	std::vector<std::shared_ptr<Node>> stack;
 	stack.reserve(10);
@@ -290,7 +289,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 
 	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Grouped);
 
-	ParserContext ct(nullptr, errorReceiver, sTable);
+	ParserContext ct(errorReceiver, sTable);
 	unsigned expectedIndents = (node->line ? node->line->indents + 1 : 0);
 
 	std::vector<std::shared_ptr<Node>> outNodes;
@@ -2005,12 +2004,12 @@ static bool replaceListComprehension(ParserContext& ct, AnnotationMap& aMap, Nod
 		return false;
 
 	// Construct nodes
-	std::string varName = std::string("#") + std::to_string(ct.getWs().generatedVarCount++);
+	auto varName = ct.allocateGeneratedVar();
 	auto n0 = std::make_shared<Node>();
 	n0->type = NodeType::Expression;
 	n0->line = n->line;
 	n0->tokens.push_back(addToken(ct, n0, **itFirst, TokenType::Name, varName));
-	n0->tokens.push_back(addToken(ct, n0, **itFirst, TokenType::Operator, "="));
+	n0->tokens.push_back(addToken(ct, n0, **itFirst, TokenType::Operator, ":"));
 	n0->tokens.push_back(addToken(ct, n0, **itFirst, TokenType::OpenBracket, "{"));
 	n0->tokens.push_back(addToken(ct, n0, **itFirst, TokenType::CloseBracket, "}"));
 	transferAnnotations(aMap, *itFirst, n0.get());
@@ -2065,12 +2064,12 @@ static bool replaceWhere(ParserContext& ct, AnnotationMap& aMap, NodePtrContaine
 			return false;
 
 		StringId placeholder = (*itDef)->sid;
-		std::string varName = std::string("#") + std::to_string(ct.getWs().generatedVarCount++);
+		auto varName = ct.allocateGeneratedVar();
 		varMap.emplace(placeholder, varName);
 
 		auto& n0 = addNode(additionalNodes, n->line, NodeType::Expression);
 		n0->tokens.push_back(addToken(ct, n0, **itDef, TokenType::Name, varName));
-		n0->tokens.push_back(addToken(ct, n0, **itDef, TokenType::Operator, "="));
+		n0->tokens.push_back(addToken(ct, n0, **itDef, TokenType::Operator, ":"));
 		n0->tokens.push_back(addToken(ct, n0, **itDef, TokenType::OpenBracket, "("));
 		n0->tokens.insert(n0->tokens.end(), itDef + 2, itNext);
 		n0->tokens.push_back(addToken(ct, n0, **itDef, TokenType::CloseBracket, ")"));
@@ -2126,7 +2125,7 @@ static bool replaceLambda(ParserContext& ct, AnnotationMap& aMap, Node* node,
 		if (itBodyLast == n->tokens.end() || !matches(**itBodyLast, StringId::CloseBrace))
 			continue;
 
-		std::string varName = std::string("#") + std::to_string(ct.getWs().generatedVarCount++);
+		auto varName = ct.allocateGeneratedVar();
 		StringId varNameId = add(ct.getSt(), varName);
 
 		auto n0 = std::make_shared<Node>();
@@ -2168,12 +2167,12 @@ static void replaceSyntaxSugar(ParserContext& ct, AnnotationMap& aMap, Node* nod
 	}
 }
 
-void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
+void parseInnerNode(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive) {
 
 	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Structured);
 
-	ParserContext ct(&ws, errorReceiver, sTable);
+	ParserContext ct(errorReceiver, sTable);
 
 	auto aMap = parseInnerAnnotations(ct, node);
 	replaceSyntaxSugar(ct, aMap, node);
@@ -2256,7 +2255,7 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 
 		if (!recursive) {
 			if (n->type == NodeType::Sync || n->type == NodeType::IfGroup) {
-				parseInnerNode(ws, errorReceiver, sTable, n.get(), false);
+				parseInnerNode(errorReceiver, sTable, n.get(), false);
 				n->blockNodesState = NodeState::Parsed;
 			}
 		}
@@ -2267,7 +2266,7 @@ void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
 
 	if (recursive) {
 		for (auto& n : node->blockNodes) {
-			parseInnerNode(ws, errorReceiver, sTable, n.get(), true);
+			parseInnerNode(errorReceiver, sTable, n.get(), true);
 			n->blockNodesState = NodeState::Parsed;
 		}
 	}

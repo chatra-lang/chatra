@@ -1315,14 +1315,14 @@ static void registerException_Derived() {
 	embeddedClasses.add(cl);
 }
 
-static std::unique_ptr<Class> createEmbeddedClass(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
+static std::unique_ptr<Class> createEmbeddedClass(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, IClassFinder& classFinder, std::string script,
 		ObjectBuilder nativeConstructor, const std::vector<NativeMethod>& nativeMethods) {
 
 	auto lines = parseLines(errorReceiver, sTable, "(internal-classes)", 1, std::move(script));
 	auto node = groupScript(errorReceiver, sTable, lines);
 	structureInnerNode(errorReceiver, sTable, node.get(), true);
-	parseInnerNode(ws, errorReceiver, sTable, node.get(), true);
+	parseInnerNode(errorReceiver, sTable, node.get(), true);
 	chatra_assert(node->blockNodes.size() == 1 && node->blockNodes[0]->type == NodeType::Class);
 
 	nodeMap.emplace(node->blockNodes[0]->sid, node.get());
@@ -1356,8 +1356,6 @@ void initializeEmbeddedClasses() {
 	embeddedClasses.add(Int::getClassStatic());
 	embeddedClasses.add(Float::getClassStatic());
 
-	ParserWorkingSet ws;
-
 	IAssertionNullErrorReceiver nullErrorReceiver;
 	IErrorReceiverBridge errorReceiver(nullErrorReceiver);
 
@@ -1376,7 +1374,7 @@ void initializeEmbeddedClasses() {
 
 	auto addClass = [&](const char* init) {
 		embeddedClassesPtr.emplace_front(
-				createEmbeddedClass(ws, errorReceiver, sTable, classFinder, init, nullptr, {}));
+				createEmbeddedClass(errorReceiver, sTable, classFinder, init, nullptr, {}));
 	};
 
 	addClass(initIterator);
@@ -1399,11 +1397,11 @@ void initializeEmbeddedClasses() {
 			createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initArrayKeyedIterator, nullptr, {}));
 			*/
 
-	clAsync = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initAsync, createAsync, {
+	clAsync = createEmbeddedClass(errorReceiver, sTable, classFinder, initAsync, createAsync, {
 			{StringId::_native_updated, StringId::Invalid, &Async::native_updated},
 	});
 
-	clString = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initString, createString, {
+	clString = createEmbeddedClass(errorReceiver, sTable, classFinder, initString, createString, {
 			{StringId::Init, StringId::fromString, &String::native_initFromString},
 			{StringId::Init, StringId::fromChar, &String::native_initFromChar},
 			{StringId::size, StringId::Invalid, &String::native_size},
@@ -1418,7 +1416,7 @@ void initializeEmbeddedClasses() {
 			{StringId::_native_sub, StringId::Invalid, &String::native_sub}
 	});
 
-	clArray = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initArray, createArray, {
+	clArray = createEmbeddedClass(errorReceiver, sTable, classFinder, initArray, createArray, {
 			{StringId::size, StringId::Invalid, &Array::native_size},
 			{StringId::_native_add, StringId::Invalid, &Array::native_add},
 			{StringId::_native_insert, StringId::Invalid, &Array::native_insert},
@@ -1426,7 +1424,7 @@ void initializeEmbeddedClasses() {
 			{StringId::_native_at, StringId::Invalid, &Array::native_at}
 	});
 
-	clDict = createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initDict, createDict, {
+	clDict = createEmbeddedClass(errorReceiver, sTable, classFinder, initDict, createDict, {
 			{StringId::size, StringId::Invalid, &Dict::native_size},
 			{StringId::has, StringId::Invalid, &Dict::native_has},
 			{StringId::_native_add, StringId::Invalid, &Dict::native_add},

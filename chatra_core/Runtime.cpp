@@ -44,7 +44,7 @@ void Package::postInitialize() {
 		interface = std::make_shared<IPackage>();
 }
 
-static bool parseBlockNodes(ParserWorkingSet& ws, IErrorReceiverBridge& errorReceiverBridge,
+static bool parseBlockNodes(IErrorReceiverBridge& errorReceiverBridge,
 		std::shared_ptr<StringTable>& sTable, Node* node) {
 
 	try {
@@ -52,7 +52,7 @@ static bool parseBlockNodes(ParserWorkingSet& ws, IErrorReceiverBridge& errorRec
 			structureInnerNode(errorReceiverBridge, sTable, node, false);
 
 		if (!errorReceiverBridge.hasError() && node->blockNodesState == NodeState::Structured) {
-			parseInnerNode(ws, errorReceiverBridge, sTable, node, false);
+			parseInnerNode(errorReceiverBridge, sTable, node, false);
 			if (!errorReceiverBridge.hasError())
 				return true;
 		}
@@ -109,11 +109,11 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 		node = scriptNode.get();
 	}
 
-	if (parseBlockNodes(runtime.parserWs, errorReceiverBridge, runtime.primarySTable, node) &&
+	if (parseBlockNodes(errorReceiverBridge, runtime.primarySTable, node) &&
 			node->type == NodeType::ScriptRoot) {
 		for (auto& n : node->symbols) {
 			if (n->type == NodeType::Class) {
-				parseBlockNodes(runtime.parserWs, errorReceiverBridge, runtime.primarySTable, n.get());
+				parseBlockNodes(errorReceiverBridge, runtime.primarySTable, n.get());
 				n->blockNodesState = NodeState::Parsed;
 			}
 		}
