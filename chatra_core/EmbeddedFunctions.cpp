@@ -22,7 +22,7 @@
 
 namespace chatra {
 
-static MethodTable embeddedMethods = MethodTable(MethodTable::ForEmbeddedMethods());
+static MethodTable embeddedMethods {MethodTable::ForEmbeddedMethods()};
 static AsyncOperatorTable embeddedOperators;
 static std::forward_list<std::shared_ptr<Node>> embeddedMethodsNode;
 static std::unordered_map<StringId, Node*> nodeMap;
@@ -142,7 +142,7 @@ void initializeEmbeddedFunctions() {
 }
 
 void registerEmbeddedFunctions(MethodTable& methods, AsyncOperatorTable& operators) {
-	methods = embeddedMethods;
+	methods.import(embeddedMethods);
 	operators.import(embeddedOperators);
 }
 

@@ -190,7 +190,7 @@ public:
 };
 
 
-class MethodTable {
+class MethodTable : public NonCopyable<MethodTable> {
 public:
 	enum class Source {
 		EmbeddedMethods, ClassMethods, ClassSuperMethods, ClassConstructors, InnerFunctions
@@ -213,7 +213,7 @@ private:
 
 public:
 	struct ForEmbeddedMethods {};
-	explicit MethodTable(ForEmbeddedMethods forEmbeddedMethods) noexcept;
+	explicit MethodTable(ForEmbeddedMethods) noexcept;
 
 	MethodTable(const Class* cl, Source source) noexcept;
 	MethodTable(Package& package, Node* node) noexcept;
@@ -247,6 +247,8 @@ public:
 	// Add all methods in r except native methods; Some Method instances are copied.
 	void inherit(const MethodTable& r, const Class* cl);
 
+	void import(const MethodTable& r);
+
 	const Method* find(const Class* cl, StringId name, StringId subName,
 			const std::vector<ArgumentSpec>& args, const std::vector<ArgumentSpec>& subArgs) const;
 
@@ -273,7 +275,7 @@ public:
 };
 
 
-class OperatorTable {
+class OperatorTable : public NonCopyable<OperatorTable> {
 	friend class AsyncOperatorTable;
 
 private:
@@ -302,6 +304,13 @@ public:
 
 	const OperatorMethod* find(Operator op, const Class* argCl) const;
 	const OperatorMethod* find(Operator op, const Class* argCl0, const Class* argCl1) const;
+
+	void import(const OperatorTable& r) {
+		for (size_t i = 0; i < NumberOfOperators; i++)
+			byOp1[i] = r.byOp1[i];
+		for (size_t i = 0; i < NumberOfOperators; i++)
+			byOp2[i] = r.byOp2[i];
+	}
 
 #ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
@@ -356,7 +365,7 @@ public:
 using ObjectBuilder = void (*)(const Class* cl, Reference ref);
 
 
-class Class {
+class Class : public NonCopyable<Class> {
 	friend class ClassTable;
 
 private:
@@ -465,7 +474,7 @@ public:
 };
 
 
-class ClassTable {
+class ClassTable : public NonCopyable<ClassTable> {
 private:
 	std::forward_list<Class> classes;
 	std::unordered_map<StringId, const Class*> byName;

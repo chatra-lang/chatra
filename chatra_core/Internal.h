@@ -104,7 +104,9 @@ protected:
 	~NonCopyable() = default;
 public:
 	NonCopyable(const NonCopyable&) = delete;
+	NonCopyable(NonCopyable&&) = delete;
 	Type& operator=(const Type &) = delete;
+	Type& operator=(Type &&) = delete;
 };
 
 enum class ErrorLevel {
@@ -226,7 +228,7 @@ public:
 			return;
 		r.read([&](const ValueType& rValue) {
 			write([&](ValueType& lValue) {
-				lValue = rValue;
+				lValue.import(rValue);
 			});
 		});
 	}
@@ -248,7 +250,7 @@ public:
 	void import(const AsyncReadWrite<ValueType>& r) {
 		r.read([&](const ValueType& rValue) {
 			writeAsync([&](ValueType& lValue) {
-				lValue = rValue;
+				lValue.import(rValue);
 			});
 		});
 	}

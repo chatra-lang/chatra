@@ -157,9 +157,8 @@ Method::Method(Node* node, const Class* cl, StringId name, StringId subName,
 		: MethodBase(node), ArgumentMatcher(std::move(args), std::move(subArgs)),
 		cl(cl), name(name), subName(subName), position(SIZE_MAX), primaryPosition(SIZE_MAX) {}
 
-MethodTable::MethodTable(ForEmbeddedMethods forEmbeddedMethods) noexcept
+MethodTable::MethodTable(ForEmbeddedMethods) noexcept
 		: source(Source::EmbeddedMethods), sourceClassPtr(nullptr) {
-	(void)forEmbeddedMethods;
 }
 
 MethodTable::MethodTable(const Class* cl, Source source) noexcept : source(source), sourceClassPtr(cl) {
@@ -226,6 +225,24 @@ void MethodTable::inherit(const MethodTable& r, const Class* cl) {
 	}
 
 	baseSize = size;
+}
+
+void MethodTable::import(const MethodTable& r) {
+	source = r.source;
+	sourceClassPtr = r.sourceClassPtr;
+	sourcePackagePtr = r.sourcePackagePtr;
+	sourceNodePtr = r.sourceNodePtr;
+	methods = r.methods;
+	byName.clear();
+	for (auto& m : methods)
+		byName[m.name].emplace_back(&m);
+	size = r.size;
+	baseSize = r.baseSize;
+	syncMap = r.syncMap;
+	nativeMethods = r.nativeMethods;
+	nativeByName.clear();
+	for (auto& m : nativeMethods)
+		nativeByName.emplace(std::make_pair(m.name, m.subName), &m);
 }
 
 const Method* MethodTable::find(const Class* cl, StringId name, StringId subName,
