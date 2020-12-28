@@ -142,7 +142,7 @@ void initializeEmbeddedFunctions() {
 }
 
 void registerEmbeddedFunctions(MethodTable& methods, AsyncOperatorTable& operators) {
-	methods.import(embeddedMethods);
+	methods = embeddedMethods;
 	operators.import(embeddedOperators);
 }
 

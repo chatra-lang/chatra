@@ -228,7 +228,7 @@ public:
 			return;
 		r.read([&](const ValueType& rValue) {
 			write([&](ValueType& lValue) {
-				lValue.import(rValue);
+				lValue = rValue;
 			});
 		});
 	}
@@ -250,7 +250,7 @@ public:
 	void import(const AsyncReadWrite<ValueType>& r) {
 		r.read([&](const ValueType& rValue) {
 			writeAsync([&](ValueType& lValue) {
-				lValue.import(rValue);
+				lValue = rValue;
 			});
 		});
 	}
