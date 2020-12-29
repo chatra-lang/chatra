@@ -248,6 +248,8 @@ public:
 	}
 
 	void import(const AsyncReadWrite<ValueType>& r) {
+		if (&r == this)
+			return;
 		r.read([&](const ValueType& rValue) {
 			writeAsync([&](ValueType& lValue) {
 				lValue = rValue;
