@@ -45,8 +45,8 @@ struct NativeException : public std::exception {
 	std::string message;
 
 public:
-	NativeException() = default;
-	explicit NativeException(const char* format, ...);
+	NativeException() noexcept = default;
+	explicit NativeException(const char* format, ...) noexcept;
 
 	const char* what() const noexcept override {
 		return message.data();
