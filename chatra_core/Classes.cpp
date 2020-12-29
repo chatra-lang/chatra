@@ -157,9 +157,8 @@ Method::Method(Node* node, const Class* cl, StringId name, StringId subName,
 		: MethodBase(node), ArgumentMatcher(std::move(args), std::move(subArgs)),
 		cl(cl), name(name), subName(subName), position(SIZE_MAX), primaryPosition(SIZE_MAX) {}
 
-MethodTable::MethodTable(ForEmbeddedMethods forEmbeddedMethods) noexcept
+MethodTable::MethodTable(ForEmbeddedMethods) noexcept
 		: source(Source::EmbeddedMethods), sourceClassPtr(nullptr) {
-	(void)forEmbeddedMethods;
 }
 
 MethodTable::MethodTable(const Class* cl, Source source) noexcept : source(source), sourceClassPtr(cl) {

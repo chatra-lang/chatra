@@ -213,7 +213,7 @@ private:
 
 public:
 	struct ForEmbeddedMethods {};
-	explicit MethodTable(ForEmbeddedMethods forEmbeddedMethods) noexcept;
+	explicit MethodTable(ForEmbeddedMethods) noexcept;
 
 	MethodTable(const Class* cl, Source source) noexcept;
 	MethodTable(Package& package, Node* node) noexcept;
@@ -333,6 +333,10 @@ public:
 		return read<const OperatorMethod*>([&](const OperatorTable& table) { return table.find(op, argCl0, argCl1); });
 	}
 
+	void import(const AsyncOperatorTable& r) {
+		AsyncReadWrite<OperatorTable>::import(r);
+	}
+
 #ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
 #endif // !CHATRA_NDEBUG
@@ -352,7 +356,7 @@ public:
 using ObjectBuilder = void (*)(const Class* cl, Reference ref);
 
 
-class Class {
+class Class : public NonCopyable<Class> {
 	friend class ClassTable;
 
 private:
@@ -461,7 +465,7 @@ public:
 };
 
 
-class ClassTable {
+class ClassTable : public NonCopyable<ClassTable> {
 private:
 	std::forward_list<Class> classes;
 	std::unordered_map<StringId, const Class*> byName;

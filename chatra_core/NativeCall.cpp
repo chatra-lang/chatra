@@ -25,7 +25,7 @@ namespace chatra {
 class NativeReferenceImp;
 class NativeCallContextImp;
 
-NativeException::NativeException(const char* format, ...) {
+NativeException::NativeException(const char* format, ...) noexcept {
 	va_list args;
 	va_start(args, format);
 	message = formatTextV(format, args);

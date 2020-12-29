@@ -1018,7 +1018,7 @@ enum class BreakPointType {
 	Default,
 };
 
-struct BreakPoint : public IdType<debugger::BreakPointId, BreakPoint> {
+struct BreakPoint {
 	debugger::CodePoint point;
 	debugger::BreakPointId breakPointId;
 	BreakPointType type = BreakPointType::Invalid;
