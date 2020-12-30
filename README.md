@@ -280,6 +280,12 @@ Released under Apache License v2.
 
 ## Version History
 
+0.3.0  Add debugger & console frontend updates
+
+- Add interactive mode
+- Add debugging features
+- Many improvement on console frontend
+
 0.2.0  Bug fix & adding some embedded libraries
 
 0.1.0  First release
