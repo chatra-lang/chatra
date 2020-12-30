@@ -22,7 +22,7 @@
 
 namespace chatra {
 
-constexpr unsigned currentVersion = 200;  // major(XX).minor(XX).revision(XX)
+constexpr unsigned currentVersion = 300;  // major(XX).minor(XX).revision(XX)
 
 static std::atomic<size_t> lastRuntimeId = {0};
 
