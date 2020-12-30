@@ -108,6 +108,7 @@ The interpreter can be compiled and run on many platforms such as:
 |Linux (Ubuntu 16.04)|x86_64|clang version 3.8.0-2ubuntu4 (tags/RELEASE_380/final)|
 |macOS 11.1|x86_64|g++ (Homebrew GCC 9.2.0_1) 9.2.0|
 |macOS 11.1|x86_64|Apple clang version 11.0.0 (clang-1100.0.33.12)|
+|Windows10(1809)|x86_64|Microsoft(R) C/C++ Optimizing Compiler Version 19.24.28316 for x86|
 
 
 ### Serializable
