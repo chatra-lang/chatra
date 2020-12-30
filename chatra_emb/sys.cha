@@ -20,7 +20,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
  */
 
 def chatraVersion()
-	return '0.2.0 develop'
+	return '0.3.0 develop'
 
 var intMax: 0x7FFF_FFFF_FFFF_FFFF
 var intMin: -0x8000_0000_0000_0000
