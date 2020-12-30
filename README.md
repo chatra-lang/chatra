@@ -62,13 +62,13 @@ If you have learned these languages, you can use Chatra immediately.
 
 ### Embeddable
 
-Chatra's interpreter is provided as stand-alone library (only depends on C++11 runtime) and 
+Chatra's interpreter is provided as stand-alone library (only depends on C++11 runtime) and
 can be called from your program with simple steps:
 
 ```C++
 // Generate Runtime and execute "test_script".
 auto host = std::make_shared<Host>();
-auto runtime = cha::Runtime::newInstance(host); 
+auto runtime = cha::Runtime::newInstance(host);
 auto packageId = runtime->loadPackage(cha::Script("test_script", "..."));
 runtime->run(packageId);
 ```
@@ -108,6 +108,7 @@ The interpreter can be compiled and run on many platforms such as:
 |Linux (Ubuntu 16.04)|x86_64|clang version 3.8.0-2ubuntu4 (tags/RELEASE_380/final)|
 |macOS 11.1|x86_64|g++ (Homebrew GCC 9.2.0_1) 9.2.0|
 |macOS 11.1|x86_64|Apple clang version 11.0.0 (clang-1100.0.33.12)|
+|macOS 11.1|arm64|Apple clang version 12.0.0 (clang-1200.0.32.28)|
 |Windows10(1809)|x86_64|Microsoft(R) C/C++ Optimizing Compiler Version 19.24.28316 for x86|
 
 
@@ -120,7 +121,7 @@ in so far as these libraries provide serialize/de-serialize interfaces via `chat
 
 ```C++
 auto host = std::make_shared<Host>();
-auto runtime1 = cha::Runtime::newInstance(host); 
+auto runtime1 = cha::Runtime::newInstance(host);
 auto packageId = runtime1->loadPackage(cha::Script("test_script", "..."));
 runtime1->run(packageId);
 
@@ -144,7 +145,7 @@ If the conditions are met, it can even be resumed on another machine
 ### Supports Threading
 
 Chatra supports multi-threading in language level.
-Calling a function with `async` keyword indicates it will be invoked in another thread so 
+Calling a function with `async` keyword indicates it will be invoked in another thread so
 the caller's thread can process another work simultaneously.
 
 ```Text
@@ -219,8 +220,8 @@ chatra[0]:1> !step over T3
 
 ## Why called "chatra" ?
 
-The name of “Chatra” comes from the Japanese “red tabby”. 
-Red tabbies are simple and friendly, 
+The name of “Chatra” comes from the Japanese “red tabby”.
+Red tabbies are simple and friendly,
 so their characteristics is suitable for this language.
 
 ![red_tabby](https://raw.githubusercontent.com/chatra-lang/resources/master/images/red_tabby.jpg "Chatra \(red tabby\) is simple")
@@ -230,7 +231,7 @@ so their characteristics is suitable for this language.
 ## Chatra is in alpha stage
 
 Chatra development is in early phase.   
-There are still many features that are lacking in the language, 
+There are still many features that are lacking in the language,
 and we plan to add them in the future.
 At least the following important features are missing or poorly implemented:
 
@@ -248,17 +249,17 @@ Until the version number reaches to 1.0,
 there is a possibility that changes will be made that breaks the compatibility
 with older versions
 (We think it is important that quickly implementing new features,
-rather than to keep the compatibility between the versions). 
-When incorporating Chatra into your project, 
+rather than to keep the compatibility between the versions).
+When incorporating Chatra into your project,
 please pay attention to differences between Chatra’s versions.
 
 
 ## Contributing
 
-Chatra is an open source project 
-and humbly accepts any contributions you might make to the project. 
+Chatra is an open source project
+and humbly accepts any contributions you might make to the project.
 Any contribution even if you think that is small, makes a great difference.  
-Not only writing code, 
+Not only writing code,
 but also we look forward to any kinds of participation such as:
 
 - Bug report
