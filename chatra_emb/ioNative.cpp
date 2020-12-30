@@ -40,20 +40,20 @@ struct NativeData : public INativePtr {
 	explicit NativeData(Type type) : type(type) {}
 };
 
-struct FileInputStreamData : public NativeData {
-	std::mutex mt;
+struct FileInputStreamData final : public NativeData {
+	mutable std::mutex mt;
 	std::unique_ptr<IFile> file;
 	FileInputStreamData() : NativeData(Type::FileInputStream) {}
 };
 
-struct FileOutputStreamData : public NativeData {
-	std::mutex mt;
+struct FileOutputStreamData final : public NativeData {
+	mutable std::mutex mt;
 	std::unique_ptr<IFile> file;
 	FileOutputStreamData() : NativeData(Type::FileOutputStream) {}
 };
 
 
-struct IoPackageInterface : public IPackage {
+struct IoPackageInterface final : public IPackage {
 	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;
@@ -169,7 +169,7 @@ static void fileInputStream_read(Ct& ct) {
 	ptrdiff_t offset, length;
 	parsePositionArgs(ct, 1, 2, bufferSize, offset, length);
 
-	std::vector<uint8_t> tmp(length);
+	std::vector<uint8_t> tmp(static_cast<size_t>(length));
 	size_t read;
 	{
 		std::lock_guard<std::mutex> lock(self->mt);
@@ -238,7 +238,7 @@ static void fileOutputStream_write(Ct& ct) {
 		ptrdiff_t offset, length;
 		parsePositionArgs(ct, 1, 2, static_cast<ptrdiff_t>(buffer.data.size()),
 				offset, length);
-		tmp.resize(length);
+		tmp.resize(static_cast<size_t>(length));
 		std::copy(buffer.data.cbegin() + offset, buffer.data.cbegin() + offset + length, tmp.begin());
 	}
 

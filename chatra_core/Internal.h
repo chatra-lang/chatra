@@ -30,7 +30,9 @@
 #include <cstddef>
 #include <climits>
 #include <cstdint>
+#include <cstdio>
 #include <cassert>
+#include <cstdarg>
 #include <type_traits>
 #include <functional>
 
@@ -52,9 +54,15 @@
 
 #include <cmath>
 
-#ifndef NDEBUG
-#include <cstdio>
-#endif // !NDEBUG
+#ifdef CHATRA_NDEBUG
+	#define chatra_assert(e)  ((void)0)
+#else
+	#define chatra_assert(e)  assert(e)
+#endif
+
+#ifndef CHATRA_NDEBUG
+	#include <cstdio>
+#endif // !CHATRA_NDEBUG
 
 #if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
 	#define CHATRA_MAYBE_GCC   __GNUC__
@@ -89,9 +97,23 @@ struct remove_pointer_cv {
 	using type = typename std::remove_cv<typename std::remove_pointer<Type>::type>::type*;
 };
 
+template <class Type>
+class NonCopyable {
+protected:
+	NonCopyable() noexcept = default;
+	~NonCopyable() = default;
+public:
+	NonCopyable(const NonCopyable&) = delete;
+	NonCopyable(NonCopyable&&) = delete;
+	Type& operator=(const Type &) = delete;
+	Type& operator=(Type &&) = delete;
+};
+
 enum class ErrorLevel {
+	Info,
 	Warning,
 	Error,
+	Fatal,
 };
 
 struct AbortCompilingException : public std::exception {};
@@ -105,7 +127,7 @@ struct IErrorReceiver {
 			const std::string& message, const std::vector<std::string>& args) = 0;
 };
 
-class IErrorReceiverBridge : public IErrorReceiver {
+class IErrorReceiverBridge final : public IErrorReceiver {
 private:
 	IErrorReceiver& target;
 	unsigned errorCount = 0;
@@ -141,12 +163,12 @@ struct IAssertionNullErrorReceiver final : public IErrorReceiver {
 			const std::string& message, const std::vector<std::string>& args) override {
 		(void)level;  (void)fileName;  (void)lineNo;  (void)line;  (void)first;  (void)last;
 		(void)message;  (void)args;
-		assert(false);
+		chatra_assert(false);
 	}
 };
 
 
-class SpinLock {
+class SpinLock final : public NonCopyable<SpinLock> {
 private:
 	std::atomic_flag flag = ATOMIC_FLAG_INIT;
 
@@ -163,7 +185,7 @@ public:
 
 
 template <class ValueType>
-class AsyncRead {
+class AsyncRead : public NonCopyable<AsyncRead<ValueType>> {
 private:
 	ValueType values[2];
 	size_t index = 0;
@@ -201,13 +223,14 @@ public:
 		return readCount;
 	}
 
-	AsyncRead& operator=(const AsyncRead<ValueType>& r) {
+	void import(const AsyncRead<ValueType>& r) {
+		if (&r == this)
+			return;
 		r.read([&](const ValueType& rValue) {
 			write([&](ValueType& lValue) {
 				lValue = rValue;
 			});
 		});
-		return *this;
 	}
 };
 
@@ -215,22 +238,23 @@ public:
 template <class ValueType>
 class AsyncReadWrite : public AsyncRead<ValueType> {
 private:
-	SpinLock lock;
+	mutable SpinLock lock;
 
 public:
 	template <typename Process>
 	void writeAsync(Process process) {
-		std::lock_guard<SpinLock> lock(this->lock);
+		std::lock_guard<SpinLock> lock0(lock);
 		AsyncRead<ValueType>::write(std::move(process));
 	}
 
-	AsyncReadWrite& operator=(const AsyncReadWrite<ValueType>& r) {
+	void import(const AsyncReadWrite<ValueType>& r) {
+		if (&r == this)
+			return;
 		r.read([&](const ValueType& rValue) {
 			writeAsync([&](ValueType& lValue) {
 				lValue = rValue;
 			});
 		});
-		return *this;
 	}
 };
 
@@ -257,7 +281,7 @@ template <class KeyType, class ValueType> class IdPool;
 class IdTypeBase {};
 
 template <class KeyType, class ValueType>
-class IdType : public IdTypeBase {
+class IdType : public IdTypeBase, public NonCopyable<IdType<KeyType, ValueType>> {
 	friend class IdPool<KeyType, ValueType>;
 
 private:
@@ -290,8 +314,8 @@ class IdPool {
 	using KeyBaseType = typename key_base_type<KeyType>::type;
 
 public:
-	using _KeyType = KeyType;
-	using _ValueType = ValueType;
+	using KeyType_s = KeyType;
+	using ValueType_s = ValueType;
 
 private:
 	mutable SpinLock lockValues;
@@ -389,6 +413,47 @@ public:
 };
 
 
+#if defined(__clang__)
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
+
+inline std::string formatTextV(const char *format, va_list args) {
+	va_list args2;
+	va_copy(args2, args);
+	auto length = std::vsnprintf(nullptr, 0, format, args);
+	std::string ret;
+	if (length < 0)
+		ret = "(error)";
+	else {
+		std::vector<char> buffer(static_cast<size_t>(length) + 1);
+		std::vsnprintf(buffer.data(), buffer.size(), format, args2);
+		ret = std::string(buffer.data());
+	}
+	va_end(args2);
+	return ret;
+}
+
+inline std::string formatText(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	auto ret = formatTextV(format, args);
+	va_end(args);
+	return ret;
+}
+
+#if defined(__clang__)
+	#pragma clang diagnostic pop
+#endif
+#if defined(CHATRA_MAYBE_GCC)
+	#pragma GCC diagnostic pop
+#endif
+
+
 inline bool startsWith(const std::string& str, size_t index, const char * prefix) {
 	size_t prefixLength = std::char_traits<char>::length(prefix);
 	return index + prefixLength <= str.size() &&
@@ -412,12 +477,12 @@ inline bool endsWith(std::string::const_iterator first, std::string::const_itera
 }
 
 inline size_t byteCount(const std::string& str, size_t index) {
-	auto c = static_cast<unsigned>(str[index]);
+	auto c = static_cast<unsigned char>(str[index]);
 	size_t length = ((c & 0x80U) == 0U ? 1 : (c & 0xE0U) == 0xC0U ? 2 : (c & 0xF0U) == 0xE0U ? 3 :
 			(c & 0xF8U) == 0xF0U ? 4 : 0);
 	if (index + length > str.size())
 		return 0;
-	for (size_t i = 1; i < length; i++)  if ((static_cast<unsigned>(str[index + i]) & 0xC0U) != 0x80U)
+	for (size_t i = 1; i < length; i++)  if ((static_cast<unsigned char>(str[index + i]) & 0xC0U) != 0x80U)
 			return 0;
 	return length;
 }
@@ -446,10 +511,6 @@ inline size_t extractChar(char32_t c, char* dest) {
 		return 4;
 	}
 	return 0;
-}
-
-inline constexpr bool isSpace(char c) {
-	return c == ' ' || c == '\t';
 }
 
 

@@ -73,7 +73,7 @@ struct NativeData : public INativePtr {
 	explicit NativeData(Type type) : type(type) {}
 };
 
-struct Pattern : public NativeData {
+struct Pattern final : public NativeData {
 	SpinLock lock;
 	std::string pattern;
 	srell::regex_constants::syntax_option_type flags = srell::regex_constants::ECMAScript;
@@ -81,7 +81,7 @@ struct Pattern : public NativeData {
 	Pattern() : NativeData(Type::Pattern) {}
 };
 
-struct Match : public NativeData {
+struct Match final : public NativeData {
 	SpinLock lock;
 	std::string pattern;
 	srell::regex_constants::syntax_option_type flags = srell::regex_constants::ECMAScript;
@@ -93,7 +93,7 @@ struct Match : public NativeData {
 	Match() : NativeData(Type::Match) {}
 };
 
-struct RegexPackageInterface : public IPackage {
+struct RegexPackageInterface final : public IPackage {
 	std::vector<uint8_t> saveNativePtr(PackageContext& pct, INativePtr* ptr) override {
 		(void)pct;
 		std::vector<uint8_t> buffer;
@@ -168,7 +168,7 @@ struct RegexPackageInterface : public IPackage {
 };
 
 [[noreturn]] static void processException(srell::regex_error& ex) {
-	const char* message = "internal error";
+	const char* message;
 	switch (ex.code()) {
 	case srell::regex_constants::error_escape:
 		message = "The expression contained an invalid escaped character, or a trailing escape";  break;
@@ -190,6 +190,8 @@ struct RegexPackageInterface : public IPackage {
 		message = "The complexity of an attempted match against a regular expression exceeded a pre-set level";  break;
 	case srell::regex_constants::error_stack:
 		message = "There was insufficient memory to determine whether the regular expression could match the specified character sequence";  break;
+	default:
+		message = "internal error";  break;
 	}
 	throw IllegalArgumentException(message);
 }
@@ -335,7 +337,7 @@ static void patternPosition(Ct& ct) {
 	std::lock_guard<SpinLock> lock(m->lock);
 
 	auto position = getPositionOrThrow(ct, m);
-	ct.set(countChar(m->str, m->m.position(position)));
+	ct.set(countChar(m->str, static_cast<size_t>(m->m.position(position))));
 }
 
 static void patternLength(Ct& ct) {

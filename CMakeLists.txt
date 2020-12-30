@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(Chatra CXX)
+project(Chatra CXX C)
 
 set(CMAKE_CXX_STANDARD 11)
 find_package(Threads REQUIRED)
@@ -13,7 +13,8 @@ set(CMAKE_CXX_FLAGS "-Wall -W \
 -Wno-c++98-compat-pedantic -Wno-sign-conversion -Wno-float-equal -Wno-padded \
 -Wno-shadow -Wno-shadow-field-in-constructor -Wno-shadow-uncaptured-local \
 -Wno-global-constructors -Wno-exit-time-destructors \
--Wno-switch-enum -Wno-weak-vtables -Wno-covered-switch-default")
+-Wno-switch-enum -Wno-weak-vtables -Wno-covered-switch-default \
+-Wno-unknown-warning-option -Wno-unknown-pragmas")
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
@@ -26,11 +27,16 @@ set(CMAKE_CXX_FLAGS "-pedantic -Wall -Wextra \
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 /W4 /wd4458 /wd4063 /wd4996")
+set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 \
+/W4 /wd4458 /wd4063 /wd4996 /DNOMINMAX")
 endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
+endif()
+
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DCHATRA_NDEBUG)
 endif()
 
 # Adds interpreter
@@ -50,11 +56,16 @@ if (CHATRA_ENABLE_LANGUAGE_TESTS)
 endif()
 
 add_executable(chatra main.cpp)
+target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/modules/")
+
+find_package(Readline)
+target_include_directories(chatra PRIVATE ${Readline_INCLUDE_DIR})
+target_link_libraries(chatra ${Readline_LIBRARY})
 
 if (CHATRA_ENABLE_LANGUAGE_TESTS)
-    target_link_libraries(chatra chatra_core chatra_emb chatra_language_test ${CMAKE_THREAD_LIBS_INIT})
-else()
-    target_link_libraries(chatra chatra_core chatra_emb ${CMAKE_THREAD_LIBS_INIT})
+    target_link_libraries(chatra chatra_language_test)
 endif()
 
 if (CHATRA_ENABLE_LANGUAGE_TESTS)

@@ -18,8 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#ifndef CHATRA_LEXICALANALYZER_H
-#define CHATRA_LEXICALANALYZER_H
+#ifndef CHATRA_LEXICAL_ANALYZER_H
+#define CHATRA_LEXICAL_ANALYZER_H
 
 #include "Internal.h"
 #include "StringTable.h"
@@ -38,7 +38,7 @@ enum class TokenType {
 	CloseBracket,  // ) ] }
 };
 
-struct Token {
+struct Token final {
 	std::weak_ptr<Line> line;
 	unsigned index;
 	size_t first;  // byte position
@@ -48,12 +48,12 @@ struct Token {
 	std::string literal;  // [Number, String]
 
 public:
-	Token(const std::weak_ptr<Line>& line, unsigned index, size_t first, size_t last,
+	Token(std::weak_ptr<Line> line, unsigned index, size_t first, size_t last,
 			TokenType type, StringId sid) noexcept
-			: line(line), index(index), first(first), last(last), type(type), sid(sid) {}
+			: line(std::move(line)), index(index), first(first), last(last), type(type), sid(sid) {}
 };
 
-struct Line {
+struct Line final {
 	bool containsError;  // To avoid generating too many warnings from this line
 	std::string fileName;
 	unsigned lineNo;
@@ -70,10 +70,10 @@ std::vector<std::shared_ptr<Line>> parseLines(IErrorReceiver& errorReceiver,
 
 void initializeLexicalAnalyzer();
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void dump(const std::shared_ptr<StringTable>& sTable, const std::shared_ptr<Line>& line);
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra
 
-#endif //CHATRA_LEXICALANALYZER_H
+#endif //CHATRA_LEXICAL_ANALYZER_H

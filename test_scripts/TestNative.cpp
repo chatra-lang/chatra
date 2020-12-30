@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,18 +27,18 @@ static const char* script =
 #include "test_native.cha"
 ;
 
-struct TestNativeData : public cha::INativePtr {
+struct TestNativeData final : public cha::INativePtr {
 	int value;
 	explicit TestNativeData(int value = 0) : value(value) {}
 };
 
-struct PackageData {
+struct PackageData final {
 	std::unique_ptr<cha::Event> event;
 };
 
 static std::unordered_map<cha::RuntimeId, std::unique_ptr<PackageData>> packageDataMap;
 
-struct TestPackageInterface : public cha::IPackage {
+struct TestPackageInterface final : public cha::IPackage {
 	std::vector<uint8_t> savePackage(cha::PackageContext& pct) override {
 		auto& packageData = packageDataMap[pct.runtimeId()];
 		if (!packageData || !packageData->event)
@@ -86,7 +86,7 @@ static void testCommand(cha::Ct& ct) {
 	}
 
 	if (verb == "instanceId") {
-		ct.set(static_cast<std::underlying_type<cha::InstanceId>::type>(ct.intanceId()));
+		ct.set(static_cast<std::underlying_type<cha::InstanceId>::type>(ct.instanceId()));
 		return;
 	}
 

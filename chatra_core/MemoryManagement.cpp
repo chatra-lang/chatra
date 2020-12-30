@@ -22,6 +22,34 @@
 
 namespace chatra {
 
+void Object::appendElementsAsArray(Storage& storage, const std::vector<size_t>& primaryIndexes,
+		Requester requester) {
+	chatra_assert(refsArray.size() <= primaryIndexes.size());
+
+	groups.reserve(primaryIndexes.size());
+	nodes.reserve(primaryIndexes.size());
+	refsArray.reserve(primaryIndexes.size());
+
+	std::unordered_map<size_t, size_t> indexMap;  // primaryIndex -> index of groups
+	for (size_t i = refsArray.size(); i < primaryIndexes.size(); i++) {
+		auto primaryIndex = primaryIndexes[i];
+		chatra_assert(primaryIndex < primaryIndexes.size());
+
+		ReferenceGroup* group;
+		auto it = indexMap.find(primaryIndex);
+		if (it == indexMap.end()) {
+			indexMap.emplace(primaryIndex, groups.size());
+			groups.emplace_back(new ReferenceGroup(storage, requester));
+			group = groups.back().get();
+		}
+		else
+			group = groups[it->second].get();
+
+		nodes.emplace_back(new ReferenceNode(*group));
+		refsArray.push_back(Reference(*nodes.back()));
+	}
+}
+
 Object::Object(Storage& storage, TypeId typeId, size_t size, Requester requester) noexcept : typeId(typeId) {
 	groups.reserve(size);
 	nodes.reserve(size);
@@ -33,10 +61,7 @@ Object::Object(Storage& storage, TypeId typeId, size_t size, Requester requester
 	}
 }
 
-Object::Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive elementsAreExclusive) noexcept
-		: typeId(typeId) {
-	(void)elementsAreExclusive;
-
+Object::Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive) noexcept : typeId(typeId) {
 	groups.reserve(size);
 	nodes.reserve(size);
 	refsArray.reserve(size);
@@ -56,7 +81,7 @@ Object::Object(Storage& storage, TypeId typeId, const std::vector<std::vector<St
 		groups.emplace_back(new ReferenceGroup(storage, requester));
 		auto& group = *groups.back();
 		for (auto key : keys) {
-			assert(refsMap.count(key) == 0);
+			chatra_assert(refsMap.count(key) == 0);
 			nodes.emplace_back(new ReferenceNode(group));
 			refsMap.emplace(key, Reference(*nodes.back()));
 		}
@@ -65,34 +90,19 @@ Object::Object(Storage& storage, TypeId typeId, const std::vector<std::vector<St
 
 Object::Object(Storage& storage, TypeId typeId, const std::vector<size_t>& primaryIndexes,
 		Requester requester) noexcept : typeId(typeId) {
-	groups.reserve(primaryIndexes.size());
-	nodes.reserve(primaryIndexes.size());
-	refsArray.reserve(primaryIndexes.size());
-
-	std::unordered_map<size_t, size_t> indexMap;  // primaryIndex -> index of groups
-	for (size_t primaryIndex : primaryIndexes) {
-		assert(primaryIndex < primaryIndexes.size());
-
-		ReferenceGroup* group;
-		auto it = indexMap.find(primaryIndex);
-		if (it == indexMap.end()) {
-			indexMap.emplace(primaryIndex, groups.size());
-			groups.emplace_back(new ReferenceGroup(storage, requester));
-			group = groups.back().get();
-		}
-		else
-			group = groups[it->second].get();
-
-		nodes.emplace_back(new ReferenceNode(*group));
-		refsArray.push_back(Reference(*nodes.back()));
-	}
+	appendElementsAsArray(storage, primaryIndexes, requester);
 }
 
 void Object::restoreReferencesForClass() {
-	assert(refsArray.empty());
+	chatra_assert(refsArray.empty());
 	refsArray.reserve(nodes.size());
 	for (auto& n : nodes)
 		refsArray.push_back(Reference(*n));
+}
+
+void Object::appendElements(Storage& storage, const std::vector<size_t>& primaryIndexes,
+		Requester requester) noexcept {
+	appendElementsAsArray(storage, primaryIndexes, requester);
 }
 
 Scope::Scope(Storage& storage, ScopeType type) noexcept : storage(storage), type(type) {
@@ -121,7 +131,7 @@ Scope::~Scope() {
 
 		// Checking readCount outside lockScopes would be unsafe
 		// because garbage collector may increment readCount asynchronously inside lockScopes
-		assert(getReadCount() == 0);
+		chatra_assert(getReadCount() == 0);
 
 		storage.scopes.erase(this);
 	}
@@ -203,7 +213,7 @@ bool Storage::stepSweeping(IConcurrentGcConfiguration& conf) {
 		Object* object = objects[position];
 		if (object == nullptr || object->gcGeneration == gcGeneration)
 			continue;
-		assert(object->gcGeneration + 1 == gcGeneration);
+		chatra_assert(object->gcGeneration + 1 == gcGeneration);
 
 		// Remove references which refer to unmarked object.
 		for (auto& n : object->nodes) {
@@ -229,7 +239,7 @@ void Storage::saveReferences(Writer& w,
 			w.out(group->getLockCount());
 
 		unsigned flags = (group->isConst ? 1U : 0U);
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 		flags |= (group->isExclusive ? 2U : 0U);
 #endif
 		w.out(flags);
@@ -351,7 +361,7 @@ void Storage::restoreObjectRefs(std::vector<std::unique_ptr<ReferenceNode>>& nod
 }
 
 void Storage::deploy() {
-	assert(recycledObjectIndexes.empty());
+	chatra_assert(recycledObjectIndexes.empty());
 	armed = true;
 	systemObjectIndex = objects.size();
 }
@@ -396,7 +406,7 @@ bool Storage::tidy(IConcurrentGcConfiguration& conf) {
 }
 
 void Storage::collect(Requester requester) {
-	assert(gcState == GcState::Idle);
+	chatra_assert(gcState == GcState::Idle);
 	std::vector<Object*> trashCopy;
 	{
 		std::lock_guard<SpinLock> lock(lockTrash);
@@ -418,21 +428,21 @@ void Storage::collect(Requester requester) {
 
 		Reference ref(node);
 		object->onDestroy(tag, requester, ref);
-		assert(object->lockedBy() == InvalidRequester);
+		chatra_assert(object->lockedBy() == InvalidRequester);
 
 		delete object;
 	}
 }
 
 std::shared_ptr<Storage> Storage::newInstance(void* tag) {
-	struct StorageBridge : Storage {
+	struct StorageBridge final : Storage {
 		explicit StorageBridge(void* tag) noexcept : Storage(tag) {}
 	};
 	return std::make_shared<StorageBridge>(tag);
 }
 
 bool Storage::audit() const {
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	std::lock_guard<SpinLock> lock0(lockScopes);
 	std::lock_guard<SpinLock> lock1(lockObjects);
 
@@ -446,12 +456,12 @@ bool Storage::audit() const {
 		scope->read([&](const RefsContainer& refs) {
 			refCount = refs.size();
 		});
-		assert(refCount == scope->nodes.size());
+		chatra_assert(refCount == scope->nodes.size());
 		for (auto& n : scope->nodes) {
 			if (n->type == ReferenceValueType::Object)
-				assert(n->object == nullptr || n->object->objectIndex < 10000000);
+				chatra_assert(n->object == nullptr || n->object->objectIndex < 10000000);
 			if (n->type == referenceValueType_ObjectIndex)
-				assert(n->vObjectIndex == SIZE_MAX || n->vObjectIndex < 10000000);
+				chatra_assert(n->vObjectIndex == SIZE_MAX || n->vObjectIndex < 10000000);
 		}
 	}
 
@@ -462,21 +472,21 @@ bool Storage::audit() const {
 			releasedIndexes++;
 			continue;
 		}
-		assert(object->objectIndex == i);
+		chatra_assert(object->objectIndex == i);
 		for (auto& n : object->nodes) {
 			if (n->type == ReferenceValueType::Object)
-				assert(n->object == nullptr || n->object->objectIndex < 10000000);
+				chatra_assert(n->object == nullptr || n->object->objectIndex < 10000000);
 			if (n->type == referenceValueType_ObjectIndex)
-				assert(n->vObjectIndex == SIZE_MAX || n->vObjectIndex < 10000000);
+				chatra_assert(n->vObjectIndex == SIZE_MAX || n->vObjectIndex < 10000000);
 		}
 	}
-	assert(recycledObjectIndexes.size() == releasedIndexes);
+	chatra_assert(recycledObjectIndexes.size() == releasedIndexes);
 #endif
 	return true;
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 static const char* toString(ScopeType v) {
 	switch (v) {
 	case ScopeType::Thread:  return "Thread";
@@ -673,6 +683,6 @@ void Storage::dump(const std::shared_ptr<StringTable>& sTable) const {
 		object->dump(sTable);
 	}
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

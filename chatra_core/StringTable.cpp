@@ -281,7 +281,7 @@ StringTable::StringTable(const StringTable& r) noexcept {
 }
 
 void StringTable::restore(Reader& r) {
-	assert(idToStr.size() == static_cast<size_t>(StringId::PredefinedStringIds));
+	chatra_assert(idToStr.size() == static_cast<size_t>(StringId::PredefinedStringIds));
 	r.in(baseVersion);
 	r.in(version);
 	r.inList([&]() { add(r.read<std::string>()); });
@@ -301,7 +301,7 @@ StringId StringTable::add(std::string str) {
 	return id;
 }
 
-struct StringTableBridge : StringTable {
+struct StringTableBridge final : StringTable {
 	explicit StringTableBridge() noexcept : StringTable() {}
 	explicit StringTableBridge(const StringTable& r) noexcept : StringTable(r) {}
 };

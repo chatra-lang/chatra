@@ -22,8 +22,8 @@
 #include "../chatra_core/Runtime.h"
 #include <random>
 
-#ifdef NDEBUG
-	#error CHATRA_ENABLE_LANGUAGE_TESTS only works with debug version of chatra_core (!NDEBUG)
+#ifdef CHATRA_NDEBUG
+	#error CHATRA_ENABLE_LANGUAGE_TESTS only works with debug version of chatra_core (!CHATRA_NDEBUG)
 #endif
 
 cha::PackageInfo getTestNativePackage();

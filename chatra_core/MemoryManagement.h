@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2020 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-#ifndef CHATRA_MEMORYMANAGEMENT_H
-#define CHATRA_MEMORYMANAGEMENT_H
+#ifndef CHATRA_MEMORY_MANAGEMENT_H
+#define CHATRA_MEMORY_MANAGEMENT_H
 
 #include "Internal.h"
 #include "StringTable.h"
@@ -33,7 +33,7 @@ constexpr Requester InvalidRequester = enum_max<Requester>::value;
 enum class TypeId : int {
 	CapturedScope = -1,
 	CapturedScopeObject = -2,
-	_Dummy = 0
+	Dummy = 0
 };
 
 constexpr TypeId toTypeId(int id) noexcept {
@@ -89,27 +89,27 @@ public:
 			return true;
 		}
 		else {
-			assert(expected != requester || lockCount == 1);
+			chatra_assert(expected != requester || lockCount == 1);
 			return expected == requester;
 		}
 	}
 
 	/// [Requires lock]
 	void unlock() {
-		assert(lockedBy() != InvalidRequester);
+		chatra_assert(lockedBy() != InvalidRequester);
 		if (--lockCount > 0)
 			return;
-		assert(lockCount == 0);
+		chatra_assert(lockCount == 0);
 		lockRequester = InvalidRequester;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump() const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-class ReferenceGroup : public Lockable {
+class ReferenceGroup final : public Lockable {
 	friend class Object;
 	friend class Reference;
 	friend class Scope;
@@ -119,7 +119,7 @@ class ReferenceGroup : public Lockable {
 private:
 	Storage& storage;
 	bool isConst;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	bool isExclusive = false;
 #endif
 
@@ -134,7 +134,7 @@ private:
 	struct IsExclusive {};
 	ReferenceGroup(Storage& storage, IsExclusive isExclusive) noexcept : storage(storage), isConst(false) {
 		(void)isExclusive;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 		this->isExclusive = true;
 #endif
 	}
@@ -143,7 +143,7 @@ private:
 	ReferenceGroup(Requester requester, int lockCount, Storage& storage, bool isConst, bool isExclusive) noexcept
 			: Lockable(requester, lockCount), storage(storage), isConst(isConst) {
 		(void)isExclusive;
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 		this->isExclusive = isExclusive;
 #endif
 	}
@@ -157,7 +157,7 @@ enum class ReferenceValueType {
 constexpr ReferenceValueType referenceValueType_ObjectIndex = static_cast<ReferenceValueType>(4);
 
 
-class ReferenceNode {
+class ReferenceNode final {
 	friend class Object;
 	friend class Reference;
 	friend class Scope;
@@ -205,16 +205,16 @@ private:
 		vObjectIndex = newValue;
 	}
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump() const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
 /// This class is named "Reference", but actually this represents "reference to reference".
 /// example:
 ///   class A / var b -> Reference object points to "b" itself, not the value of b
-class Reference {
+class Reference final {
 	friend class Object;
 	friend class Scope;
 	friend class CapturedScope;
@@ -228,7 +228,7 @@ private:
 public:
 	// This strange method is used for implementing serializing, std::hash() and std::equal_to().
 	// Also used for some debugging features.
-	ReferenceNode* ___nodePtr() const {
+	ReferenceNode* internal_nodePtr() const {
 		return node;
 	}
 
@@ -256,13 +256,13 @@ public:
 	}
 
 	bool isConst() const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		return node->group.isConst;
 	}
 
 	bool requiresLock() const {
-		assert(node != nullptr);
-#ifdef NDEBUG
+		chatra_assert(node != nullptr);
+#ifdef CHATRA_NDEBUG
 		return !node->group.isConst;
 #else
 		return !node->group.isConst && !node->group.isExclusive;
@@ -270,50 +270,50 @@ public:
 	}
 
 	Requester lockedBy() const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		return node->group.lockedBy();
 	}
 
 	bool lock(Requester requester) const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		return node->group.lock(requester);
 	}
 
 	bool lockOnce(Requester requester) const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		return node->group.lockOnce(requester);
 	}
 
 	void unlock() const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		node->group.unlock();
 	}
 
 	bool isNullWithoutLock() const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		return node->type == ReferenceValueType::Object && node->object == nullptr;
 	}
 
 	/// [Requires lock]
 	bool isNull() const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		return isNullWithoutLock();
 	}
 
 	ReferenceValueType valueTypeWithoutLock() const {
-		assert(node != nullptr);
+		chatra_assert(node != nullptr);
 		return node->type;
 	}
 
 	/// [Requires lock]
 	ReferenceValueType valueType() const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		return valueTypeWithoutLock();
 	}
 
 	template <class Type = Object>
 	Type& derefWithoutLock() const {
-		assert(node != nullptr && node->object != nullptr);
+		chatra_assert(node != nullptr && node->object != nullptr);
 		return *static_cast<Type *>(node->object);
 	}
 
@@ -321,33 +321,45 @@ public:
 	template <class Type = Object>
 	Type& deref() const {
 		static_assert(std::is_base_of<Object, Type>::value, "Type should be derived class of Object");
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		return derefWithoutLock<Type>();
+	}
+
+	bool getBoolWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Bool);
+		return node->vBool;
+	}
+
+	int64_t getIntWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Int);
+		return node->vInt;
+	}
+
+	double getFloatWithoutLock() const {
+		chatra_assert(node->type == ReferenceValueType::Float);
+		return node->vFloat;
 	}
 
 	/// [Requires lock]
 	bool getBool() const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		assert(node->type == ReferenceValueType::Bool);
-		return node->vBool;
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		return getBoolWithoutLock();
 	}
 
 	/// [Requires lock]
 	int64_t getInt() const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		assert(node->type == ReferenceValueType::Int);
-		return node->vInt;
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		return getIntWithoutLock();
 	}
 
 	/// [Requires lock]
 	double getFloat() const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
-		assert(node->type == ReferenceValueType::Float);
-		return node->vFloat;
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		return getFloatWithoutLock();
 	}
 
 	void setWithoutBothLock(const Reference& ref) const {
-		assert(node != nullptr && ref.node != nullptr);
+		chatra_assert(node != nullptr && ref.node != nullptr);
 		switch (ref.node->type) {
 		case ReferenceValueType::Bool:  node->setBool(ref.node->vBool); break;
 		case ReferenceValueType::Int:  node->setInt(ref.node->vInt); break;
@@ -358,37 +370,37 @@ public:
 
 	/// [Requires lock to ref]
 	void setWithoutLock(const Reference& ref) const {
-		assert(!ref.requiresLock() || ref.node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!ref.requiresLock() || ref.node->group.lockedBy() != InvalidRequester);
 		setWithoutBothLock(ref);
 	}
 
 	/// [Requires lock (both *this and ref)]
 	void set(const Reference& ref) const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		setWithoutLock(ref);
 	}
 
 	/// [Requires lock]
 	void setNull() const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		node->setObject(nullptr);
 	}
 
 	/// [Requires lock]
 	void setBool(bool newValue) const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		node->setBool(newValue);
 	}
 
 	/// [Requires lock]
 	void setInt(int64_t newValue) const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		node->setInt(newValue);
 	}
 
 	/// [Requires lock]
 	void setFloat(double newValue) const {
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		node->setFloat(newValue);
 	}
 
@@ -399,7 +411,7 @@ public:
 	template <class Type, class... Args>
 	Type& allocate(Args&&... args) const {
 		static_assert(std::is_base_of<Object, Type>::value, "Type should be derived class of Object");
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		return allocateWithoutLock<Type>(std::forward<Args>(args)...);
 	}
 
@@ -410,7 +422,7 @@ public:
 	template <class Type>
 	Type& set(Type* value) const {
 		static_assert(std::is_base_of<Object, Type>::value, "Type should be derived class of Object");
-		assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+		chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 		return setWithoutLock<Type>(value);
 	}
 
@@ -445,13 +457,16 @@ private:
 			std::unordered_map<StringId, Reference> refs) noexcept
 			: typeId(typeId), groups(std::move(groups)), nodes(std::move(nodes)), refsMap(std::move(refs)) { (void)storage; }
 
+	void appendElementsAsArray(Storage& storage, const std::vector<size_t>& primaryIndexes,
+			Requester requester);
+
 protected:
 	// Constructor for array-like objects
 	Object(Storage& storage, TypeId typeId, size_t size, Requester requester = InvalidRequester) noexcept;
 
 	// Constructor for container's body
 	struct ElementsAreExclusive {};
-	Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive elementsAreExclusive) noexcept;
+	Object(Storage& storage, TypeId typeId, size_t size, ElementsAreExclusive) noexcept;
 
 	// Constructor for compound types
 	Object(Storage& storage, TypeId typeId, const std::vector<std::vector<StringId>>& references,
@@ -471,6 +486,12 @@ protected:
 	virtual bool hasOnDestroy() const { return false; }
 
 public:
+	// Append elements to this object which was initialized by constructor for classes.
+	// "primaryIndexes" must be super-set of its passed in constructor or prior appendElements() call.
+	// note: this method is not thread-safe
+	void appendElements(Storage& storage, const std::vector<size_t>& primaryIndexes,
+			Requester requester = InvalidRequester) noexcept;
+
 	TypeId getTypeId() const {
 		return typeId;
 	}
@@ -493,9 +514,9 @@ public:
 
 	Reference ref(size_t position) const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	virtual void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -512,7 +533,7 @@ enum class ScopeType {
 
 using RefsContainer = std::unordered_map<StringId, Reference>;
 
-class Scope : private AsyncRead<RefsContainer> {
+class Scope final : private AsyncRead<RefsContainer> {
 	friend class Reference;
 	friend class Storage;
 
@@ -524,7 +545,7 @@ private:
 	std::vector<std::unique_ptr<ReferenceNode>> nodes;
 	std::underlying_type<StringId>::type nextId = static_cast<std::underlying_type<StringId>::type>(StringId::Invalid) - 1;
 
-	SpinLock lockAllocateCapture;
+	mutable SpinLock lockAllocateCapture;
 	std::atomic<bool> captured = {false};
 
 private:
@@ -572,13 +593,13 @@ public:
 	std::unordered_map<StringId, Reference> getAllRefsWithKey() const;
 	std::unordered_map<const Object*, StringId> getObjectMap() const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-class CapturedScope : private Object {
+class CapturedScope final : private Object {
 	friend class Reference;
 	friend class Scope;
 	friend class Storage;
@@ -601,9 +622,9 @@ public:
 
 	Reference refCaptured(StringId key) const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -697,6 +718,9 @@ public:
 
 	std::unique_ptr<Scope> add(ScopeType type);
 
+	template <class Type = Object>
+	Type& derefDirect(size_t objectIndex) const;
+
 	/// Step concurrent GC; returns whether GC was completed.
 	/// Once this was called and until this returns true, collect() cannot be called.
 	bool tidy(IConcurrentGcConfiguration& conf);
@@ -714,14 +738,14 @@ public:
 	/// for debug
 	bool audit() const;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	size_t dumpReferencesSub(const std::shared_ptr<StringTable>& sTable, const Object& object,
 			const std::string& suffix, size_t count) const;
 	void dumpReferences(const std::shared_ptr<StringTable>& sTable, const Object& object) const;
 	size_t objectCount() const;
 	Object* refDirect(size_t objectIndex) const;
 	void dump(const std::shared_ptr<StringTable>& sTable) const;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
@@ -736,7 +760,7 @@ inline void ReferenceNode::setObject(Object* newObject) {
 
 template <class Type, class... Args>
 Type& Reference::allocateWithoutLock(Args&&... args) const {
-	assert(node != nullptr);
+	chatra_assert(node != nullptr);
 	Type* object = new Type(node->group.storage, std::forward<Args>(args)...);
 	node->setObject(object);
 	node->group.storage.registerObject(node->object);
@@ -745,13 +769,13 @@ Type& Reference::allocateWithoutLock(Args&&... args) const {
 
 template <class Type>
 Type& Reference::setWithoutLock(Type* value) const {
-	assert(value->objectIndex != SIZE_MAX);
+	chatra_assert(value->objectIndex != SIZE_MAX);
 	node->setObject(value);
 	return *value;
 }
 
 inline void Reference::capture(Scope& scope) const {
-	assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
+	chatra_assert(!requiresLock() || node->group.lockedBy() != InvalidRequester);
 
 	auto ref = scope.ref(StringId::CapturedScope);
 	CapturedScope* captured;
@@ -783,13 +807,13 @@ inline Reference Object::ref(size_t position) const {
 }
 
 inline Reference Scope::add(chatra::StringId key, Requester requester) {
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	bool alreadyAdded = false;
 	read([&](const RefsContainer& refs) {
 		alreadyAdded = (refs.count(key) != 0);
 	});
-	assert(!alreadyAdded);
-#endif // !NDEBUG
+	chatra_assert(!alreadyAdded);
+#endif // !CHATRA_NDEBUG
 
 	groups.emplace_back(new ReferenceGroup(storage, requester));
 	nodes.emplace_back(new ReferenceNode(*groups.back()));
@@ -877,12 +901,24 @@ inline void Storage::registerObject(Object* object) {
 	object->gcGeneration = gcGeneration;
 }
 
+template <class Type>
+Type& Storage::derefDirect(size_t objectIndex) const {
+	static_assert(std::is_base_of<Object, Type>::value, "Type should be derived class of Object");
+	std::lock_guard<SpinLock> lock0(lockObjects);
+
+	if (objectIndex >= objects.size() ||
+			std::find(recycledObjectIndexes.cbegin(), recycledObjectIndexes.cend(), objectIndex) != recycledObjectIndexes.cend())
+		throw IllegalArgumentException();
+
+	return *static_cast<Type*>(objects[objectIndex]);
+}
+
 template<typename WriteObject, typename WriteObjectReferences>
 inline void Storage::save(Writer& w, WriteObject writeObject, WriteObjectReferences writeObjectReferences) const {
 
-	assert(audit());
+	chatra_assert(audit());
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	w.out(systemScopes.size());
 	w.out(systemObjectIndex);
 #endif
@@ -929,7 +965,7 @@ inline void Storage::save(Writer& w, WriteObject writeObject, WriteObjectReferen
 			break;
 
 		default:
-			(void)TypeId::_Dummy;
+			(void)TypeId::Dummy;
 			saveRefs = !writeObject(object->typeId, object);
 			break;
 		}
@@ -977,10 +1013,10 @@ inline void Storage::save(Writer& w, WriteObject writeObject, WriteObjectReferen
 template <typename ReadObject, typename ReadObjectReferences>
 inline void Storage::restore(Reader& r, ReadObject readObject, ReadObjectReferences readObjectReferences) {
 
-	assert(systemScopes.size() == r.read<size_t>());
-	assert(systemScopes.size() == scopes.size());
-	assert(systemObjectIndex == r.read<size_t>());
-	assert(systemObjectIndex == objects.size());
+	chatra_assert(systemScopes.size() == r.read<size_t>());
+	chatra_assert(systemScopes.size() == scopes.size());
+	chatra_assert(systemObjectIndex == r.read<size_t>());
+	chatra_assert(systemObjectIndex == objects.size());
 
 	// scopes (1st)
 	r.restoreResync(1000);
@@ -1086,7 +1122,7 @@ inline void Storage::restore(Reader& r, ReadObject readObject, ReadObjectReferen
 	});
 
 	r.restoreResync(1004);
-	assert(audit());
+	chatra_assert(audit());
 }
 
 
@@ -1097,13 +1133,13 @@ namespace std {
 
 template<> struct hash<chatra::Reference> {
 	size_t operator()(const chatra::Reference& x) const noexcept {
-		return std::hash<void*>()(x.___nodePtr());
+		return std::hash<void*>()(x.internal_nodePtr());
 	}
 };
 
 template<> struct equal_to<chatra::Reference> {
 	bool operator()(const chatra::Reference& a, const chatra::Reference& b) const noexcept {
-		return a.___nodePtr() == b.___nodePtr();
+		return a.internal_nodePtr() == b.internal_nodePtr();
 	}
 };
 
@@ -1111,4 +1147,4 @@ template<> struct equal_to<chatra::Reference> {
 
 CHATRA_ENUM_HASH(chatra::Requester)
 
-#endif //CHATRA_MEMORYMANAGEMENT_H
+#endif //CHATRA_MEMORY_MANAGEMENT_H

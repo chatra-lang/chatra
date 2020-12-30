@@ -43,8 +43,15 @@ enum class TimerId : size_t {};
 
 struct NativeException : public std::exception {
 	std::string message;
-	NativeException() = default;
-	explicit NativeException(const char* format, ...);
+
+public:
+	NativeException() noexcept = default;
+	explicit NativeException(const char* format, ...) noexcept;
+
+	const char* what() const noexcept override {
+		return message.data();
+	}
+
 protected:
 	void setMessage(const char* format, va_list args);
 };
@@ -202,7 +209,7 @@ struct NativeCallContext {
 
 	virtual RuntimeId runtimeId() const = 0;
 
-	virtual InstanceId intanceId() const = 0;
+	virtual InstanceId instanceId() const = 0;
 
 	virtual bool hasSelf() const = 0;
 	virtual INativePtr* selfPtr() const = 0;
@@ -371,8 +378,15 @@ struct IHost {
 		(void)driverType;
 		return nullptr;  // or getStandardFileSystem() etc.
 	}
+
+	virtual void onInteractiveInstanceReady(InstanceId interactiveInstanceId) { (void)interactiveInstanceId; }
 };
 
+// chatra_debugger.h
+namespace debugger {
+struct IDebuggerHost;
+struct IDebugger;
+}
 
 class Runtime {
 public:
@@ -413,12 +427,22 @@ public:
 	/// @throws PackageNotFoundException
 	virtual InstanceId run(PackageId packageId) = 0;
 
+	/// Start interactive instance
+	virtual InstanceId createInteractiveInstance() = 0;
+
+	/// Check whether the specified interactive instance can accept next push() call
+	virtual bool readyToNextInteraction(InstanceId interactiveInstanceId) = 0;
+
+	/// Request to process next statement to an interactive instance
+	virtual void push(InstanceId interactiveInstanceId, const std::string& scriptName,
+			const std::string& statement) = 0;
+
 	/// Check whether at least one thread remains or not
-	/// @throws IllgalArgumentException  instance is not found
+	/// @throws IllegalArgumentException  instance is not found
 	virtual bool isRunning(InstanceId instanceId) = 0;
 
 	/// Stop specified instance.
-	/// @throws IllgalArgumentException  instance is not found
+	/// @throws IllegalArgumentException  instance is not found
 	/// @throws NotSupportedOperationException specified instance has active threads (= isRunning() returns true)
 	virtual void stop(InstanceId instanceId) = 0;
 
@@ -430,6 +454,12 @@ public:
 	/// @param step  must be &gt;=0
 	/// @throws IllegalArgumentException
 	virtual void increment(TimerId timerId, int64_t step) = 0;
+
+	/// Get a debugger interface corresponding to this Runtime instance.
+	/// You can call this method multiple times, but each Runtime has only single IDebugger instance and
+	/// specified IDebuggerHost specified in past invocation will be overwritten by last specified value.
+	virtual std::shared_ptr<debugger::IDebugger> getDebugger(
+			std::shared_ptr<debugger::IDebuggerHost> debuggerHost) = 0;
 };
 
 

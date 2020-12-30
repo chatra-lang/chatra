@@ -22,7 +22,9 @@
 #define CHATRA_RUNTIME_H
 
 #include "chatra.h"
+#include "chatra_debugger.h"
 #include "Internal.h"
+#include "CharacterClass.h"
 #include "LexicalAnalyzer.h"
 #include "Parser.h"
 #include "StringTable.h"
@@ -31,7 +33,7 @@
 #include "Timer.h"
 #include "Serialize.h"
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	// #define CHATRA_DEBUG_LOCK
 	// #define CHATRA_TRACE_TEMPORARY_ALLOCATION
 #endif
@@ -61,6 +63,13 @@ constexpr NodeType adhocNodeType(size_t delta) noexcept {
 
 constexpr NodeType ntFinalizer = adhocNodeType(0);
 constexpr NodeType ntParserError = adhocNodeType(1);
+constexpr NodeType ntBreakPointStatement = adhocNodeType(2);
+constexpr NodeType ntBreakPointInnerBlock = adhocNodeType(3);
+constexpr NodeType ntBreakPointIfGroup = adhocNodeType(4);
+constexpr NodeType ntBreakPointElseIf = adhocNodeType(5);
+constexpr NodeType ntBreakPointElse = adhocNodeType(6);
+constexpr NodeType ntBreakPointFor = adhocNodeType(7);
+constexpr NodeType ntBreakPointWhile = adhocNodeType(8);
 
 // Special operator types
 constexpr Operator adhocOperator(size_t delta) noexcept {
@@ -68,22 +77,23 @@ constexpr Operator adhocOperator(size_t delta) noexcept {
 }
 
 constexpr Operator opInitializePackage = adhocOperator(0);
-constexpr Operator opEvaluateTuple = adhocOperator(1);
-constexpr Operator opInitializeVars = adhocOperator(2);
-constexpr Operator opPopValue = adhocOperator(3);
-constexpr Operator opPostConstructor = adhocOperator(4);
-constexpr Operator opPostPostfixUnaryOperator = adhocOperator(5);
-constexpr Operator opRestoreTemporaryLock = adhocOperator(6);
-constexpr Operator opReturnFromAsync = adhocOperator(7);
-constexpr Operator opProcessFor_CallNext = adhocOperator(8);
-constexpr Operator opVarStatementMarker = adhocOperator(9);
+constexpr Operator opInitializeAdditionalPackage = adhocOperator(1);
+constexpr Operator opEvaluateTuple = adhocOperator(2);
+constexpr Operator opInitializeVars = adhocOperator(3);
+constexpr Operator opPopValue = adhocOperator(4);
+constexpr Operator opPostConstructor = adhocOperator(5);
+constexpr Operator opPostPostfixUnaryOperator = adhocOperator(6);
+constexpr Operator opRestoreTemporaryLock = adhocOperator(7);
+constexpr Operator opReturnFromAsync = adhocOperator(8);
+constexpr Operator opProcessFor_CallNext = adhocOperator(9);
+constexpr Operator opVarStatementMarker = adhocOperator(10);
 
 constexpr PackageId finalizerPackageId = static_cast<PackageId>(0);
 constexpr InstanceId finalizerInstanceId = static_cast<InstanceId>(1);
 constexpr Requester finalizerThreadId = static_cast<Requester>(1);
 
 
-class TemporaryObject : public Object {
+class TemporaryObject final : public Object {
 public:
 	enum class Type : unsigned {
 		// Nothing is pointed (implicitly point to top level of frames).
@@ -250,39 +260,39 @@ public:
 	bool hasSource() const;
 
 	Reference getSourceRef() const {
-		assert(hasSource());
+		chatra_assert(hasSource());
 		return ref(StringId::SourceObject);
 	}
 
 	bool hasRef() const;
 
 	Reference getRef() const {
-		assert(hasRef());
+		chatra_assert(hasRef());
 		return targetRef;
 	}
 
 	size_t getPrimaryIndex() const {
-		assert(type == Type::ObjectRef);
+		chatra_assert(type == Type::ObjectRef);
 		return primaryIndex;
 	}
 
 	// Get frameIndex. SIZE_MAX for methods, !SIZE_MAX for inner methods
 	size_t getFrameIndex() const {
-		assert(type == Type::FrameMethod);
+		chatra_assert(type == Type::FrameMethod);
 		return frameIndex;
 	}
 
 	bool hasPackage() const;
 
 	Package* getPackage() const {
-		assert(hasPackage());
+		chatra_assert(hasPackage());
 		return package;
 	}
 
 	bool hasClass() const;
 
 	const Class* getClass() const {
-		assert(hasClass());
+		chatra_assert(hasClass());
 		return cl;
 	}
 
@@ -296,13 +306,13 @@ public:
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS_WITH_THREAD(TemporaryObject);
 	CHATRA_DECLARE_SERIALIZE_OBJECT_REFS_METHODS;
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-class TemporaryTuple : public ObjectBase, public PreDefined<TemporaryTuple, StringId::TemporaryTuple> {
+class TemporaryTuple final : public ObjectBase, public PreDefined<TemporaryTuple, StringId::TemporaryTuple> {
 private:
 	Thread& thread;
 	size_t frameIndex = SIZE_MAX;
@@ -333,7 +343,7 @@ public:
 };
 
 
-class TupleAssignmentMap : public ObjectBase, public PreDefined<TupleAssignmentMap, StringId::TupleAssignmentMap> {
+class TupleAssignmentMap final : public ObjectBase, public PreDefined<TupleAssignmentMap, StringId::TupleAssignmentMap> {
 public:
 	struct Element {
 		size_t destIndex = 0;
@@ -359,7 +369,7 @@ public:
 };
 
 
-class FunctionObject : public ObjectBase, public PreDefined<FunctionObject, StringId::FunctionObject> {
+class FunctionObject final : public ObjectBase, public PreDefined<FunctionObject, StringId::FunctionObject> {
 public:
 	Package* package;
 	std::vector<std::tuple<ScopeType, Node*, const Class*>> scopes;  // Class, Method or Block; reverse order
@@ -377,7 +387,7 @@ public:
 };
 
 
-class WaitContext : public Object {
+class WaitContext final : public Object {
 	friend bool WaitContextEventWatcher(void* tag);
 
 private:
@@ -398,7 +408,7 @@ private:
 	unsigned waitingId = 0;
 	size_t callerFrame = 0;
 
-	SpinLock lockTriggered;
+	mutable SpinLock lockTriggered;
 	std::vector<std::unique_ptr<Target>> targets;
 	size_t remainingCount = 0;
 
@@ -416,7 +426,7 @@ bool WaitContextEventWatcher(void* tag);
 EventObject* derefAsEventObject(Reference ref);
 
 
-class NativeEventObjectImp : public NativeEventObject {
+class NativeEventObjectImp final : public NativeEventObject {
 private:
 	RuntimeImp& runtime;
 	unsigned waitingId;
@@ -437,7 +447,7 @@ enum class LockType {
 
 constexpr size_t lockTypes = 3;
 
-class Lock {
+class Lock final {
 private:
 	std::unordered_set<Reference> refs[lockTypes];
 	bool methodCall = false;
@@ -462,7 +472,10 @@ public:
 
 public:
 	Lock() noexcept {}
+
+#ifdef CHATRA_DEBUG_LOCK
 	~Lock();
+#endif // CHATRA_DEBUG_LOCK
 
 	bool has(Reference ref, LockType lockType) const;
 	void add(Reference ref, LockType lockType);
@@ -481,7 +494,7 @@ public:
 };
 
 
-class Frame {
+class Frame final {
 public:
 	Thread& thread;
 	Package& package;
@@ -509,6 +522,7 @@ public:
 	std::vector<TemporaryObject*> values;
 	TemporaryObject* exception = nullptr;
 	Node* exceptionNode = nullptr;
+	std::string stackTrace;
 	TemporaryObject* caughtException = nullptr;
 
 	std::vector<TemporaryTuple*> temporaryTuples;
@@ -530,13 +544,20 @@ public:
 
 	void clearAllTemporaries();
 
-	Reference getSelf();
+	Reference getSelf() const;
+
+	Node* getExceptionNode() const;
 
 public:
 	Frame(Thread& thread, Package& package, size_t parentIndex,
 			Scope* scope, size_t popCount = 1) noexcept;
 	Frame(Thread& thread, Package& package, size_t parentIndex,
 			ScopeType type, Node* node, size_t popCount = 1) noexcept;
+
+	// Constructor for ScriptRoot on interactive instance
+	struct ForInteractive {};
+	Frame(ForInteractive, Thread& thread, Package& package, size_t parentIndex,
+			Scope* scope, Node* node, size_t popCount = 1) noexcept;
 
 	// Constructor for ScopeType::Class
 	Frame(Thread& thread, Package& package, size_t parentIndex,
@@ -549,21 +570,26 @@ public:
 constexpr size_t residentialFrameCount = 2;
 
 namespace Phase {
-	constexpr size_t ScriptRoot_Initial = SIZE_MAX - 3;
-	constexpr size_t ScriptRoot_InitCall0 = SIZE_MAX - 2;
+	constexpr size_t PhaseMask = SIZE_MAX >> 1U;
+	constexpr size_t BreakPointFlag = SIZE_MAX ^ SIZE_MAX >> 1U;
+
+	constexpr size_t ScriptRoot_Initial = PhaseMask - 4;
+	constexpr size_t ScriptRoot_InteractiveInitial = PhaseMask - 3;
+	constexpr size_t ScriptRoot_InitCall0 = PhaseMask - 2;
 	constexpr size_t ScriptRoot_InitCall1 = ScriptRoot_InitCall0 + 1;
 
-	constexpr size_t IfGroup_Base0 = SIZE_MAX >> 1U;
-	constexpr size_t IfGroup_Base1 = IfGroup_Base0 + 1;
+	constexpr size_t IfGroup_Base1 = PhaseMask ^ PhaseMask >> 1U;
+	constexpr size_t IfGroup_Base0 = IfGroup_Base1 - 1;
+	constexpr size_t IfGroup_IndexMask = IfGroup_Base1 - 1;
 
-	constexpr size_t Switch_Base0 = SIZE_MAX - 2;
+	constexpr size_t Switch_Base0 = PhaseMask - 2;
 	constexpr size_t Switch_Base1 = Switch_Base0 + 1;
 
-	constexpr size_t Case_Base = SIZE_MAX - 3;
+	constexpr size_t Case_Base = PhaseMask - 3;
 	constexpr size_t Case_Check0 = Case_Base + 1;
 	constexpr size_t Case_Check1 = Case_Base + 2;
 
-	constexpr size_t For_Begin = SIZE_MAX - 6;
+	constexpr size_t For_Begin = PhaseMask - 6;
 	constexpr size_t For_CallIterator = For_Begin + 1;
 	constexpr size_t For_PrepareLoop = For_Begin + 2;
 	constexpr size_t For_BeginLoop = For_Begin + 3;
@@ -571,13 +597,13 @@ namespace Phase {
 	constexpr size_t For_EnterLoop = For_Begin + 5;
 	constexpr size_t For_Continue = For_BeginLoop;
 
-	constexpr size_t While_Continue = SIZE_MAX - 3;
-	constexpr size_t While_Condition0 = SIZE_MAX - 2;
+	constexpr size_t While_Continue = PhaseMask - 3;
+	constexpr size_t While_Condition0 = PhaseMask - 2;
 	constexpr size_t While_Condition1 = While_Condition0 + 1;
 }
 
 
-class TransferRequest {
+class TransferRequest final {
 public:
 	Requester requester;
 	Reference ref;
@@ -593,7 +619,7 @@ public:
 
 
 template <class Type>
-class ObjectPool {
+class ObjectPool final {
 private:
 	Thread& thread;
 	std::vector<Type*> recycled;
@@ -630,16 +656,22 @@ public:
 };
 
 
-class Thread : public IdType<Requester, Thread>, public IErrorReceiver {
+class Thread final : public IdType<Requester, Thread>, public IErrorReceiver {
 	friend class Frame;
+	friend class RuntimeImp;
 
 public:
 	RuntimeImp& runtime;
 	Instance& instance;
 
+	bool isInteractive = false;
+	std::atomic<bool> readyToNextInteraction = {true};
+	std::unique_ptr<Scope> scriptScope;
+
 	static bool initialized;
 	static Node expressionMarkerNode;
 	static Node initializePackageNode;
+	static Node initializeAdditionalPackageNode;
 	static Node evaluateTupleNode;
 	static Node defaultConstructorNode;
 	static Node initializeVarsNode;
@@ -676,7 +708,7 @@ public:
 	std::vector<Frame> frames;
 
 	std::atomic<bool> hasTransferReq = {false};
-	SpinLock lockTransferReq;
+	mutable SpinLock lockTransferReq;
 	std::deque<TransferRequest> transferReq;
 	std::deque<TransferRequest> transferReqCopy;
 
@@ -684,7 +716,7 @@ public:
 	ObjectPool<TemporaryTuple> temporaryTuplePool;
 
 	std::thread::id nativeCallThreadId;
-	SpinLock lockNative;
+	mutable SpinLock lockNative;
 	size_t callerFrame = 0;
 	bool pauseRequested = false;
 
@@ -702,13 +734,13 @@ private:
 	void scanInnerFunctions(IErrorReceiver* errorReceiver, const StringTable* sTable);
 	bool parse();
 
-	Node* getExceptionNode();
+	std::string captureStackTrace();
 	void raiseException(const RuntimeException& ex);
 	void raiseException(TemporaryObject* exValue);
 	void consumeException();
 	void checkIsValidNode(Node* node);
 
-	void sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder);
+	void sendTransferReq(Requester requester, Reference ref, LockType lockType, Requester holder) const;
 	bool lockReference(Reference ref, LockType lockType);
 	bool lockReference(TemporaryObject* value);
 	void checkTransferReq();
@@ -737,6 +769,7 @@ private:
 	Frame& pushBlock(Node* node, size_t phase);
 	Frame& pushBlock(Node* node, size_t phase, StringId label, size_t phaseOnContinue);
 	void pop();
+	void popForFinish();
 
 	enum class FinallyBlockScheme {
 		Through, Run, IncludesLast
@@ -783,7 +816,7 @@ private:
 	EvaluateValueResult evaluateTuple();
 	EvaluateValueResult evaluateAndAllocateForAssignment(Node* node, TemporaryObject* value);
 
-	std::string getClassName(const Class* cl);
+	std::string getClassName(const Class* cl) const;
 
 	template <typename PrBool, typename PrInt, typename PrFloat>
 	bool standardUnaryOperator(PrBool prBool, PrInt prInt, PrFloat prFloat);
@@ -843,13 +876,17 @@ private:
 
 	void processFinalizer();
 
+	template <typename PhaseCond>
+	bool checkDebugBreak(Node* node0, Thread* thread, size_t& phase, PhaseCond phaseCond);
+
 public:
 	Frame* findClassFrame();
 
 	void error(ErrorLevel level,
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args) override;
-	void emitError(StringId exceptionName, Node* exceptionNode);
+	void emitError(StringId exceptionName, Node* exceptionNode,
+			const char* additionalMessage = nullptr);
 
 public:
 	static Node* refSpecialNode(NodeType type, Operator op = defaultOp);
@@ -861,20 +898,30 @@ public:
 
 	void finish();
 
-	void run();
+	enum class StepRunResult {
+		Abort, Continue, Next, BreakPoint
+	};
+	StepRunResult stepRun();
+
+	enum class RunResult {
+		Next, Stop
+	};
+	RunResult run();
+
+	Node* currentNode(size_t frameIndex = SIZE_MAX) const;
 
 	Thread(RuntimeImp& runtime, Instance& instance, Reader& r) noexcept;
-	TemporaryObject* restoreTemporary(Reader& r);
-	TemporaryTuple* restoreTemporaryTuple(Reader& r);
+	TemporaryObject* restoreTemporary(Reader& r) const;
+	TemporaryTuple* restoreTemporaryTuple(Reader& r) const;
 	CHATRA_DECLARE_SERIALIZE_METHODS_WITHOUT_CONSTRUCTOR(Thread);
 	void postInitialize(Reader& r);
 };
 
 
-class Instance : public IdType<InstanceId, Instance> {
+class Instance final : public IdType<InstanceId, Instance> {
 public:
 	PackageId primaryPackageId;
-	SpinLock lockThreads;
+	mutable SpinLock lockThreads;
 	std::unordered_map<Requester, std::unique_ptr<Thread>> threads;
 
 public:
@@ -883,7 +930,7 @@ public:
 };
 
 
-class PackageObject : public ObjectBase {
+class PackageObject final : public ObjectBase {
 public:
 	PackageObject(Storage& storage, const Class* cl) noexcept
 			: ObjectBase(storage, typeId_PackageObject, cl) {}
@@ -894,7 +941,7 @@ public:
 };
 
 
-class Package : public PackageInfo, public IdType<PackageId, Package>, public IClassFinder, public PackageContext {
+class Package final : public PackageInfo, public IdType<PackageId, Package>, public IClassFinder, public PackageContext {
 public:
 	RuntimeImp& runtime;
 	std::atomic<bool> initialized = {false};
@@ -908,11 +955,11 @@ public:
 	bool grouped = false;
 	bool hasDefOperator = false;  // contains "def operator"
 
-	SpinLock lockNode;
+	mutable SpinLock lockNode;
 	std::shared_ptr<Node> node;
 	std::vector<Thread*> threadsWaitingForNode;
 
-	SpinLock lockInstances;
+	mutable SpinLock lockInstances;
 	std::unordered_map<InstanceId, std::unique_ptr<Instance>> instances;
 
 	std::unique_ptr<Class> clPackage;
@@ -926,21 +973,23 @@ public:
 	Package(RuntimeImp& runtime, std::string name, PackageInfo packageInfo, bool fromHost) noexcept;
 	void postInitialize();
 
-	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node);
+	std::shared_ptr<Node> parseNode(IErrorReceiver& errorReceiver, Node* node, bool processOnlyLast = false);
+	void distributeScriptNode(std::shared_ptr<Node> scriptNode);
 
 	bool requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
-			bool warnIfDuplicates = true);
+			bool warnIfDuplicates = true) const;
 	Package& import(Node* node, PackageId targetPackageId);
 	void build(IErrorReceiver& errorReceiver, const StringTable* sTable);
-	void allocatePackageObject();
+	void allocatePackageObject() const;
 
 	const Class* findClass(StringId name) override;
 	const Class* findPackageClass(StringId packageName, StringId name) override;
 
 	Package* findPackage(StringId name);
-	const std::vector<Package*>& refAnonymousImports();
+	const std::vector<Package*>& refAnonymousImports() const;
 
 	void pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, ScopeType type, size_t popCount = 1);
+	void pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, Scope* scope, size_t popCount = 1);
 
 	RuntimeId runtimeId() const override;
 	std::vector<uint8_t> saveEvent(NativeEventObject* event) const override;
@@ -952,14 +1001,36 @@ public:
 	void restoreScripts(Reader& r);
 	CHATRA_DECLARE_SERIALIZE_METHODS_WITHOUT_CONSTRUCTOR(Package);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable);
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 
-class RuntimeImp : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration {
+enum class BreakPointType {
+	Invalid,
+	Statement,
+	InnerBlock,
+	IfGroup,
+	For,
+	While,
+	Case,
+	Default,
+};
+
+struct BreakPoint {
+	debugger::CodePoint point;
+	debugger::BreakPointId breakPointId;
+	BreakPointType type = BreakPointType::Invalid;
+	Node* node0 = nullptr;
+	Node* node1 = nullptr;
+};
+
+
+class RuntimeImp final : public Runtime, public IErrorReceiver, public IConcurrentGcConfiguration, public debugger::IDebugger {
 public:
+	std::weak_ptr<RuntimeImp> self;
+
 	RuntimeId runtimeId;
 	std::shared_ptr<IHost> host;
 	bool multiThread = false;
@@ -969,14 +1040,14 @@ public:
 	std::atomic<bool> attemptToShutdown = {false};
 
 	std::shared_ptr<StringTable> primarySTable;  // locked by #parser
-	SpinLock lockSTable;
+	mutable SpinLock lockSTable;
 	std::shared_ptr<StringTable> distributedSTable;
 
 	ParserWorkingSet parserWs;  // locked by #parser
 
 	std::shared_ptr<Storage> storage;
 	std::atomic<int> gcWaitCount = {0};
-	std::mutex mtGc;
+	mutable std::mutex mtGc;
 	std::unique_ptr<Instance> gcInstance;
 	std::unique_ptr<Thread> gcThread;
 
@@ -984,12 +1055,12 @@ public:
 	IdPool<InstanceId, Instance> instanceIds;
 	IdPool<Requester, Thread> threadIds;
 
-	SpinLock lockScope;  // only used for adding WaitContexts
+	mutable SpinLock lockScope;  // only used for adding WaitContexts
 	std::unique_ptr<Scope> scope;  // Parser, FinalizerObjects, FinalizerTemporary, {WaitContext}
 	std::vector<Reference> recycledRefs;
 
-	std::mutex mtLoadPackage;
-	SpinLock lockPackages;
+	mutable std::mutex mtLoadPackage;
+	mutable SpinLock lockPackages;
 	std::unordered_map<PackageId, std::unique_ptr<Package>> packages;
 	std::unordered_map<std::string, PackageId> packageIdByName;
 
@@ -1000,35 +1071,47 @@ public:
 	std::deque<Thread*> queue;
 
 	// [Single thread]
-	SpinLock lockQueue;
+	mutable SpinLock lockQueue;
 
 	// [Multi-thread]
-	std::mutex mtQueue;
-	std::condition_variable cvQueue;
-	std::condition_variable cvShutdown;
+	mutable std::mutex mtQueue;
+	mutable std::condition_variable cvQueue;
+	mutable std::condition_variable cvShutdown;
 	unsigned targetWorkerThreads = 0;
 	unsigned nextId = 0;
 	std::unordered_map<unsigned, std::unique_ptr<std::thread>> workerThreads;
 
 	std::atomic<bool> hasWaitingThreads = {false};
-	SpinLock lockWaitingThreads;
+	mutable SpinLock lockWaitingThreads;
 	std::unordered_map<unsigned, Thread*> waitingThreads;
 	std::vector<unsigned> recycledWaitingIds;
 
-	SpinLock lockTimers;
+	mutable SpinLock lockTimers;
 	std::unordered_map<std::string, std::unique_ptr<Timer>> timers;
 	std::vector<Timer*> idToTimer;
 	std::unordered_map<unsigned, std::tuple<std::string, int64_t>> sleepRequests;  // [waitingId]
 
 	// Finalizer
 	Thread* finalizerThread = nullptr;
-	SpinLock lockFinalizerTemporary;
+	mutable SpinLock lockFinalizerTemporary;
 
 	MethodTableCache methodTableCache;  // by restoreEntities() only
 
 	// Drivers
-	SpinLock lockDrivers;
+	mutable SpinLock lockDrivers;
 	std::unordered_map<DriverType, std::unique_ptr<IDriver>> drivers;
+
+	// Debugger
+	std::shared_ptr<debugger::IDebuggerHost> debuggerHost;
+	mutable std::mutex lockDebugger;
+	bool paused = false;
+	unsigned previousWorkerThreads = 0;
+	std::unordered_map<debugger::BreakPointId, BreakPoint> breakPoints;
+	size_t nextBreakPointId = 0;
+
+	// Interactive mode
+	mutable SpinLock lockTrashNodes;
+	std::forward_list<std::shared_ptr<Node>> trashNodes;
 
 private:
 	void launchStorage();
@@ -1041,13 +1124,13 @@ private:
 
 	void saveEntityFrames(Writer& w);
 	void saveEntityMap(Writer& w);
-	void saveStorage(Writer& w);
-	void saveState(Writer& w);
+	void saveStorage(Writer& w) const;
+	void saveState(Writer& w) const;
 
 	void restoreEntityFrames(Reader& r);
 	void restoreEntityMap(Reader& r);
 	void restoreEntities(Reader& r, PackageId packageId, Node* node);
-	void restoreStorage(Reader& r);
+	void restoreStorage(Reader& r) const;
 	void restoreState(Reader& r);
 
 	void reactivateFinalizerThread();
@@ -1061,7 +1144,9 @@ public:
 	size_t stepCountForMarking(size_t totalObjectCount) override;
 	size_t stepCountForSweeping(size_t totalObjectCount) override;
 
-	Thread& createThread(Instance& instance, Package& package, Node* node = nullptr);
+	bool distributeStringTable(unsigned oldVersion = UINT_MAX);
+
+	Thread& createThread(Instance& instance, Package& package, bool isInteractive = false, Node* node = nullptr);
 	void enqueue(Thread* thread);
 
 	unsigned pause(Thread* thread);
@@ -1072,6 +1157,8 @@ public:
 	IDriver* getDriver(DriverType driverType);
 
 	static std::string formatOrigin(const std::string& fileName, unsigned lineNo);
+	static std::string formatMessage(ErrorLevel level,
+			const std::string& message, const std::vector<std::string>& args);
 	static std::string formatError(ErrorLevel level,
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args, bool outputExtraMessagePlaceholder = false);
@@ -1080,11 +1167,24 @@ public:
 			const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
 			const std::string& message, const std::vector<std::string>& args) override;
 
-	void outputError(const std::string& message);
+	void systemMessage(ErrorLevel level,
+			const std::string& message, const std::vector<std::string>& args) const;
+
+	void outputError(const std::string& message) const;
+
+	Thread* popDebuggableThread(debugger::ThreadId threadId);
+	template <typename ContinueCond>
+	debugger::StepRunResult stepRun(Thread* thread, ContinueCond continueCond);
+	debugger::CodePoint nodeToCodePoint(PackageId packageId, Node* node);
+	void adjustFramePhase(Node* node, size_t baseIndex, ptrdiff_t delta) const;
+	void applyBreakPoint(BreakPoint& bp);
+	void cancelBreakPoint(BreakPoint& bp) const;
+	void debugBreak(Node* node0, Thread* thread);
 
 public:
 	explicit RuntimeImp(std::shared_ptr<IHost> host) noexcept;
 
+	void setSelf(std::shared_ptr<RuntimeImp>& self);
 	void initialize(unsigned initialThreadCount);
 	void initialize(unsigned initialThreadCount, const std::vector<uint8_t>& savedState);
 
@@ -1094,6 +1194,7 @@ public:
 	const MethodTable* restoreMethodTable(PackageId packageId, Node* node);
 	const MethodTable* refMethodTable() { return &methods; }
 
+	std::vector<uint8_t> doShutdown(bool save);
 	~RuntimeImp() override;
 
 	std::vector<uint8_t> shutdown(bool save) override;
@@ -1104,15 +1205,37 @@ public:
 	PackageId loadPackage(const std::vector<Script>& scripts) override;
 	PackageId loadPackage(const std::string& packageName) override;
 	InstanceId run(PackageId packageId) override;
+	InstanceId createInteractiveInstance() override;
+	bool readyToNextInteraction(InstanceId interactiveInstanceId) override;
+	void push(InstanceId interactiveInstanceId, const std::string& scriptName,
+			const std::string& statement) override;
 	bool isRunning(InstanceId instanceId) override;
 	void stop(InstanceId instanceId) override;
 	TimerId addTimer(const std::string& name) override;
 	void increment(TimerId timerId, int64_t step) override;
+	std::shared_ptr<debugger::IDebugger> getDebugger(
+			std::shared_ptr<debugger::IDebuggerHost> debuggerHost) override;
 
-#ifndef NDEBUG
-	size_t objectCount() { return storage->objectCount(); }
+	void pause() override;
+	void resume() override;
+	bool isPaused() override;
+	debugger::StepRunResult stepOver(debugger::ThreadId threadId) override;
+	debugger::StepRunResult stepInto(debugger::ThreadId threadId) override;
+	debugger::StepRunResult stepOut(debugger::ThreadId threadId) override;
+	debugger::BreakPointId addBreakPoint(const debugger::CodePoint& point) override;
+	void removeBreakPoint(debugger::BreakPointId breakPointId) override;
+	std::vector<debugger::PackageState> getPackagesState() override;
+	std::vector<debugger::InstanceState> getInstancesState() override;
+	debugger::ThreadState getThreadState(debugger::ThreadId threadId) override;
+	debugger::FrameState getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) override;
+	debugger::ScopeState getScopeState(debugger::ThreadId threadId, debugger::ScopeId scopeId) override;
+	debugger::ObjectState getObjectState(debugger::ObjectId objectId) override;
+	void killThread(debugger::ThreadId threadId) override;
+
+#ifndef CHATRA_NDEBUG
+	size_t objectCount() const { return storage->objectCount(); }
 	void dump();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 };
 
 void initializeEmbeddedFunctions();  // should be called after initializeEmbeddedClasses()
@@ -1129,14 +1252,14 @@ void native_sleep(CHATRA_NATIVE_ARGS);
 void native_type(CHATRA_NATIVE_ARGS);
 void native_objectId(CHATRA_NATIVE_ARGS);
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void enableStdout(bool enabled);
 void setTestMode(const std::string& testMode);
 void beginCheckScript();
 void endCheckScript();
 bool showResults();
 void waitUntilFinished();
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 void native_check(CHATRA_NATIVE_ARGS);
 void native_checkCmd(CHATRA_NATIVE_ARGS);
@@ -1172,8 +1295,8 @@ Type* ObjectPool<Type>::allocate(Allocator allocator) {
 
 template <class Type>
 void ObjectPool<Type>::recycle(Type* value) {
-	assert(std::find(allocated.cbegin(), allocated.cend(), value) != allocated.cend());
-	assert(std::find(recycled.cbegin(), recycled.cend(), value) == recycled.cend());
+	chatra_assert(std::find(allocated.cbegin(), allocated.cend(), value) != allocated.cend());
+	chatra_assert(std::find(recycled.cbegin(), recycled.cend(), value) == recycled.cend());
 	value->clear();
 	recycled.emplace_back(value);
 }
@@ -1182,8 +1305,8 @@ template <class Type>
 template <class InputIterator>
 void ObjectPool<Type>::recycle(InputIterator first, InputIterator last) {
 	for (auto it = first; it != last; it++) {
-		assert(std::find(allocated.cbegin(), allocated.cend(), *it) != allocated.cend());
-		assert(std::find(recycled.cbegin(), recycled.cend(), *it) == recycled.cend());
+		chatra_assert(std::find(allocated.cbegin(), allocated.cend(), *it) != allocated.cend());
+		chatra_assert(std::find(recycled.cbegin(), recycled.cend(), *it) == recycled.cend());
 	}
 	std::for_each(first, last, [](Type* value) { value->clear(); });
 	recycled.insert(recycled.end(), first, last);
@@ -1239,7 +1362,7 @@ ObjectPool<Type>::~ObjectPool() {
 			value->dump(thread.runtime.primarySTable);
 		}
 	}
-	assert(leaked == 0);
+	chatra_assert(leaked == 0);
 }
 
 #else // CHATRA_TRACE_TEMPORARY_ALLOCATION

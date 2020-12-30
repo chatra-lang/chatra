@@ -129,6 +129,26 @@ bool ArgumentMatcher::matches(const std::vector<ArgumentSpec>& args, const std::
 			matchedCountWithoutDefaults == listCountWithoutDefaults + dictCountWithoutDefaults;
 }
 
+std::string ArgumentMatcher::getSignature(const StringTable* sTable) const {
+	std::string out = "(";
+	for (size_t i = 0; i < args.size(); i++) {
+		if (i != 0)
+			out += ", ";
+		auto& arg = args[i];
+		out += sTable->ref(arg.name);
+		if (arg.cl != nullptr) {
+			out += ":";
+			out += sTable->ref(arg.cl->getName());
+		}
+		if (arg.type == ArgumentDef::Type::ListVarArg || arg.type == ArgumentDef::Type::DictVarArg)
+			out += "...";
+		if (arg.defaultOp != nullptr)
+			out += formatText("=%p", static_cast<void*>(arg.defaultOp->subNodes[1].get()));
+	}
+	out += ")";
+	return out;
+}
+
 Method::Method(Node* node, const Class* cl, StringId name, size_t position, size_t primaryPosition) noexcept
 		: MethodBase(node), cl(cl), name(name), subName(StringId::Invalid), position(position), primaryPosition(primaryPosition) {}
 
@@ -137,19 +157,18 @@ Method::Method(Node* node, const Class* cl, StringId name, StringId subName,
 		: MethodBase(node), ArgumentMatcher(std::move(args), std::move(subArgs)),
 		cl(cl), name(name), subName(subName), position(SIZE_MAX), primaryPosition(SIZE_MAX) {}
 
-MethodTable::MethodTable(ForEmbeddedMethods forEmbeddedMethods) noexcept
+MethodTable::MethodTable(ForEmbeddedMethods) noexcept
 		: source(Source::EmbeddedMethods), sourceClassPtr(nullptr) {
-	(void)forEmbeddedMethods;
 }
 
 MethodTable::MethodTable(const Class* cl, Source source) noexcept : source(source), sourceClassPtr(cl) {
-	assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
-	assert(cl != nullptr);
+	chatra_assert(source == Source::ClassMethods || source == Source::ClassSuperMethods || source == Source::ClassConstructors);
+	chatra_assert(cl != nullptr);
 }
 
 MethodTable::MethodTable(Package& package, Node* node) noexcept
 		: source(Source::InnerFunctions), sourcePackagePtr(&package), sourceNodePtr(node) {
-	assert(node != nullptr);
+	chatra_assert(node != nullptr);
 }
 
 size_t MethodTable::add(Node* node, const Class* cl, StringId name, Node* syncNode) noexcept {
@@ -182,7 +201,7 @@ void MethodTable::add(const NativeMethod& method) noexcept {
 
 void MethodTable::inherit(const MethodTable& r, const Class* cl) {
 	ptrdiff_t delta = size - r.baseSize;
-	assert(delta >= 0);
+	chatra_assert(delta >= 0);
 
 	for (auto& e : r.byName) {
 		auto& methodList = byName[e.first];
@@ -240,6 +259,13 @@ std::vector<const Method*> MethodTable::findByName(StringId name, StringId subNa
 			continue;
 		ret.emplace_back(method);
 	}
+	return ret;
+}
+
+std::vector<const Method*> MethodTable::getAllMethods() const {
+	std::vector<const Method*> ret;
+	for (auto& method : methods)
+		ret.emplace_back(&method);
 	return ret;
 }
 
@@ -388,7 +414,7 @@ void Class::addDefaultConstructor(ObjectBuilder objectBuilder) {
 }
 
 void Class::addConvertingConstructor(const Class* sourceCl) {
-	assert(sourceCl != this);
+	chatra_assert(sourceCl != this);
 	ArgumentDef arg;
 	arg.type = ArgumentDef::Type::List;
 	arg.name = StringId::a0;
@@ -412,11 +438,35 @@ Class::Class(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFin
 Class::Class(Package* package, Node* node) noexcept : Class(package, node, node->sid, nullptr) {
 }
 
+static void addVariables(IErrorReceiver& errorReceiver, MethodTable& methods,
+		const std::unordered_map<Node*, Node*>& varSyncMap, const Class* cl, Node* n) {
+
+	for (auto& defNode : n->subNodes[SubNode::Var_Definitions]->subNodes) {
+		auto name = (defNode->type == NodeType::Name ? defNode->sid : defNode->subNodes[0]->sid);
+
+		auto duplicatedMethods = methods.findByName(name, StringId::Invalid);
+		for (auto* m : duplicatedMethods) {
+			if (m->position != SIZE_MAX) {
+				errorAtNode(errorReceiver, ErrorLevel::Error, defNode.get(), "duplicated variable name", {});
+				errorAtNode(errorReceiver, ErrorLevel::Error, m->node, "previous declaration is here", {});
+				throw RuntimeException(StringId::ParserErrorException);
+			}
+		}
+
+		Node* syncNode = nullptr;
+		auto it = varSyncMap.find(n);
+		if (it != varSyncMap.end())
+			syncNode = it->second;
+
+		methods.add(defNode.get(), cl, name, syncNode);
+	}
+}
+
 void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
 		ObjectBuilder objectBuilder, const std::vector<NativeMethod>& nativeMethods) {
 	this->objectBuilder = objectBuilder;
 
-	assert(node->blockNodesState == NodeState::Parsed);
+	chatra_assert(node->blockNodesState == NodeState::Parsed);
 
 	bool isClass = (node->type == NodeType::Class);
 	if (isClass)
@@ -436,27 +486,8 @@ void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable,
 
 	bool hasConstructor = false;
 	for (auto& n : node->symbols) {
-		if (n->type == NodeType::Var) {
-			for (auto& defNode : n->subNodes[SubNode::Var_Definitions]->subNodes) {
-				auto name = (defNode->type == NodeType::Name ? defNode->sid : defNode->subNodes[0]->sid);
-
-				auto duplicatedMethods = methods.findByName(name, StringId::Invalid);
-				for (auto* m : duplicatedMethods) {
-					if (m->position != SIZE_MAX) {
-						errorAtNode(errorReceiver, ErrorLevel::Error, defNode.get(), "duplicated variable name", {});
-						errorAtNode(errorReceiver, ErrorLevel::Error, m->node, "previous declaration is here", {});
-						throw RuntimeException(StringId::ParserErrorException);
-					}
-				}
-
-				Node* syncNode = nullptr;
-				auto it = varSyncMap.find(n.get());
-				if (it != varSyncMap.end())
-					syncNode = it->second;
-
-				methods.add(defNode.get(), this, name, syncNode);
-			}
-		}
+		if (n->type == NodeType::Var)
+			addVariables(errorReceiver, methods, varSyncMap, this, n.get());
 		else if (n->type == NodeType::Def) {
 			if (n->sid == StringId::Init) {
 				hasConstructor = true;
@@ -475,6 +506,29 @@ void Class::initialize(IErrorReceiver& errorReceiver, const StringTable* sTable,
 			constructors.add(method);
 		else
 			methods.add(method);
+	}
+}
+
+void Class::cumulativeInitializeForPackage(IErrorReceiver& errorReceiver, const StringTable* sTable, IClassFinder& classFinder,
+		Node* node) {
+
+	chatra_assert(node->blockNodesState == NodeState::Parsed);
+	this->node = node;
+
+	std::unordered_map<Node*, Node*> varSyncMap = getSyncMap(node);
+
+	for (auto& n : node->symbols) {
+		if (n->type == NodeType::Var)
+			addVariables(errorReceiver, methods, varSyncMap, this, n.get());
+		else if (n->type == NodeType::Def) {
+			if (n->sid == StringId::Init) {
+				errorAtNode(errorReceiver, ErrorLevel::Error, n.get(),
+						"package-level init() cannot be defined in interactive mode", {});
+				throw RuntimeException(StringId::ParserErrorException);
+			}
+			else
+				addMethod(methods, errorReceiver, sTable, classFinder, n.get(), nullptr);
+		}
 	}
 }
 
@@ -503,9 +557,9 @@ static std::pair<StringId, const Class*> findArgumentClass(IClassFinder& classFi
 
 static std::pair<StringId, const Class*> findArgumentClassAsPrimitive(IClassFinder& classFinder, Node* nValue) {
 	if (nValue->type != NodeType::Literal) {
-		assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
+		chatra_assert(nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus);
 		nValue = nValue->subNodes[0].get();
-		assert(nValue->type == NodeType::Literal);
+		chatra_assert(nValue->type == NodeType::Literal);
 	}
 
 	switch (nValue->literalValue->type) {
@@ -516,7 +570,7 @@ static std::pair<StringId, const Class*> findArgumentClassAsPrimitive(IClassFind
 	case LiteralType::MultilingualString:
 		return std::make_pair(StringId::String, classFinder.findClass(StringId::String));  // Is it safe?
 	default:
-		assert(false);
+		chatra_assert(false);
 		return std::make_pair(StringId::Invalid, nullptr);
 	}
 }
@@ -552,7 +606,7 @@ ArgumentDef nodeToArgument(IErrorReceiver& errorReceiver,
 				|| nValue->op == Operator::UnaryMinus || nValue->op == Operator::UnaryPlus)
 			c = findArgumentClassAsPrimitive(classFinder, nValue);
 		else {
-			assert(nValue->op == Operator::Call);
+			chatra_assert(nValue->op == Operator::Call);
 			c = findArgumentClass(classFinder, nValue->subNodes[0].get());
 		}
 
@@ -643,7 +697,7 @@ void addMethod(MethodTable& table, IErrorReceiver& errorReceiver,
 
 	auto exists = table.findByName(node->sid, StringId::Invalid);
 	if (nOperator) {
-		auto it = std::find_if(exists.cbegin(), exists.cend(), [](const Method* m) -> bool { return m->node->flags & NodeFlags::Native; });
+		auto it = std::find_if(exists.cbegin(), exists.cend(), [](const Method* m) -> bool { return (m->node->flags & NodeFlags::Native) != 0; });
 		if (it != exists.cend()) {
 			errorAtNode(errorReceiver, ErrorLevel::Error, node, "function with operator suffix cannot have the same name with native functions", {});
 			if ((*it)->node != nullptr)
@@ -666,7 +720,7 @@ void addMethod(MethodTable& table, IErrorReceiver& errorReceiver,
 
 void addInnerMethods(MethodTable& table, IErrorReceiver& errorReceiver,
 		const StringTable* sTable, IClassFinder& classFinder, Node* node) {
-	assert(node->type != NodeType::ScriptRoot && node->type != NodeType::Class);
+	chatra_assert(node->type != NodeType::ScriptRoot && node->type != NodeType::Class);
 	for (auto& n : node->symbols) {
 		if (n->type == NodeType::Def)
 			addMethod(table, errorReceiver, sTable, classFinder, n.get());
@@ -729,7 +783,7 @@ void Tuple::Key::restore(Reader& r) {
 
 Tuple::Tuple(Storage& storage, Requester requester) noexcept
 		: ObjectBase(storage, typeId_Tuple, getClassStatic(), 0, requester) {
-	assert(requester != InvalidRequester);
+	chatra_assert(requester != InvalidRequester);
 }
 
 Tuple::Tuple(Storage& storage, const StringTable* sTable, const std::vector<std::pair<Key, Reference>>& args,
@@ -737,7 +791,7 @@ Tuple::Tuple(Storage& storage, const StringTable* sTable, const std::vector<std:
 		: ObjectBase(storage, typeId_Tuple, getClassStatic(), args.size(), requester) {
 
 	// Tuple is always temporary value, never at outside of scope
-	assert(requester != InvalidRequester);
+	chatra_assert(requester != InvalidRequester);
 
 	indexToKey.reserve(args.size());
 
@@ -802,7 +856,7 @@ std::vector<ArgumentSpec> Tuple::toArgs() const {
 				: !key.str.empty() ? StringId::AnyString : StringId::Invalid);
 
 		auto r0 = ref(i);
-		assert(!r0.requiresLock() || r0.lockedBy() != InvalidRequester);
+		chatra_assert(!r0.requiresLock() || r0.lockedBy() != InvalidRequester);
 		ret.emplace_back(sid, getReferClass(r0));
 	}
 	return ret;
@@ -830,7 +884,7 @@ bool Tuple::restore(Reader& r) {
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void ArgumentMatcher::dumpArgumentMatcher(const std::shared_ptr<StringTable>& sTable) const {
 	printf("(");
 	for (size_t i = 0; i < args.size(); i++) {
@@ -932,6 +986,6 @@ void Tuple::dump(const std::shared_ptr<StringTable>& sTable) const {
 		printf(" \"%s\"[%u]", e.first.c_str(), static_cast<unsigned>(e.second));
 	printf("\n");
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra

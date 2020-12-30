@@ -41,7 +41,7 @@ void Timer::popAndInvokeHandlers(Time currentTime) {
 		timeQueue.pop_front();
 
 		auto it = map.find(tm);
-		assert(it != map.cend());
+		chatra_assert(it != map.cend());
 		handlers = std::move(it->second.handlers);
 		map.erase(it);
 		for (auto& e : handlers) {
@@ -119,11 +119,11 @@ void Timer::cancelAll() {
 }
 
 
-class SystemTimer : public Timer {
+class SystemTimer final : public Timer {
 private:
 	bool stop = false;
-	std::mutex mt;
-	std::condition_variable cv;
+	mutable std::mutex mt;
+	mutable std::condition_variable cv;
 	std::thread th;
 
 private:
@@ -163,12 +163,12 @@ public:
 };
 
 
-class EmulatedTimer : public Timer {
+class EmulatedTimer final : public Timer {
 public:
 	~EmulatedTimer() override = default;
 
 private:
-	SpinLock lockTime;
+	mutable SpinLock lockTime;
 	Time time;
 
 protected:

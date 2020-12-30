@@ -22,7 +22,7 @@
 
 namespace chatra {
 
-constexpr unsigned currentVersion = 200;  // major(XX).minor(XX).revision(XX)
+constexpr unsigned currentVersion = 300;  // major(XX).minor(XX).revision(XX)
 
 static std::atomic<size_t> lastRuntimeId = {0};
 
@@ -67,14 +67,14 @@ static bool parseBlockNodes(ParserWorkingSet& ws, IErrorReceiverBridge& errorRec
 	return false;
 }
 
-std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* node) {
+std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* node, bool processOnlyLast) {
 	std::shared_ptr<Node> scriptNode;
 	IErrorReceiverBridge errorReceiverBridge(errorReceiver);
 
 	if (!grouped) {
 		grouped = true;
 
-		for (auto& script : scripts) {
+		auto parseScript = [&](const Script& script) {
 			try {
 				auto fileLines = parseLines(errorReceiverBridge, runtime.primarySTable, script.name, 1, script.script);
 				auto fileNode = groupScript(errorReceiverBridge, runtime.primarySTable, fileLines);
@@ -92,6 +92,13 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 			catch (AbortCompilingException&) {
 				// nothing to do
 			}
+		};
+
+		if (processOnlyLast)
+			parseScript(scripts.back());
+		else {
+			for (auto& script : scripts)
+				parseScript(script);
 		}
 
 		if (!scriptNode) {
@@ -118,9 +125,18 @@ std::shared_ptr<Node> Package::parseNode(IErrorReceiver& errorReceiver, Node* no
 	return scriptNode;
 }
 
+void Package::distributeScriptNode(std::shared_ptr<Node> scriptNode) {
+	std::lock_guard<SpinLock> lock0(lockNode);
+	node = std::move(scriptNode);
+	auto* nNew = node.get();
+	for (auto* thread : threadsWaitingForNode)
+		thread->frames.back().node = nNew;
+	threadsWaitingForNode.clear();
+}
+
 bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringTable* sTable, Node* node,
-		bool warnIfDuplicates) {
-	assert(node->type == NodeType::Import);
+		bool warnIfDuplicates) const {
+	chatra_assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 	if (imports.count(sid) != 0) {
@@ -147,7 +163,7 @@ bool Package::requiresProcessImport(IErrorReceiver& errorReceiver, const StringT
 }
 
 Package& Package::import(Node* node, PackageId targetPackageId) {
-	assert(node->type == NodeType::Import);
+	chatra_assert(node->type == NodeType::Import);
 
 	auto sid = node->subNodes[SubNode::Import_Package]->sid;
 
@@ -193,12 +209,17 @@ static std::vector<NativeMethod> filterNativeMethods(
 }
 
 void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
-	assert(node->blockNodesState == NodeState::Parsed);
+	chatra_assert(node->blockNodesState == NodeState::Parsed);
 
 	// Performs two-path initialization to allow cross references in
 	// constructor arguments or package-global defs
 	std::unordered_map<StringId, Node*> classNames;
 	std::vector<Class*> classList;
+
+	// Note that in the case of interactive instances, this method can be called multiple times
+	for (auto& e : classes.refClassMap())
+		classNames.emplace(e.first, e.second->getNode());
+
 	for (auto& n : node->symbols) {
 		if (n->type != NodeType::Class)
 			continue;
@@ -215,8 +236,11 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	}
 
 	// Register variables, classes and operator overrides
-	assert(!clPackage);
-	clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(), nullptr, filterNativeMethods(sTable, handlers)));
+	if (clPackage)
+		clPackage->cumulativeInitializeForPackage(errorReceiver, sTable, *this, node.get());
+	else
+		clPackage.reset(new Class(errorReceiver, sTable, *this, this, node.get(),
+				nullptr, filterNativeMethods(sTable, handlers)));
 
 	for (auto* cl : classList)
 		cl->initialize(errorReceiver, sTable, *this, nullptr, filterNativeMethods(sTable, handlers, cl->getName()));
@@ -229,8 +253,14 @@ void Package::build(IErrorReceiver& errorReceiver, const StringTable* sTable) {
 	}
 }
 
-void Package::allocatePackageObject() {
-	scope->addConst(StringId::PackageObject).allocateWithoutLock<PackageObject>(clPackage.get());
+void Package::allocatePackageObject() const {
+	if (scope->has(StringId::PackageObject)) {
+		// for interactive instances
+		scope->ref(StringId::PackageObject).derefWithoutLock<PackageObject>()
+		        .appendElements(*runtime.storage, clPackage->refMethods().getPrimaryIndexes());
+	}
+	else
+		scope->addConst(StringId::PackageObject).allocateWithoutLock<PackageObject>(clPackage.get());
 }
 
 const Class* Package::findClass(StringId name) {
@@ -262,7 +292,7 @@ Package* Package::findPackage(StringId name) {
 	return it == importsByName.end() ? nullptr : it->second;
 }
 
-const std::vector<Package*>& Package::refAnonymousImports() {
+const std::vector<Package*>& Package::refAnonymousImports() const {
 	return anonymousImports;
 }
 
@@ -271,6 +301,13 @@ void Package::pushNodeFrame(Thread& thread, Package& package, size_t parentIndex
 	if (node->blockNodesState != NodeState::Parsed)
 		threadsWaitingForNode.emplace_back(&thread);
 	thread.frames.emplace_back(thread, package, parentIndex, type, node.get(), popCount);
+}
+
+void Package::pushNodeFrame(Thread& thread, Package& package, size_t parentIndex, Scope* scope, size_t popCount) {
+	std::lock_guard<SpinLock> lock(lockNode);
+	if (node->blockNodesState != NodeState::Parsed)
+		threadsWaitingForNode.emplace_back(&thread);
+	thread.frames.emplace_back(Frame::ForInteractive(), thread, package, parentIndex, scope, node.get(), popCount);
 }
 
 RuntimeId Package::runtimeId() const {
@@ -367,13 +404,13 @@ void RuntimeImp::launchStorage() {
 	storage = Storage::newInstance(this);
 	gcInstance = instanceIds.allocate();
 	gcThread = threadIds.allocate(*this, *gcInstance);
-	assert(gcInstance->getId() == static_cast<InstanceId>(0));
-	assert(gcThread->getId() == static_cast<Requester>(0));
+	chatra_assert(gcInstance->getId() == static_cast<InstanceId>(0));
+	chatra_assert(gcThread->getId() == static_cast<Requester>(0));
 
 	// Register pseudo package for finalizer
 	auto _finalizerPackageId = loadPackage({std::string("(finalizer)"), ""});
-	assert(_finalizerPackageId == finalizerPackageId);
-    (void)_finalizerPackageId;
+	chatra_assert(_finalizerPackageId == finalizerPackageId);
+	(void)_finalizerPackageId;
 
 	auto* finalizerPackage = packageIds.ref(finalizerPackageId);
 	finalizerPackage->initialized = true;
@@ -389,11 +426,11 @@ void RuntimeImp::launchStorage() {
 
 void RuntimeImp::launchFinalizerThread() {
 	auto _finalizerInstanceId = run(finalizerPackageId);  // global scope will be restored later
-	assert(_finalizerInstanceId == finalizerInstanceId);
-    (void)_finalizerInstanceId;
+	chatra_assert(_finalizerInstanceId == finalizerInstanceId);
+	(void)_finalizerInstanceId;
 
 	finalizerThread = instanceIds.ref(finalizerInstanceId)->threads.begin()->second.get();
-	assert(finalizerThread->getId() == finalizerThreadId);
+	chatra_assert(finalizerThread->getId() == finalizerThreadId);
 
 	scope = storage->add(ScopeType::Global);
 	scope->add(StringId::Parser);
@@ -448,7 +485,7 @@ static void addToParentMap(std::unordered_map<const Node*, const Node*>& parentM
 	for (auto& n : childNodes) {
 		if (!n)
 			continue;
-		assert(parentMap.count(n.get()) == 0);
+		chatra_assert(parentMap.count(n.get()) == 0);
 		parentMap.emplace(n.get(), node);
 		nodes.emplace_back(n.get());
 	}
@@ -530,7 +567,7 @@ void RuntimeImp::saveEntityMap(Writer& w) {
 #define CHATRA_WRITE_OBJECT_REFS(className)  case typeId_##className:  \
 		static_cast<className*>(object)->saveReferences(w);  break
 
-void RuntimeImp::saveStorage(Writer& w) {
+void RuntimeImp::saveStorage(Writer& w) const {
 	storage->save(w, [&](TypeId typeId, Object* object) {
 		w.saveResync(static_cast<int>(typeId));
 		switch (typeId) {
@@ -565,7 +602,7 @@ void RuntimeImp::saveStorage(Writer& w) {
 	});
 }
 
-void RuntimeImp::saveState(Writer& w) {
+void RuntimeImp::saveState(Writer& w) const {
 
 	w.out(packageIds, [&](const Package& package) {
 		return package.getId() != finalizerPackageId;
@@ -743,13 +780,13 @@ void RuntimeImp::restoreEntities(Reader& r, PackageId packageId, Node* node) {
 		static_cast<className*>(object)->restoreReferences(r);  break
 
 template <class Type>
-struct RestoreExceptionPredicate {
+struct RestoreExceptionPredicate final {
 	void operator()(Object** object, Storage& storage) {
 		*object = new Type(storage);
 	}
 };
 
-void RuntimeImp::restoreStorage(Reader& r) {
+void RuntimeImp::restoreStorage(Reader& r) const {
 	storage->restore(r, [&](TypeId typeId, Object** object) {
 		r.restoreResync(static_cast<int>(typeId));
 		switch (typeId) {
@@ -922,8 +959,25 @@ size_t RuntimeImp::stepCountForSweeping(size_t totalObjectCount) {
 	return std::max<size_t>(64, totalObjectCount >> 4U);
 }
 
-Thread& RuntimeImp::createThread(Instance& instance, Package& package, Node* node) {
+bool RuntimeImp::distributeStringTable(unsigned oldVersion) {
+	if (oldVersion != UINT_MAX && oldVersion == primarySTable->getVersion())
+		return false;
+
+	primarySTable->clearDirty();
+	{
+		std::lock_guard<SpinLock> lock0(lockSTable);
+		distributedSTable = primarySTable->copy();
+	}
+	threadIds.forEach([&](Thread& thread) {
+		thread.hasNewSTable = true;
+	});
+
+	return true;
+}
+
+Thread& RuntimeImp::createThread(Instance& instance, Package& package, bool isInteractive, Node* node) {
 	auto thread = threadIds.lockAndAllocate(*this, instance);
+	thread->isInteractive = isInteractive;
 	thread->postInitialize();
 	thread->frames.reserve(16);
 	thread->frames.emplace_back(*thread, package, SIZE_MAX, scope.get());
@@ -948,7 +1002,7 @@ Thread& RuntimeImp::createThread(Instance& instance, Package& package, Node* nod
 }
 
 void RuntimeImp::enqueue(Thread* thread) {
-	assert(thread != nullptr);
+	chatra_assert(thread != nullptr);
 
 	/*std::printf("enqueue: instanceId %u, threadId = %u; frames.size = %u\n",
 			static_cast<unsigned>(thread->instance.getId()),
@@ -962,9 +1016,9 @@ void RuntimeImp::enqueue(Thread* thread) {
 		std::unique_lock<std::mutex> lock(mtQueue);
 		count++;
 		if (count == breakCount)
-			assert(false);
+			chatra_assert(false);
 		for (auto* t : queue)
-			assert(t != thread);
+			chatra_assert(t != thread);
 	}*/
 
 	if (multiThread) {
@@ -997,7 +1051,12 @@ void RuntimeImp::resume(unsigned waitingId) {
 	{
 		std::lock_guard<SpinLock> lock(lockWaitingThreads);
 		auto it = waitingThreads.find(waitingId);
-		assert(it != waitingThreads.end());
+		if (it == waitingThreads.end()) {
+			systemMessage(ErrorLevel::Info, "resume: specified waitingId = ${0} is not valid; "
+					"this is not likely to be error if killThread() has been called on the thread in waiting state",
+					{std::to_string(waitingId)});
+			return;
+		}
 		thread = it->second;
 	}
 
@@ -1037,7 +1096,7 @@ IDriver* RuntimeImp::getDriver(DriverType driverType) {
 	auto it = drivers.find(driverType);
 	IDriver* driver = nullptr;
 	if (it == drivers.cend())
-		driver = drivers.emplace(driverType, host->queryDriver(driverType)).first->second.get();
+		driver = drivers.emplace(driverType, std::unique_ptr<IDriver>(host->queryDriver(driverType))).first->second.get();
 	else
 		driver = it->second.get();
 	if (driver == nullptr)
@@ -1060,12 +1119,16 @@ std::string RuntimeImp::formatOrigin(const std::string& fileName, unsigned lineN
 	return out;
 }
 
-std::string RuntimeImp::formatError(ErrorLevel level,
-		const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
-		const std::string& message, const std::vector<std::string>& args, bool outputExtraMessagePlaceholder) {
+std::string RuntimeImp::formatMessage(ErrorLevel level,
+		const std::string& message, const std::vector<std::string>& args) {
 
-	std::string out = formatOrigin(fileName, lineNo);
-	out.append(":");
+	std::string out;
+	switch (level) {
+	case ErrorLevel::Info:  out = "info";  break;
+	case ErrorLevel::Warning:  out = "warning";  break;
+	case ErrorLevel::Error:  out = "error";  break;
+	case ErrorLevel::Fatal:  out = "fatal";  break;
+	}
 
 	std::string outMessage = message;
 	if (!args.empty()) {
@@ -1081,17 +1144,48 @@ std::string RuntimeImp::formatError(ErrorLevel level,
 			}
 		}
 	}
-	out.append(" ").append(level == ErrorLevel::Warning ? "warning" : "error").append(": ").append(outMessage);
+	out.append(": ").append(outMessage);
+
+	return out;
+}
+
+std::string RuntimeImp::formatError(ErrorLevel level,
+		const std::string& fileName, unsigned lineNo, const std::string& line, size_t first, size_t last,
+		const std::string& message, const std::vector<std::string>& args, bool outputExtraMessagePlaceholder) {
+
+	std::string out = formatOrigin(fileName, lineNo);
+	out.append(": ");
+	out.append(formatMessage(level, message, args));
+
 	if (outputExtraMessagePlaceholder)
 		out.append("${0}");  // Placeholder for "+extra N errors"
 
 	if (!line.empty()) {
-		out.append(":\n");
-		first = (first == SIZE_MAX ? 0 : first);
-		last = (last == SIZE_MAX ? line.size() : last);
-		assert(first <= last);
-		out.append("  ").append(line.substr(0, first))
-				.append(" *HERE* >>").append(line.substr(first, last - first)).append("<< ").append(line.substr(last));
+		out.append(":\n\t");
+
+		auto skip = static_cast<size_t>(std::distance(line.cbegin(), std::find_if(line.cbegin(), line.cend(), isNotSpace)));
+
+		if (first == SIZE_MAX || last == SIZE_MAX)
+			out.append(line.substr(skip));
+		else {
+			chatra_assert(first <= last && last <= line.size());
+			skip = std::min(skip, first);
+
+			auto validLength = line.find("//", last);
+			if (validLength == std::string::npos)
+				validLength = line.size();
+
+			bool hasTailingText = (line.cbegin() + validLength
+					!= std::find_if(line.cbegin() + last, line.cbegin() + validLength, isNotSpace));
+
+			if (first == skip && !hasTailingText)
+				out.append(line.substr(skip));
+			else {
+				out.append(line.substr(skip, first - skip))
+						.append(" *HERE* ->").append(line.substr(first, last - first)).append("<- ")
+						.append(line.substr(last));
+			}
+		}
 	}
 
 	out.append("\n");
@@ -1104,13 +1198,364 @@ void RuntimeImp::error(ErrorLevel level,
 	outputError(formatError(level, fileName, lineNo, line, first, last, message, args));
 }
 
-void RuntimeImp::outputError(const std::string& message) {
+void RuntimeImp::systemMessage(ErrorLevel level,
+		const std::string& message, const std::vector<std::string>& args) const {
+	outputError("system " + formatMessage(level, message, args) + "\n");
+}
+
+void RuntimeImp::outputError(const std::string& message) const {
 	host->console(message);
 }
+
+Thread* RuntimeImp::popDebuggableThread(debugger::ThreadId threadId) {
+	if (!paused)
+		throw debugger::IllegalRuntimeStateException("Runtime is not paused");
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+
+	Thread* thread = threadIds.lockAndRef(requester);
+	if (thread == nullptr)
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+
+	{
+		std::lock_guard<SpinLock> lock0(lockQueue);
+		auto it = std::find(queue.cbegin(), queue.cend(), thread);
+		if (it == queue.cend())
+			return nullptr;
+		queue.erase(it);
+	}
+
+	return thread;
+}
+
+template <typename ContinueCond>
+debugger::StepRunResult RuntimeImp::stepRun(Thread* thread, ContinueCond continueCond) {
+	auto threadId = thread->getId();
+
+	checkGc();
+	thread->captureStringTable();
+
+	while (continueCond()) {
+		if (debuggerHost && !debuggerHost->onStepRunLoop()) {
+			enqueue(thread);
+			return debugger::StepRunResult::AbortedByHost;
+		}
+
+		switch (thread->stepRun()) {
+		case Thread::StepRunResult::Abort:
+			thread->finish();
+			return debugger::StepRunResult::Finished;
+		case Thread::StepRunResult::Continue:
+			continue;
+		case Thread::StepRunResult::Next:
+			break;
+		case Thread::StepRunResult::BreakPoint:
+			return debugger::StepRunResult::BreakPoint;
+		}
+
+		if (threadIds.lockAndRef(threadId) == nullptr)
+			return debugger::StepRunResult::Finished;
+
+		{
+			std::lock_guard<SpinLock> lock0(lockQueue);
+			auto it = std::find(queue.cbegin(), queue.cend(), thread);
+			if (it != queue.cend()) {
+				queue.erase(it);
+				continue;
+			}
+		}
+
+		{
+			std::lock_guard<SpinLock> lock1(lockWaitingThreads);
+			auto it = std::find_if(waitingThreads.cbegin(), waitingThreads.cend(), [&](const std::pair<unsigned, Thread*>& e) {
+				return e.second == thread;
+			});
+			if (it != waitingThreads.cend())
+				return debugger::StepRunResult::Blocked;
+		}
+
+		return debugger::StepRunResult::WaitingResources;
+	}
+
+	enqueue(thread);
+	return debugger::StepRunResult::Stopped;
+}
+
+debugger::CodePoint RuntimeImp::nodeToCodePoint(PackageId packageId, Node* node) {
+	if (node == nullptr)
+		return debugger::CodePoint();
+
+	auto line = (node->tokens.empty() ? node->line : node->tokens[0]->line.lock());
+	if (!line)
+		return debugger::CodePoint();
+
+	debugger::CodePoint ret;
+
+	{
+		std::lock_guard<decltype(packageIds)> lock0(packageIds);
+		if (!packageIds.has(packageId))
+			throw IllegalArgumentException();
+		ret.packageName = packageIds.ref(packageId)->name;
+	}
+
+	ret.fileName = line->fileName;
+	ret.lineNo = line->lineNo;
+	return ret;
+}
+
+static bool findNode(const debugger::CodePoint& point, Node* node, std::vector<Node*>& path_r) {
+	auto line = (node->tokens.empty() ? node->line : node->tokens[0]->line.lock());
+	if (line && line->lineNo == point.lineNo && line->fileName == point.fileName) {
+		path_r.emplace_back(node);
+		return true;
+	}
+
+	for (auto& n : node->blockNodes) {
+		if (findNode(point, n.get(), path_r)) {
+			path_r.emplace_back(node);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void RuntimeImp::adjustFramePhase(Node* node, size_t baseIndex, ptrdiff_t delta) const {
+	threadIds.forEach([&](Thread& thread) {
+		for (auto& f : thread.frames) {
+			if (f.node == node && f.phase <= f.node->blockNodes.size() && f.phase >= baseIndex)
+				f.phase += delta;
+		}
+	});
+}
+
+void RuntimeImp::applyBreakPoint(BreakPoint& bp) {
+	Package* p = nullptr;
+	packageIds.forEach([&](Package& package) {
+		if (package.name != bp.point.packageName)
+			return;
+		for (auto& s : package.scripts) {
+			if (s.name == bp.point.fileName) {
+				p = &package;
+				break;
+			}
+		}
+	});
+	if (p == nullptr)
+		throw IllegalArgumentException();
+
+	IErrorReceiverBridge errorReceiverBridge(*this);
+	unsigned sTableVersion = primarySTable->getVersion();
+
+	if (!p->grouped) {
+		auto scriptNode = p->parseNode(errorReceiverBridge, nullptr);
+		if (errorReceiverBridge.hasError())
+			throw debugger::ParserErrorAroundBreakPointException();
+		p->distributeScriptNode(std::move(scriptNode));
+	}
+
+	Node* node;
+	{
+		std::lock_guard<SpinLock> lock0(p->lockNode);
+		node = p->node.get();
+	}
+
+	std::vector<Node*> path;
+	for (;;) {
+		path.clear();
+		if (!findNode(bp.point, node, path)) {
+			distributeStringTable(sTableVersion);
+			throw debugger::NonBreakableStatementException();
+		}
+
+		auto it = std::find_if(path.crbegin(), path.crend(), [&](Node* n) {
+			return n->blockNodesState != NodeState::Parsed;
+		});
+		if (it == path.crend())
+			break;
+
+		p->parseNode(errorReceiverBridge, *it);
+		if (errorReceiverBridge.hasError())
+			throw debugger::ParserErrorAroundBreakPointException();
+	}
+
+	distributeStringTable(sTableVersion);
+
+	switch (path[0]->type) {
+	case NodeType::Expression:
+	case NodeType::Touch:
+	case NodeType::Switch:
+	case NodeType::Do:
+	case NodeType::Break:
+	case NodeType::Continue:
+	case NodeType::Return:
+	case NodeType::Throw: {
+		bp.type = BreakPointType::Statement;
+		bp.node0 = path[0];
+		bp.node1 = path[1];
+
+		auto it = std::find_if(path[1]->blockNodes.cbegin(), path[1]->blockNodes.cend(), [&](const std::shared_ptr<Node>& n) {
+			return n.get() == path[0];
+		});
+		chatra_assert(it != path[1]->blockNodes.cend());
+
+		adjustFramePhase(path[1], std::distance(path[1]->blockNodes.cbegin(), it), +1);
+
+		auto* n = path[1]->blockNodes.insert(it, std::make_shared<Node>())->get();
+		n->type = ntBreakPointStatement;
+		n->blockNodesState = NodeState::Parsed;
+		break;
+	}
+
+	case NodeType::Def:
+	case NodeType::DefOperator:
+	case NodeType::Class:
+	case NodeType::Case:
+	case NodeType::Default:
+	case NodeType::Catch:
+	case NodeType::Finally: {
+		bp.type = BreakPointType::InnerBlock;
+		bp.node0 = path[0];
+		chatra_assert(path[0]->blockNodesState == NodeState::Parsed);
+
+		adjustFramePhase(path[0], 0, +1);
+
+		auto* n = path[0]->blockNodes.insert(path[0]->blockNodes.cbegin(), std::make_shared<Node>())->get();
+		n->type = ntBreakPointInnerBlock;
+		n->blockNodesState = NodeState::Parsed;
+		break;
+	}
+
+	case NodeType::If:
+	case NodeType::ElseIf:
+	case NodeType::Else: {
+		bp.type = BreakPointType::IfGroup;
+		bp.node0 = path[0];
+		bp.node1 = path[1];  // IfGroup
+
+		switch (path[0]->type) {
+		case NodeType::If:  path[1]->type = ntBreakPointIfGroup;  break;
+		case NodeType::ElseIf:  path[0]->type = ntBreakPointElseIf;  break;
+		case NodeType::Else:  path[0]->type = ntBreakPointElse;  break;
+		default:
+			throw InternalError();
+		}
+		break;
+	}
+
+	default: {
+		NodeType nodeType;
+		switch (path[0]->type) {
+		case NodeType::For:  bp.type = BreakPointType::For;  nodeType = ntBreakPointFor;  break;
+		case NodeType::While:  bp.type = BreakPointType::While;  nodeType = ntBreakPointWhile;  break;
+		default:
+			throw debugger::NonBreakableStatementException();
+		}
+		bp.node0 = path[0];
+		path[0]->type = nodeType;
+		break;
+	}
+	}
+}
+
+void RuntimeImp::cancelBreakPoint(BreakPoint& bp) const {
+	switch (bp.type) {
+	case BreakPointType::Invalid:
+		return;
+	case BreakPointType::Statement: {
+		auto it = std::find_if(bp.node1->blockNodes.cbegin(), bp.node1->blockNodes.cend(), [&](const std::shared_ptr<Node>& n) {
+			return n.get() == bp.node0;
+		});
+		chatra_assert(it != bp.node1->blockNodes.cbegin() && it != bp.node1->blockNodes.cend());
+
+		adjustFramePhase(bp.node1, std::distance(bp.node1->blockNodes.cbegin(), it), -1);
+
+		bp.node1->blockNodes.erase(it - 1);
+		break;
+	}
+
+	case BreakPointType::InnerBlock: {
+		adjustFramePhase(bp.node0, 1, -1);
+		bp.node0->blockNodes.erase(bp.node0->blockNodes.cbegin());
+		break;
+	}
+
+	case BreakPointType::IfGroup: {
+		if (bp.node0->type == NodeType::If)
+			bp.node1->type = NodeType::IfGroup;
+		else if (bp.node0->type == ntBreakPointElseIf)
+			bp.node0->type = NodeType::ElseIf;
+		else if (bp.node0->type == ntBreakPointElse)
+			bp.node0->type = NodeType::Else;
+		else
+			throw InternalError();
+		break;
+	}
+
+	default: {
+		NodeType nodeType;
+		switch (bp.type) {
+		case BreakPointType::For:  nodeType = NodeType::For;  break;
+		case BreakPointType::While:  nodeType = NodeType::While;  break;
+		default:
+			throw InternalError();
+		}
+		bp.node0->type = nodeType;
+		break;
+	}
+	}
+}
+
+void RuntimeImp::debugBreak(Node* node0, Thread* thread) {
+	debugger::BreakPointId breakPointId;
+	debugger::IDebuggerHost* debuggerHost;
+	{
+		std::lock_guard<std::mutex> lock0(lockDebugger);
+		if (paused)
+			throw debugger::IllegalRuntimeStateException();
+
+		auto it = std::find_if(breakPoints.cbegin(), breakPoints.cend(), [&](decltype(breakPoints)::const_reference e) {
+			return e.second.node0 == node0;
+		});
+		if (it == breakPoints.cend())
+			throw InternalError();
+		breakPointId = it->first;
+
+		if (multiThread) {
+			{
+				std::unique_lock<std::mutex> lock1(mtQueue);
+				previousWorkerThreads = targetWorkerThreads;
+			}
+
+			if (previousWorkerThreads != 1) {
+				setWorkers(1);
+				{
+					std::unique_lock<std::mutex> lock(mtQueue);
+					if (!workerThreads.empty())
+						cvShutdown.wait(lock, [&]() { return workerThreads.size() == 1; });
+				}
+			}
+			setWorkers(0);
+		}
+		paused = true;
+		debuggerHost = this->debuggerHost.get();
+	}
+
+	chatra_assert(thread != nullptr);
+	enqueue(thread);
+
+	if (debuggerHost != nullptr)
+		debuggerHost->onBreakPoint(breakPointId);
+}
+
 
 RuntimeImp::RuntimeImp(std::shared_ptr<IHost> host) noexcept
 		: runtimeId(static_cast<RuntimeId>(lastRuntimeId.fetch_add(1))),
 		host(std::move(host)), methods(MethodTable::ForEmbeddedMethods()) {
+}
+
+void RuntimeImp::setSelf(std::shared_ptr<RuntimeImp>& self) {
+	this->self = self;
 }
 
 void RuntimeImp::initialize(unsigned initialThreadCount) {
@@ -1150,8 +1595,8 @@ void RuntimeImp::initialize(unsigned initialThreadCount, const std::vector<uint8
 		throw IllegalArgumentException();
 	}
 
-	assert(storage->audit());
-	assert(!primarySTable->isDirty());
+	chatra_assert(storage->audit());
+	chatra_assert(!primarySTable->isDirty());
 
 	reactivateFinalizerThread();
 
@@ -1175,7 +1620,7 @@ Node* RuntimeImp::restorePackageNode(Reader& r, PackageId packageId, bool initia
 	if (errorReceiverBridge.hasError())
 		throw IllegalArgumentException();
 
-	assert(scriptNode);
+	chatra_assert(scriptNode);
 	package->node = std::move(scriptNode);
 	restoreEntities(r, packageId, package->node.get());
 	return package->node.get();
@@ -1205,15 +1650,7 @@ const MethodTable* RuntimeImp::restoreMethodTable(PackageId packageId, Node* nod
 	return methodTableCache.scanInnerFunctions(this, primarySTable.get(), *package, node);
 }
 
-RuntimeImp::~RuntimeImp() {
-	if (!closed)
-		(void)shutdown(false);
-
-	gcThread.reset();
-	gcInstance.reset();
-}
-
-std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
+std::vector<uint8_t> RuntimeImp::doShutdown(bool save) {
 	if (closed)
 		throw UnsupportedOperationException();
 	closed = true;
@@ -1237,7 +1674,10 @@ std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
 	shutdownTimers();
 
 	if (save) {
-		assert(storage->audit());
+		for (auto& e : breakPoints)
+			cancelBreakPoint(e.second);
+
+		chatra_assert(storage->audit());
 
 		Writer w(*this);
 		primarySTable->save(w.select("sTable"));
@@ -1253,6 +1693,18 @@ std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
 	return {};
 }
 
+RuntimeImp::~RuntimeImp() {
+	if (!closed)
+		(void)doShutdown(false);
+
+	gcThread.reset();
+	gcInstance.reset();
+}
+
+std::vector<uint8_t> RuntimeImp::shutdown(bool save) {
+	return doShutdown(save);
+}
+
 void RuntimeImp::setWorkers(unsigned threadCount) {
 	if (!multiThread)
 		return;
@@ -1266,6 +1718,13 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 
 	for (; workerThreads.size() < threadCount; nextId++) {
 		workerThreads.emplace(nextId, std::unique_ptr<std::thread>(new std::thread([&, this](unsigned wsId) {
+			auto detach = [&]() {
+				auto it = workerThreads.find(wsId);
+				it->second->detach();
+				workerThreads.erase(it);
+				cvShutdown.notify_one();
+			};
+
 			for (;;) {
 				Thread* thread;
 				{
@@ -1274,10 +1733,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 						return !queue.empty() || workerThreads.size() > targetWorkerThreads;
 					});
 					if (workerThreads.size() > targetWorkerThreads) {
-						auto it = workerThreads.find(wsId);
-						it->second->detach();
-						workerThreads.erase(it);
-						cvShutdown.notify_one();
+						detach();
 						return;
 					}
 					thread = queue.front();
@@ -1285,10 +1741,13 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 				}
 
 				try {
-					thread->run();
+					if (thread->run() == Thread::RunResult::Stop) {
+						detach();
+						return;
+					}
 				}
 				catch (...) {
-					outputError("fatal: uncaught exception raised\n");
+					systemMessage(ErrorLevel::Fatal, "uncaught exception raised", {});
 				}
 			}
 		}, nextId)));
@@ -1297,8 +1756,7 @@ void RuntimeImp::setWorkers(unsigned threadCount) {
 }
 
 bool RuntimeImp::handleQueue() {
-	if (multiThread)
-		return false;
+	chatra_assert(!multiThread);
 	Thread* thread;
 	{
 		std::lock_guard<SpinLock> lock(lockQueue);
@@ -1370,6 +1828,94 @@ InstanceId RuntimeImp::run(PackageId packageId) {
 	return instanceId;
 }
 
+InstanceId RuntimeImp::createInteractiveInstance() {
+	auto packageBody = packageIds.lockAndAllocate(*this, "", PackageInfo{{{"", ""}}, {}, nullptr}, false);
+	auto package = packageBody.get();
+	auto packageId = packageBody->getId();
+	{
+		std::lock_guard<SpinLock> lock(lockPackages);
+		packages.emplace(packageId, std::move(packageBody));
+	}
+
+	auto instance = instanceIds.lockAndAllocate(packageId);
+	auto instanceId = instance->getId();
+
+	auto& thread = createThread(*instance, *package, true);
+	std::swap(thread.scriptScope, thread.frames.back().frameScope);
+	thread.pop();
+	chatra_assert(thread.frames.size() == residentialFrameCount);
+
+	{
+		std::lock_guard<SpinLock> lock(package->lockInstances);
+		package->instances.emplace(instanceId, std::move(instance));
+	}
+	return instanceId;
+}
+
+bool RuntimeImp::readyToNextInteraction(InstanceId interactiveInstanceId) {
+	auto* instance = instanceIds.lockAndRef(interactiveInstanceId);
+	if (instance == nullptr)
+		throw IllegalArgumentException();
+
+	std::lock_guard<SpinLock> lock0(instance->lockThreads);
+	for (auto& e : instance->threads) {
+		auto& t = e.second;
+		if (t->isInteractive)
+			return t->readyToNextInteraction.load();
+	}
+	throw IllegalArgumentException();
+}
+
+void RuntimeImp::push(InstanceId interactiveInstanceId, const std::string& scriptName,
+		const std::string& statement) {
+
+	auto* instance = instanceIds.lockAndRef(interactiveInstanceId);
+	if (instance == nullptr)
+		throw IllegalArgumentException();
+
+	Thread* thread = nullptr;
+	{
+		std::lock_guard<SpinLock> lock0(instance->lockThreads);
+		for (auto& e : instance->threads) {
+			auto& t = e.second;
+			if (!t->isInteractive)
+				continue;
+			if (!t->readyToNextInteraction.load())
+				throw UnsupportedOperationException("interaction instance (I%zu) is busy",
+						static_cast<size_t>(interactiveInstanceId));
+			thread = t.get();
+		}
+	}
+	if (thread == nullptr)
+		throw IllegalArgumentException();
+
+	thread->readyToNextInteraction = false;
+
+	auto* package = packageIds.lockAndRef(instance->primaryPackageId);
+	package->scripts.emplace_back(scriptName, statement);
+
+	{
+		std::lock_guard<SpinLock> lock0(lockTrashNodes);
+		trashNodes.emplace_front(std::move(package->node));
+		package->node = std::make_shared<Node>();
+		package->node->type = NodeType::ScriptRoot;
+		package->node->flags |= NodeFlags::InitialNode;
+	}
+
+	chatra_assert(thread->frames.size() == residentialFrameCount);
+	thread->frames.emplace_back(*thread, *package, 1, package->scope.get());
+	package->pushNodeFrame(*thread, *package, 2, thread->scriptScope.get(), 2);
+
+	package->initialized = false;
+	package->grouped = false;
+
+	auto& f = thread->frames.back();
+	chatra_assert(f.stack.empty());
+	f.phase = Phase::ScriptRoot_InteractiveInitial;
+
+	enqueue(thread);
+}
+
 bool RuntimeImp::isRunning(InstanceId instanceId) {
 	auto* instance = instanceIds.lockAndRef(instanceId);
 	if (instance == nullptr)
@@ -1395,7 +1941,7 @@ void RuntimeImp::stop(InstanceId instanceId) {
 	}
 
 	auto* package = packageIds.lockAndRef(instance->primaryPackageId);
-	assert(package != nullptr);
+	chatra_assert(package != nullptr);
 	{
 		std::lock_guard<SpinLock> lock1(package->lockInstances);
 		package->instances.erase(instanceId);
@@ -1435,6 +1981,476 @@ void RuntimeImp::increment(TimerId timerId, int64_t step) {
 	timer->increment(std::chrono::milliseconds(step));
 }
 
+std::shared_ptr<debugger::IDebugger> RuntimeImp::getDebugger(
+		std::shared_ptr<debugger::IDebuggerHost> debuggerHost) {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	this->debuggerHost = std::move(debuggerHost);
+	return std::static_pointer_cast<debugger::IDebugger>(self.lock());
+}
+
+void RuntimeImp::pause() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (paused)
+		throw debugger::IllegalRuntimeStateException("Runtime is already paused");
+
+	if (multiThread) {
+		{
+			std::unique_lock<std::mutex> lock1(mtQueue);
+			previousWorkerThreads = targetWorkerThreads;
+		}
+		shutdownThreads();
+	}
+	paused = true;
+}
+
+void RuntimeImp::resume() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	if (!paused)
+		throw debugger::IllegalRuntimeStateException("Runtime is not paused");
+
+	if (multiThread)
+		setWorkers(previousWorkerThreads);
+	paused = false;
+}
+
+bool RuntimeImp::isPaused() {
+	std::lock_guard<std::mutex> lock0(lockDebugger);
+	return paused;
+}
+
+#define CHATRA_POP_DEBUGGABLE_THREAD  \
+		std::lock_guard<std::mutex> lock0(lockDebugger);  \
+		auto* thread = popDebuggableThread(threadId);  \
+		if (thread == nullptr)  \
+			return debugger::StepRunResult::NotInRunning
+
+debugger::StepRunResult RuntimeImp::stepOver(debugger::ThreadId threadId) {
+	CHATRA_POP_DEBUGGABLE_THREAD;
+
+	auto framesCount = thread->frames.size();
+	auto* node = thread->currentNode();
+	if (node == nullptr) {
+		enqueue(thread);
+		return debugger::StepRunResult::NotTraceable;
+	}
+
+	return stepRun(thread, [&]() {
+		return framesCount <= thread->frames.size()
+				&& node == thread->currentNode(framesCount - 1);
+	});
+}
+
+debugger::StepRunResult RuntimeImp::stepInto(debugger::ThreadId threadId) {
+	CHATRA_POP_DEBUGGABLE_THREAD;
+
+	auto framesCount = thread->frames.size();
+	auto* node = thread->currentNode();
+	if (node == nullptr) {
+		enqueue(thread);
+		return debugger::StepRunResult::NotTraceable;
+	}
+
+	return stepRun(thread, [&]() {
+		return framesCount == thread->frames.size() && node == thread->currentNode();
+	});
+}
+
+debugger::StepRunResult RuntimeImp::stepOut(debugger::ThreadId threadId) {
+	CHATRA_POP_DEBUGGABLE_THREAD;
+
+	auto targetFrameIndex = thread->frames.size() - 1;
+	for (;;) {
+		auto& f = thread->frames[targetFrameIndex];
+		targetFrameIndex -= f.popCount;
+		if (f.scope->getScopeType() != ScopeType::Block)
+			break;
+	}
+
+	return stepRun(thread, [&]() {
+		return targetFrameIndex + 1 < thread->frames.size();
+	});
+}
+
+#define CHATRA_CHECK_RUNTIME_PAUSED  \
+		std::lock_guard<std::mutex> lock0(lockDebugger);  \
+		if (!paused)  \
+			throw debugger::IllegalRuntimeStateException()
+
+debugger::BreakPointId RuntimeImp::addBreakPoint(const debugger::CodePoint& point) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto it = std::find_if(breakPoints.cbegin(), breakPoints.cend(), [&](decltype(breakPoints)::const_reference e) {
+		auto& bp = e.second;
+		return bp.point.packageName == point.packageName && bp.point.fileName == point.fileName
+				&& bp.point.lineNo == point.lineNo;
+	});
+	if (it != breakPoints.cend())
+		throw IllegalArgumentException();
+
+	BreakPoint bp;
+	bp.point = point;
+	applyBreakPoint(bp);
+
+	auto breakPointId = static_cast<debugger::BreakPointId>(nextBreakPointId++);
+	breakPoints.emplace(breakPointId, std::move(bp));
+	return breakPointId;
+}
+
+void RuntimeImp::removeBreakPoint(debugger::BreakPointId breakPointId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto it = breakPoints.find(breakPointId);
+	if (it == breakPoints.cend())
+		throw IllegalArgumentException();
+
+	cancelBreakPoint(it->second);
+	breakPoints.erase(it);
+}
+
+static bool isInteractiveInstance(const Instance& instance) {
+	std::lock_guard<SpinLock> lock0(instance.lockThreads);
+	for (auto& e : instance.threads) {
+		if (e.second->isInteractive)
+			return true;
+	}
+	return false;
+}
+
+std::vector<debugger::PackageState> RuntimeImp::getPackagesState() {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	std::vector<debugger::PackageState> ret;
+	packageIds.forEach([&](const Package& package) {
+		if (package.getId() == finalizerPackageId)
+			return;
+
+		ret.emplace_back();
+		auto& v = ret.back();
+
+		v.packageId = package.getId();
+		v.packageName = package.name;
+
+		{
+			std::lock_guard<SpinLock> lock1(package.lockInstances);
+			if (package.instances.size() == 1 && isInteractiveInstance(*package.instances.cbegin()->second))
+				return;
+		}
+		v.scripts = package.scripts;
+	});
+	return ret;
+}
+
+std::vector<debugger::InstanceState> RuntimeImp::getInstancesState() {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	std::vector<debugger::InstanceState> ret;
+	instanceIds.forEach([&](const Instance& instance) {
+		auto instanceId = instance.getId();
+		if (instanceId == finalizerInstanceId || instanceId == gcInstance->getId())
+			return;
+
+		ret.emplace_back();
+		auto& v = ret.back();
+
+		v.instanceId = instance.getId();
+		v.primaryPackageId = instance.primaryPackageId;
+
+		std::lock_guard<SpinLock> lock1(instance.lockThreads);
+		v.threadIds.reserve(instance.threads.size());
+		for (auto& e : instance.threads)
+			v.threadIds.emplace_back(static_cast<debugger::ThreadId>(static_cast<size_t>(e.first)));
+	});
+	return ret;
+}
+
+debugger::ThreadState RuntimeImp::getThreadState(debugger::ThreadId threadId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+
+	std::lock_guard<decltype(threadIds)> lock1(threadIds);
+	if (!threadIds.has(requester))
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+	auto* thread = threadIds.ref(requester);
+
+	debugger::ThreadState ret;
+	ret.threadId = threadId;
+
+	for (size_t frameIndex = thread->frames.size() - 1; frameIndex + 1 > residentialFrameCount;
+			frameIndex -= thread->frames[frameIndex].popCount) {
+		ret.frameIds.emplace_back(static_cast<debugger::FrameId>(frameIndex));
+	}
+
+	return ret;
+}
+
+static debugger::ScopeType convertScopeType(ScopeType scopeType) {
+	switch (scopeType) {
+	case ScopeType::Package:  return debugger::FrameType::Package;
+	case ScopeType::ScriptRoot:  return debugger::FrameType::ScriptRoot;
+	case ScopeType::Class:  return debugger::FrameType::Class;
+	case ScopeType::Method:  return debugger::FrameType::Method;
+	case ScopeType::InnerMethod:  return debugger::FrameType::Method;
+	case ScopeType::Block:  return debugger::FrameType::Block;
+	default:
+		throw IllegalArgumentException();
+	}
+}
+
+debugger::FrameState RuntimeImp::getFrameState(debugger::ThreadId threadId, debugger::FrameId frameId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+	auto frameIndex = static_cast<size_t>(frameId);
+
+	std::lock_guard<decltype(threadIds)> lock1(threadIds);
+	if (!threadIds.has(requester))
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+	auto* thread = threadIds.ref(requester);
+
+	if (frameIndex >= thread->frames.size())
+		throw IllegalArgumentException("specified frameId(%zu, threadId = %zu) is not found",
+				frameIndex, static_cast<size_t>(threadId));
+	auto& f = thread->frames[frameIndex];
+
+	debugger::FrameState ret;
+	ret.threadId = threadId;
+	ret.frameId = frameId;
+	ret.frameType = convertScopeType(f.scope->getScopeType());
+	ret.current = nodeToCodePoint(f.package.getId(), thread->currentNode(frameIndex));
+
+	for (; frameIndex != SIZE_MAX; frameIndex = thread->frames[frameIndex].parentIndex) {
+		auto scopeType = thread->frames[frameIndex].scope->getScopeType();
+		if (scopeType == ScopeType::Thread || scopeType == ScopeType::Global)
+			continue;
+		ret.scopeIds.emplace_back(static_cast<debugger::ScopeId>(frameIndex));
+	}
+
+	return ret;
+}
+
+static std::string getClassNameForDebugger(const StringTable* sTable, Object& object) {
+	switch (object.getTypeId()) {
+	case TypeId::CapturedScope:
+	case TypeId::CapturedScopeObject:
+	case typeId_TemporaryObject:
+	case typeId_WaitContext:
+		return "systemObject";
+
+	case typeId_PackageObject:
+		return "packageObject";
+
+	default:
+		auto* cl = static_cast<ObjectBase*>(&object)->getClass();
+		auto className = sTable->ref(cl->getName());
+		auto* p = cl->getPackage();
+		if (p != nullptr && !p->name.empty())
+			className = p->name + "." + className;
+		return className;
+	}
+}
+
+static debugger::Value getValueForDebugger(const StringTable* sTable, Reference ref) {
+	debugger::Value v;
+	switch (ref.valueTypeWithoutLock()) {
+	case ReferenceValueType::Bool:
+		v.valueType = debugger::ValueType::Bool;
+		v.vBool = ref.getBoolWithoutLock();
+		break;
+	case ReferenceValueType::Int:
+		v.valueType = debugger::ValueType::Int;
+		v.vInt = ref.getIntWithoutLock();
+		break;
+	case ReferenceValueType::Float:
+		v.valueType = debugger::ValueType::Float;
+		v.vFloat = ref.getFloatWithoutLock();
+		break;
+
+	case ReferenceValueType::Object: {
+		if (ref.isNullWithoutLock())
+			v.valueType = debugger::ValueType::Null;
+		else if (ref.derefWithoutLock<ObjectBase>().getClass() == String::getClassStatic()) {
+			v.valueType = debugger::ValueType::String;
+			v.vString = ref.derefWithoutLock<String>().getValue();
+		}
+		else {
+			v.valueType = debugger::ValueType::Object;
+			auto& object = ref.derefWithoutLock();
+			v.objectId = static_cast<debugger::ObjectId>(object.getObjectIndex());
+			v.className = getClassNameForDebugger(sTable, object);
+		}
+		break;
+	}
+	}
+	return v;
+}
+
+static debugger::Value getValueForDebugger(const StringTable* sTable, const Method* method) {
+	chatra_assert(method->position == SIZE_MAX);
+
+	debugger::Value v;
+	v.valueType = debugger::ValueType::Method;
+	v.methodName = sTable->ref(method->name);
+	if (method->subName != StringId::Invalid)
+		v.methodName += "." + sTable->ref(method->subName);
+	v.methodArgs = method->getSignature(sTable);
+	return v;
+}
+
+class ValueWriterForDebugger {
+private:
+	std::unordered_map<std::string, debugger::Value>& values;
+	std::unordered_map<std::string, unsigned> keys;
+
+public:
+	explicit ValueWriterForDebugger(std::unordered_map<std::string, debugger::Value>& values) : values(values) {}
+
+	void addValue(std::string key, debugger::Value v) {
+		auto it = keys.find(key);
+		if (it == keys.cend()) {
+			keys.emplace(key, 1);
+			values.emplace(std::move(key), std::move(v));
+			return;
+		}
+
+		if (it->second == 1) {
+			auto vFirst = values[key];
+			values.erase(key);
+			values.emplace(key + "[1]", std::move(vFirst));
+		}
+
+		auto count = it->second + 1;
+		values.emplace(key + "[" + std::to_string(count) + "]", std::move(v));
+		keys.emplace(std::move(key), count);
+	}
+
+	void addRef(const StringTable* sTable, StringId name, Reference ref) {
+		addValue(sTable->ref(name), getValueForDebugger(sTable, ref));
+	}
+
+	void addMethod(const StringTable* sTable, const Method* method) {
+		auto v = getValueForDebugger(sTable, method);
+		auto key = v.methodName;
+		addValue(std::move(key), std::move(v));
+	}
+};
+
+debugger::ScopeState RuntimeImp::getScopeState(debugger::ThreadId threadId, debugger::ScopeId scopeId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+	auto frameIndex = static_cast<size_t>(scopeId);
+
+	std::lock_guard<decltype(threadIds)> lock1(threadIds);
+	if (!threadIds.has(requester))
+		throw IllegalArgumentException("specified threadId(%zu) is not found", static_cast<size_t>(threadId));
+	auto* thread = threadIds.ref(requester);
+
+	if (frameIndex >= thread->frames.size())
+		throw IllegalArgumentException("specified scopeId(%zu, threadId = %zu) is not found",
+				frameIndex, static_cast<size_t>(threadId));
+	auto& f = thread->frames[frameIndex];
+
+	debugger::ScopeState ret;
+	ret.threadId = threadId;
+	ret.scopeId = scopeId;
+	ret.scopeType = convertScopeType(f.scope->getScopeType());
+
+	ValueWriterForDebugger writer(ret.values);
+
+	for (auto& e : f.scope->getAllRefsWithKey())
+		writer.addRef(primarySTable.get(), e.first, e.second);
+
+	if (f.methods != nullptr) {
+		for (auto* method : f.methods->getAllMethods())
+			writer.addMethod(primarySTable.get(), method);
+	}
+
+	return ret;
+}
+
+debugger::ObjectState RuntimeImp::getObjectState(debugger::ObjectId objectId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto& object = storage->derefDirect(static_cast<size_t>(objectId));
+
+	debugger::ObjectState ret;
+	ret.objectId = objectId;
+	ret.className = getClassNameForDebugger(primarySTable.get(), object);
+
+	ValueWriterForDebugger writer(ret.values);
+
+	switch (object.getTypeId()) {
+	case TypeId::CapturedScope:
+	case TypeId::CapturedScopeObject:
+	case typeId_TemporaryObject:
+	case typeId_WaitContext:
+		break;
+
+	default: {
+		auto* cl = storage->derefDirect<ObjectBase>(static_cast<size_t>(objectId)).getClass();
+
+		for (auto* method : cl->refMethods().getAllMethods()) {
+			if (method->position != SIZE_MAX)
+				writer.addRef(primarySTable.get(), method->name, object.ref(method->position));
+			else
+				writer.addMethod(primarySTable.get(), method);
+		}
+
+		for (auto* method : cl->refConstructors().getAllMethods())
+			writer.addMethod(primarySTable.get(), method);
+	}
+	}
+
+	return ret;
+}
+
+void RuntimeImp::killThread(debugger::ThreadId threadId) {
+	CHATRA_CHECK_RUNTIME_PAUSED;
+
+	auto requester = static_cast<Requester>(static_cast<size_t>(threadId));
+	Thread* thread = nullptr;
+	auto waitingId = std::numeric_limits<unsigned>::max();
+
+	{
+		std::lock_guard<SpinLock> lock1(lockQueue);
+		auto it = std::find_if(queue.cbegin(), queue.cend(), [&](Thread* t) {
+			return t->getId() == requester;
+		});
+		if (it != queue.cend()) {
+			thread = *it;
+			queue.erase(it);
+		}
+	}
+
+	if (thread == nullptr) {
+		std::lock_guard<SpinLock> lock2(lockWaitingThreads);
+		auto it = std::find_if(waitingThreads.cbegin(), waitingThreads.cend(), [&](const std::pair<unsigned, Thread*>& e) {
+			return e.second->getId() == requester;
+		});
+		if (it != waitingThreads.cend()) {
+			waitingId = it->first;
+			thread = it->second;
+			waitingThreads.erase(it);
+			recycledWaitingIds.emplace_back(waitingId);
+			hasWaitingThreads = !waitingThreads.empty();
+		}
+	}
+
+	if (thread == nullptr)
+		throw IllegalArgumentException("specified threadId = %zu is not exist", static_cast<size_t>(threadId));
+
+	thread->finish();
+
+	if (waitingId == std::numeric_limits<unsigned>::max())
+		systemMessage(ErrorLevel::Info, "threadId = ${0} was killed",
+				{std::to_string(static_cast<size_t>(threadId))});
+	else
+		systemMessage(ErrorLevel::Info, "threadId = ${0} (waitingId = ${1}) was killed",
+				{std::to_string(static_cast<size_t>(threadId)), std::to_string(waitingId)});
+}
+
+
 static std::atomic<bool> initialized = {false};
 static std::mutex mtInitialize;
 
@@ -1452,7 +2468,7 @@ std::shared_ptr<Runtime> Runtime::newInstance(std::shared_ptr<IHost> host,
 				initializeEmbeddedFunctions();
 			}
 			catch (...) {
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 				std::fprintf(stderr, "fatal: failed to initialize some subsystems!");
 #endif
 				return nullptr;
@@ -1462,6 +2478,7 @@ std::shared_ptr<Runtime> Runtime::newInstance(std::shared_ptr<IHost> host,
 	}
 
 	auto runtime = std::make_shared<RuntimeImp>(std::move(host));
+	runtime->setSelf(runtime);
 	if (savedState.empty())
 		runtime->initialize(initialThreadCount);
 	else
@@ -1476,7 +2493,7 @@ void UserObjectBase::onDestroy(void* tag, Requester requester, Reference& ref) {
 
 	auto& runtime = *static_cast<RuntimeImp*>(tag);
 
-	assert(ref.deref<ObjectBase>().getTypeId() == typeId_UserObjectBase);
+	chatra_assert(ref.deref<ObjectBase>().getTypeId() == typeId_UserObjectBase);
 	auto& object = ref.deref<UserObjectBase>();
 	if (object.deinitCalled)
 		return;
@@ -1504,7 +2521,7 @@ void UserObjectBase::onDestroy(void* tag, Requester requester, Reference& ref) {
 }
 
 
-#ifndef NDEBUG
+#ifndef CHATRA_NDEBUG
 void Package::dump(const std::shared_ptr<StringTable>& sTable) {
 	if (scope) {
 		printf("scope:\n");
@@ -1541,6 +2558,6 @@ void RuntimeImp::dump() {
 		printf("%u threads running\n", static_cast<unsigned>(queue.size()));
 	}
 }
-#endif // !NDEBUG
+#endif // !CHATRA_NDEBUG
 
 }  // namespace chatra
