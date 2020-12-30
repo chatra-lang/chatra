@@ -1,27 +1,37 @@
 ![chatra_logo](https://raw.githubusercontent.com/chatra-lang/resources/master/logo/chatra_logo_for_light_bg_small.png "Chatra")
 
-Japanese version is [here](/README.ja.md).
+# Programing language "Chatra"
+
+Chatra is a lightweight scripting language which has simple design, but powerful.
+
+The key concepts of Chatra is "easy to use".
 
 
-Chatra Cheat Sheet:<br/>
-[![Chatra Cheat Sheet Light](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_light.pdf)
-[![Chatra Cheat Sheet Dark](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark_thumb.png)](https://raw.githubusercontent.com/chatra-lang/resources/master/docs/chatra_cheatsheet_dark.pdf)
+## Getting started
 
-# About “Chatra”
-Chatra is a lightweight scripting language which has simple design 
-so that anyone can write its scripts easily.   
-It can be used as an independent interpreter, or it can be embedded in your program
-and used as a macro language.
+At present, Chatra is provided in the form of the source codes written in C++11.
 
-To make it easy to embed into the programs, 
-the Chatra interpreter is written using only C++11 standard. 
-It does not depend on any external libraries.  
-You can run multiple independent virtual machines without any special tricks, 
-and you can run multiple scripts inside each virtual machine at the same time.
+To build console frontend:
 
-## Chatra is simple
-Chatra has very simple grammar.  
-If you are familiar with at least one programming language, you can read it.
+- Install cmake and C++11 compiler as you like
+- Install readline library (`apt install libreadline6-dev` or `brew install readline`, etc)
+- `mkdir build && cd build`
+- `cmake ..` or with appropriate options
+- `make`
+
+To embed into your program:
+
+- Copy the directories "chatra", "chatra_core", and "chatra_emb" (if required - this one contains embedded packages for Chatra scripts)
+- Add "chatra" directory into include path
+- Compile all "*.cpp" files and link them with your program, or use "CMakeLists.txt"
+
+
+## Key features
+
+### Simple & powerful
+
+Chatra has very simple language structure.
+If you are familiar with at least one programming language, you can understand chatra's script what it does.
 
 ```Text
 class HelloWorld
@@ -33,37 +43,85 @@ for in Range(5)
     instance.someMethod('World')
 ```
 
-Moreover, Chatra has many features that modern languages should have.
+Although it is simple, Chatra has many features which a modern programing language should have:
 
-Intentionally saying it complicated, 
-Chatra is a class-style dynamic typing object-oriented language with features such as
-multi-threading support, concurrent garbage collection, closure, 
-and reference-based mutual exclusion. 
-But simplicity is the core value of Chatra, 
-so you can forget about such a tedious story. 
-Remember only if you want to explain it to someone cool :-)
+- Classes
+- Scopes
+- Exceptions
+- Function overloading
+- Operator overloading
+- Function/method reference
+- Closure
+- Concurrent garbage collection
+- Incremental parser
 
-Chatra's grammar is influenced by languages such as
+Chatra's grammar is influenced by well-known languages such as
 C/C++, Java, Python and Swift.
 If you have learned these languages, you can use Chatra immediately.
 
-## Chatra is serializable
-The second key feature is that Chatra is serializable.   
-A virtual machine (called Runtime) that executes Chatra scripts 
-can always save the entire state into a byte stream, 
-and it can be restored and resumed later. 
-This is useful in situations where frequent stop/resume occurs, 
-such as smartphone apps.  
-If the conditions are met, it can even be resumed on another machine[^1].
 
-[^1]: Strictly saying, there are some prerequisites.
+### Embeddable
 
-note: The following code is useful information for those who want to embed Chatra’s virtual machine into a program, but is probably unusable information for those who write scripts of Chatra.
+Chatra's interpreter is provided as stand-alone library (only depends on C++11 runtime) and
+can be called from your program with simple steps:
 
 ```C++
 // Generate Runtime and execute "test_script".
 auto host = std::make_shared<Host>();
-auto runtime1 = cha::Runtime::newInstance(host); 
+auto runtime = cha::Runtime::newInstance(host);
+auto packageId = runtime->loadPackage(cha::Script("test_script", "..."));
+runtime->run(packageId);
+```
+
+You can export any native function to chatra's interpreter in this way:
+
+```Text
+def add10(a: Int) as native
+```
+
+```C++
+// equivalent to:
+// def add10(a)
+//     return a + 10
+static void someNativeFunction(cha::Ct& ct) {
+    ct.set(ct[0].get<int>() + 10);
+}
+
+cha::PackageInfo getANativePackage() {
+	std::vector<cha::Script> scripts = {{packageName, script}};
+	std::vector<cha::HandlerInfo> handlers = {
+			{someNativeFunction, "add10"}
+	};
+	return {scripts, handlers, nullptr};
+}
+```
+
+
+### Portable
+
+Chatra's interpreter is written with "almost pure" C++11 and only depends on C++11 standard library (prefixed "std").
+The interpreter can be compiled and run on many platforms such as:
+
+| OS | CPU arch | compiler |
+|---|---|---|
+|Linux (Ubuntu 16.04)|x86_64|g++ (Ubuntu 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609|
+|Linux (Ubuntu 16.04)|x86_64|clang version 3.8.0-2ubuntu4 (tags/RELEASE_380/final)|
+|macOS 11.1|x86_64|g++ (Homebrew GCC 9.2.0_1) 9.2.0|
+|macOS 11.1|x86_64|Apple clang version 11.0.0 (clang-1100.0.33.12)|
+|macOS 11.1|arm64|Apple clang version 12.0.0 (clang-1200.0.32.28)|
+|Windows10(1809)|x86_64|Microsoft(R) C/C++ Optimizing Compiler Version 19.24.28316 for x86|
+
+
+### Serializable
+
+An instance of chatra's interpreter (called `Runtime`) can be serialized into byte-stream,
+and can be restored and resumed later.
+The serialized byte-stream contains entire state of `Runtime`, including internal state of native libraries such as file pointers
+in so far as these libraries provide serialize/de-serialize interfaces via `chatra::IPackage`.
+
+```C++
+auto host = std::make_shared<Host>();
+auto runtime1 = cha::Runtime::newInstance(host);
 auto packageId = runtime1->loadPackage(cha::Script("test_script", "..."));
 runtime1->run(packageId);
 
@@ -78,31 +136,105 @@ runtime2 = cha::Runtime::newInstance(host, stream);
 // … resume execution ...
 ```
 
-The name of “Chatra” comes from the Japanese “red tabby”. 
-Red tabbies are simple and friendly, 
+This feature is useful in situations where frequent stop/resume occurs,
+such as smartphone apps.  
+If the conditions are met, it can even be resumed on another machine
+(strictly saying, there are some prerequisites).
+
+
+### Supports Threading
+
+Chatra supports multi-threading in language level.
+Calling a function with `async` keyword indicates it will be invoked in another thread so
+the caller's thread can process another work simultaneously.
+
+```Text
+def someFunction()
+    i: 0
+    for j in Range(10000)
+        i += j
+    return i
+
+a = async someFunction()
+// do some other works...
+wait(a)
+log('sum=' + a.result)
+```
+
+
+### Reference-based mutual exclusion
+
+The mutual exclusion is one of the most troublesome topics in multi-threading.
+Chatra has a reference-oriented mutual exclusion mechanism to keep implementation simple which has features of:
+
+- Any reference (variables and class members) can be owned by only one thread at the same time.
+- Ownership to references are exchanged at the timing of function-call/return boundary.
+- References grouped by `sync` block are only take one owner;
+  This means, while one of thread manipulates some references in 'sync' block, all of other threads will be blocked when attempt to access any references inside the `sync` block.
+- Additionally, ownership to a `sync` block is never released until its owned function returns.
+
+```Text
+sync
+    var a: 0
+
+def yield()
+
+def interference()
+    a = 1  // sync block is locked
+    yield()
+    a = 2
+    // lock released
+
+def interferenceThread()
+    while true
+        interference()
+
+t = async interferenceThread()
+// variable "a" is always observed as 2 (never be 1)
+```
+
+
+### Debugger
+
+The chatra interpreter has an interface for debugging, called `IDebugger`.
+Also, the console frontend of chatra supports all debugging features.
+
+```ShellSession
+Chatra interactive frontend
+type "!h" to show debugger command help
+chatra[0]:1> !run "debug_test.cha"
+[I3] P2 file: debug_test.cha
+chatra[0]:1> !b @debug_test(8)
+chatra[0]:1> !resume
+a=123
+b=234
+[reached to breakpoint B0]
+  B0 @debug_test.cha(8): return b + c
+chatra[0]:1> !threads
+[T3] I3, primary=P2, 3frames:{T3:F10 type=Method, T3:F6 type=Method, T3:F3 type=ScriptRoot} @debug_test.cha(8): return b + c
+[T2] I2, primary=P1, 0frames:{} @unknown
+chatra[0]:1> !step over T3
+[paused] @debug_test.cha(11): log('func3(b)=' + func4(b))
+```
+
+
+## Why called "chatra" ?
+
+The name of “Chatra” comes from the Japanese “red tabby”.
+Red tabbies are simple and friendly,
 so their characteristics is suitable for this language.
 
 ![red_tabby](https://raw.githubusercontent.com/chatra-lang/resources/master/images/red_tabby.jpg "Chatra \(red tabby\) is simple")
 ![calico](https://raw.githubusercontent.com/chatra-lang/resources/master/images/calico.jpg "Mike \(calico\) is not simple")
 
-# Getting Started
-(Sorry under construction)  
-There is a document that outlines the language specification.  
-Details are here. However, it is not fully maintained yet.  
-If you want to know how to incorporate Chatra’s virtual machine
-into your program, go here.
 
-At present, Chatra is provided in the form of source code written in C++.
-To build them, please check this document.
-The source code also includes a front-end
-for using as an independent interpreter. 
-See here for how to use the front-end.
+## Chatra is in alpha stage
 
-# Chatra is in alpha stage
 Chatra development is in early phase.   
-There are still many features that are lacking in the language, 
+There are still many features that are lacking in the language,
 and we plan to add them in the future.
 At least the following important features are missing or poorly implemented:
+
 - Standard (embedded) library
 - Debugger support
 - Remote procedure call support
@@ -117,16 +249,19 @@ Until the version number reaches to 1.0,
 there is a possibility that changes will be made that breaks the compatibility
 with older versions
 (We think it is important that quickly implementing new features,
-rather than to keep the compatibility between the versions). 
-When incorporating Chatra into your project, 
+rather than to keep the compatibility between the versions).
+When incorporating Chatra into your project,
 please pay attention to differences between Chatra’s versions.
 
-# Contributing
-Chatra is an open source project 
-and humbly accepts any contributions you might make to the project. 
+
+## Contributing
+
+Chatra is an open source project
+and humbly accepts any contributions you might make to the project.
 Any contribution even if you think that is small, makes a great difference.  
-Not only writing code, 
+Not only writing code,
 but also we look forward to any kinds of participation such as:
+
 - Bug report
 - Adding test patterns
 - Request of features
@@ -135,11 +270,16 @@ but also we look forward to any kinds of participation such as:
 - Graphical design
 - Sending impressions or feelings
 
-If there are, please post them by ~~this procedure~~.  
-(Sorry documentation is now under construction; We accept PRs via github)
+If there are, please post them by email, PRs, or any communication tools you can reach to us.
 
-# License
+
+## License
+
 Released under Apache License v2.
 
-# Version History
+
+## Version History
+
+0.2.0  Bug fix & adding some embedded libraries
+
 0.1.0  First release

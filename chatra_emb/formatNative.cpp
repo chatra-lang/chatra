@@ -324,6 +324,7 @@ static void format(Ct& ct) {
 			iSpec += length;
 		}
 
+		bool hasPrecision = false;
 		if (f[iSpec] == '.' && iSpec + 1 < i1 && isDigit(f[iSpec + 1])) {
 			auto length = findOffset(f, iSpec + 1, i1, isNotDigit) - iSpec;
 			if (length > 1 + 10)
@@ -333,6 +334,7 @@ static void format(Ct& ct) {
 			std::strncpy(spec + specSize, f.data() + iSpec, length);
 			specSize += length;
 			iSpec += length;
+			hasPrecision = true;
 		}
 
 		if (isAlpha(f[iSpec]))
@@ -434,14 +436,20 @@ static void format(Ct& ct) {
 			break;
 		}
 
+		case 'a':
+		case 'A':
+			if (!hasPrecision) {
+				std::strcpy(spec + specSize, ".6");
+				specSize += 2;
+			}
+			// CHATRA_FALLTHROUGH
+
 		case 'e':
 		case 'E':
 		case 'f':
 		case 'F':
 		case 'g':
-		case 'G':
-		case 'a':
-		case 'A': {
+		case 'G': {
 			char typeString[2] = {type, '\0'};
 			if (value.isNull())
 				valueString = convert(specifierIndex, spec, specSize, typeString, 0.0);

@@ -157,7 +157,8 @@ class Reader extends Stream
 				c: _buffer[_offset++]
 				if c == 0x0A
 					break readLoop
-				out.add(c)
+				if c != 0x0D
+					out.add(c)
 
 			_available = _stream.read(_buffer)
 			if _available == 0
