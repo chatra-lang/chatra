@@ -241,6 +241,7 @@ StringTable::StringTable() noexcept {
 			{"wait", StringId::wait},
 			{"type", StringId::type},
 			{"objectId", StringId::objectId},
+			{"_native_compile", StringId::_native_compile},
 			{"_check", StringId::_check},
 			{"_checkCmd", StringId::_checkCmd},
 			{"_incrementTestTimer", StringId::_incrementTestTimer},

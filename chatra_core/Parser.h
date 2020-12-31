@@ -292,10 +292,6 @@ namespace NodeFlags {
 	constexpr uint32_t InitialNode = 0x4;
 }
 
-struct ParserWorkingSet final {
-	unsigned generatedVarCount = 0;
-};
-
 std::shared_ptr<Node> groupScript(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, const std::vector<std::shared_ptr<Line>> &lines);
 
@@ -303,7 +299,7 @@ void structureInnerNode(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive);
 
 // note: This function does not change node->blockNodesState
-void parseInnerNode(ParserWorkingSet& ws, IErrorReceiver& errorReceiver,
+void parseInnerNode(IErrorReceiver& errorReceiver,
 		std::shared_ptr<StringTable>& sTable, Node* node, bool recursive);
 
 void initializeParser();

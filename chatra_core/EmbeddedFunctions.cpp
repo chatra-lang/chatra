@@ -49,6 +49,8 @@ def wait(a0...; a1...)
 def type(a0) as native
 def objectId(a0) as native
 
+def _native_compile(a0: String) as native
+
 def operator(a0 == a1)
 	return type(a0).equals(type(a1)) ? a0.equals(a1) : false
 def operator(a0 != a1)
@@ -70,8 +72,6 @@ def _incrementTestTimer(a0: Int) as native
 
 void initializeEmbeddedFunctions() {
 	auto& classes = refEmbeddedClassTable();
-
-	ParserWorkingSet ws;
 
 	INullErrorReceiver nullErrorReceiver;
 	IAssertionNullErrorReceiver assertionNullErrorReceiver;
@@ -95,7 +95,7 @@ void initializeEmbeddedFunctions() {
 	auto lines = parseLines(errorReceiver, sTable, "(internal-functions)", 1, initFunctions);
 	auto node = groupScript(errorReceiver, sTable, lines);
 	structureInnerNode(errorReceiver, sTable, node.get(), true);
-	parseInnerNode(ws, errorReceiver, sTable, node.get(), true);
+	parseInnerNode(errorReceiver, sTable, node.get(), true);
 	nodeMap.emplace(StringId::EmbeddedFunctions, node.get());
 
 	unsigned defOperatorCount = 0;
@@ -135,6 +135,7 @@ void initializeEmbeddedFunctions() {
 	embeddedMethods.add(NativeMethod(StringId::_native_wait, StringId::Invalid, native_wait));
 	embeddedMethods.add(NativeMethod(StringId::type, StringId::Invalid, native_type));
 	embeddedMethods.add(NativeMethod(StringId::objectId, StringId::Invalid, native_objectId));
+	embeddedMethods.add(NativeMethod(StringId::_native_compile, StringId::Invalid, native_compile));
 	embeddedMethods.add(NativeMethod(StringId::_check, StringId::Invalid, native_check));
 	embeddedMethods.add(NativeMethod(StringId::_checkCmd, StringId::Invalid, native_checkCmd));
 	embeddedMethods.add(NativeMethod(StringId::_incrementTestTimer, StringId::Invalid, native_incrementTestTimer));
@@ -314,6 +315,17 @@ void native_objectId(CHATRA_NATIVE_ARGS) {
 	auto id = ref.deref().getObjectIndex();
 	chatra_assert(id != SIZE_MAX);
 	ret.setInt(static_cast<int64_t>(id));
+}
+
+void native_compile(CHATRA_NATIVE_ARGS) {
+	CHATRA_NATIVE_ARGS_CAPTURE;
+
+	auto arg0 = args.ref(0);
+	if (arg0.isNull())
+		throw RuntimeException(StringId::IllegalArgumentException);
+
+	auto script = arg0.deref<String>().getValue();
+	// TODO
 }
 
 #ifndef CHATRA_NDEBUG
