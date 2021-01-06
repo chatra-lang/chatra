@@ -927,7 +927,7 @@ static void showPackages(const std::unordered_map<Target, size_t>& filters) {
 		FILTER_PACKAGE(v);
 		sortScripts(v.scripts);
 		size_t scriptIndex = 0;
-		dLogC(0, "[<P%zu>] \"%s\", %ufiles:{%s}",
+		dLogC(0, "[<P%zu>] \"%s\", %zufiles:{%s}",
 				static_cast<size_t>(v.packageId), escape(v.packageName).data(), v.scripts.size(),
 				formatList(v.scripts, [&](const cha::Script& s) {
 					return "<(" + std::to_string(scriptIndex++) + ")>" + escape(s.name);
@@ -943,7 +943,7 @@ static void showInstances(const std::unordered_map<Target, size_t>& filters) {
 				static_cast<cha::d::ThreadId>(filters.at(Target::Thread))))
 			continue;
 
-		dLogC(0, "[<I%zu>] primary=<P%zu>, %uthreads:{%s}",
+		dLogC(0, "[<I%zu>] primary=<P%zu>, %zuthreads:{%s}",
 				static_cast<size_t>(v.instanceId), static_cast<size_t>(v.primaryPackageId),
 				v.threadIds.size(),
 				formatList(v.threadIds, [](cha::d::ThreadId id) {
@@ -959,7 +959,7 @@ static void showThreads(const std::unordered_map<Target, size_t>& filters) {
 		for (auto threadId : vi.threadIds) {
 			auto vt = debugger->getThreadState(threadId);
 			FILTER_THREAD(vt);
-			dLogC(0, "[<T%zu>] <I%zu>, primary=<P%zu>, %uframes:{%s} %s",
+			dLogC(0, "[<T%zu>] <I%zu>, primary=<P%zu>, %zuframes:{%s} %s",
 					static_cast<size_t>(threadId), static_cast<size_t>(vi.instanceId),
 					static_cast<size_t>(vi.primaryPackageId), vt.frameIds.size(),
 					formatList(vt.frameIds, [&](cha::d::FrameId id) {
@@ -981,7 +981,7 @@ static void showFrames(const std::unordered_map<Target, size_t>& filters) {
 			for (auto frameId : vt.frameIds) {
 				auto vf = debugger->getFrameState(threadId, frameId);
 				FILTER_FRAME(vf);
-				dLogC(0, "[<T%zu:F%zu>] <I%zu>, primary=<P%zu>, type=%s, %uscopes:{%s} %s",
+				dLogC(0, "[<T%zu:F%zu>] <I%zu>, primary=<P%zu>, type=%s, %zuscopes:{%s} %s",
 						static_cast<size_t>(threadId), static_cast<size_t>(frameId),
 						static_cast<size_t>(vi.instanceId), static_cast<size_t>(vi.primaryPackageId),
 						scopeFrameTypeName[static_cast<size_t>(vf.frameType)],
@@ -1010,7 +1010,7 @@ static void showScopes(const std::unordered_map<Target, size_t>& filters) {
 		}
 	}
 
-	dLogC(0, "[<T%zu:S%zu>] <I%zu>, primary=<P%zu>, type=%s, %uvalues:",
+	dLogC(0, "[<T%zu:S%zu>] <I%zu>, primary=<P%zu>, type=%s, %zuvalues:",
 			static_cast<size_t>(v.threadId), static_cast<size_t>(v.scopeId),
 			static_cast<size_t>(vi.instanceId), static_cast<size_t>(vi.primaryPackageId),
 			scopeFrameTypeName[static_cast<size_t>(v.scopeType)],
