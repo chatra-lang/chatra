@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2020 Chatra Project Team
+ * Copyright(C) 2020-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -442,7 +442,7 @@ static void format(Ct& ct) {
 				std::strcpy(spec + specSize, ".6");
 				specSize += 2;
 			}
-			// CHATRA_FALLTHROUGH
+			CHATRA_FALLTHROUGH;
 
 		case 'e':
 		case 'E':

@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@
 #include <climits>
 #include <cstdint>
 #include <cstdio>
-#include <cassert>
 #include <cstdarg>
 #include <type_traits>
 #include <functional>
@@ -54,41 +53,7 @@
 
 #include <cmath>
 
-#ifdef CHATRA_NDEBUG
-	#define chatra_assert(e)  ((void)0)
-#else
-	#define chatra_assert(e)  assert(e)
-#endif
-
-#ifndef CHATRA_NDEBUG
-	#include <cstdio>
-#endif // !CHATRA_NDEBUG
-
-#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
-	#define CHATRA_MAYBE_GCC   __GNUC__
-#endif
-
-#ifndef CHATRA_WHEN
-	#define CHATRA_WHEN(...)  typename std::enable_if<__VA_ARGS__, std::nullptr_t>::type = nullptr
-#endif
-#define CHATRA_HAS_TYPE(...)  std::is_same<__VA_ARGS__, __VA_ARGS__>::value
-#define CHATRA_TYPE_EXISTS(...)  CHATRA_WHEN(std::is_same<__VA_ARGS__, __VA_ARGS__>::value)
-
-#if defined(__clang__)
-	#define CHATRA_FALLTHROUGH  [[clang::fallthrough]]
-	#define CHATRA_FALLTHROUGH_DEFINED
-#endif
-
-#if defined(CHATRA_MAYBE_GCC)
-	#if __GNUC__ >= 7
-		#define CHATRA_FALLTHROUGH  [[gnu::fallthrough]]
-		#define CHATRA_FALLTHROUGH_DEFINED
-	#endif
-#endif
-
-#ifndef CHATRA_FALLTHROUGH_DEFINED
-	#define CHATRA_FALLTHROUGH
-#endif
+#include "chatra_utils.h"
 
 namespace chatra {
 

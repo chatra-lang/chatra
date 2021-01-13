@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2020 Chatra Project Team
+ * Copyright(C) 2020-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,20 +20,10 @@
 #ifndef CHATRA_EMB_INTERNAL_H
 #define CHATRA_EMB_INTERNAL_H
 
-#include "chatra.h"
+#include "chatra_utils.h"
+
 #include <atomic>
 #include <mutex>
-#include <cassert>
-
-#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
-	#define CHATRA_MAYBE_GCC   __GNUC__
-#endif
-
-#ifdef CHATRA_NDEBUG
-	#define chatra_assert(e)  ((void)0)
-#else
-	#define chatra_assert(e)  assert(e)
-#endif
 
 namespace chatra {
 namespace emb {

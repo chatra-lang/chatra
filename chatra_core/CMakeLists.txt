@@ -1,4 +1,5 @@
 add_library(chatra_core
+        Common.h
         Internal.h
         StringTable.h
         StringTable.cpp
