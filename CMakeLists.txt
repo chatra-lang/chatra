@@ -31,9 +31,9 @@ set(CMAKE_CXX_FLAGS "/GR /EHsc /source-charset:utf-8 \
 /W4 /wd4458 /wd4063 /wd4996 /DNOMINMAX")
 endif()
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
-endif()
+# if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
+# endif()
 
 if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DCHATRA_NDEBUG)
