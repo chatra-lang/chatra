@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -960,7 +960,8 @@ size_t RuntimeImp::stepCountForSweeping(size_t totalObjectCount) {
 }
 
 bool RuntimeImp::distributeStringTable(unsigned oldVersion) {
-	if (oldVersion != UINT_MAX && oldVersion == primarySTable->getVersion())
+	if (oldVersion != std::numeric_limits<unsigned>::max()
+			&& oldVersion == primarySTable->getVersion())
 		return false;
 
 	primarySTable->clearDirty();

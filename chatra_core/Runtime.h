@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1142,7 +1142,7 @@ public:
 	size_t stepCountForMarking(size_t totalObjectCount) override;
 	size_t stepCountForSweeping(size_t totalObjectCount) override;
 
-	bool distributeStringTable(unsigned oldVersion = UINT_MAX);
+	bool distributeStringTable(unsigned oldVersion = std::numeric_limits<unsigned>::max());
 
 	Thread& createThread(Instance& instance, Package& package, bool isInteractive = false, Node* node = nullptr);
 	void enqueue(Thread* thread);
