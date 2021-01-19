@@ -1039,6 +1039,7 @@ public:
 
 	std::atomic<bool> attemptToShutdown = {false};
 
+	mutable std::mutex mtParser;
 	std::shared_ptr<StringTable> primarySTable;  // locked by #parser
 	mutable SpinLock lockSTable;
 	std::shared_ptr<StringTable> distributedSTable;

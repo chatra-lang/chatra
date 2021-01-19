@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,6 +164,7 @@ enum class StringId : uint_least32_t {
 	String,
 	Array,
 	Dict,
+	_ReflectNode,
 
 	// Exceptions
 	Exception,
@@ -267,6 +268,8 @@ enum class StringId : uint_least32_t {
 	_native_append,
 	_native_at,
 	_native_sub,
+	_block,
+	_sub,
 
 	PredefinedStringIds,
 	Invalid = std::numeric_limits<uint_least32_t>::max()

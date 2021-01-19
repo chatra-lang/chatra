@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -107,14 +107,18 @@ bool Thread::parse() {
 	}
 
 	IErrorReceiverBridge errorReceiverBridge(*this);
-	unsigned sTableVersion = runtime.primarySTable->getVersion();
+	std::shared_ptr<Node> scriptNode;
+	{
+		std::lock_guard<std::mutex> lock(runtime.mtParser);
+		unsigned sTableVersion = runtime.primarySTable->getVersion();
 
-	auto scriptNode = f.package.parseNode(errorReceiverBridge, f.node,
-			f.phase == Phase::ScriptRoot_InteractiveInitial);
-	scanInnerFunctions(&errorReceiverBridge, runtime.primarySTable.get());
+		scriptNode = f.package.parseNode(errorReceiverBridge, f.node,
+				f.phase == Phase::ScriptRoot_InteractiveInitial);
+		scanInnerFunctions(&errorReceiverBridge, runtime.primarySTable.get());
 
-	if (runtime.distributeStringTable(sTableVersion))
-		captureStringTable();
+		if (runtime.distributeStringTable(sTableVersion))
+			captureStringTable();
+	}
 
 	// Defer distributing node to each threads because new thread creation during parseBlockNodes() causes MemberNotFoundException
 	if (scriptNode)

@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ static std::unique_ptr<Class> clAsync;
 static std::unique_ptr<Class> clString;
 static std::unique_ptr<Class> clArray;
 static std::unique_ptr<Class> clDict;
+static std::unique_ptr<Class> clReflectNode;
 static std::unordered_map<StringId, Node*> nodeMap;
 
 // note: Any tokens used in embedded scripts must be pre-defined in StringTable.
@@ -386,9 +387,8 @@ class Async
 		throw UnsupportedOperationException()
 )***";
 
-[[noreturn]] static void createAsync(const Class* cl, Reference ref) {
+[[noreturn]] static void createAsync(const Class* cl, Reference) {
 	(void)cl;
-	(void)ref;
 	chatra_assert(cl == clAsync.get());
 	throw RuntimeException(StringId::UnsupportedOperationException);
 }
@@ -863,6 +863,12 @@ void Array::add(Reference ref) {
 	container().ref(length++).set(ref);
 }
 
+Reference Array::add() {
+	std::lock_guard<SpinLock> lock(lockValue);
+	extend(length + 1);
+	return container().ref(length++);
+}
+
 bool Array::save(Writer& w) const {
 	w.out(length);
 	return false;
@@ -1294,6 +1300,57 @@ void Dict::native_values(CHATRA_NATIVE_ARGS) {
 		retValue.container().ref(index++).set(self.container().ref(e.second));
 }
 
+void ReflectNodeShared::addNode(Node& node) {
+	for (auto& token : node.additionalTokens)
+		additionalTokens.push_back(std::move(token));
+	node.additionalTokens.clear();
+}
+
+const Class* ReflectNode::getClassStatic() {
+	return clReflectNode.get();
+}
+
+ReflectNode::ReflectNode(Storage& storage, std::shared_ptr<ReflectNodeShared> shared,
+		const Node* node) noexcept
+		: ObjectBase(storage, typeId_ReflectNode, getClassStatic()),
+		shared(std::move(shared)) {
+
+	n.type = node->type;
+	n.line = node->line;
+	n.tokens = node->tokens;
+	n.flags = node->flags;
+	n.sid = node->sid;
+	if (node->literalValue)
+		n.literalValue.reset(new Literal(*node->literalValue));
+	n.op = node->op;
+}
+
+static const char* initReflectNode = R"***(
+class _ReflectNode
+	var _block
+	var _sub
+	def init()
+)***";
+
+[[noreturn]] static void createReflectNode(const Class* cl, Reference) {
+	(void)cl;
+	chatra_assert(cl == clReflectNode.get());
+	throw RuntimeException(StringId::UnsupportedOperationException);
+}
+
+bool ReflectNode::save(Writer& w) const {
+	// TODO
+	return false;
+}
+
+ReflectNode::ReflectNode(Reader&) noexcept : ObjectBase(typeId_ReflectNode, getClassStatic()) {
+}
+
+bool ReflectNode::restore(Reader& r) {
+	// TODO
+	return false;
+}
+
 template <StringId name>
 static void createException(const Class* cl, Reference ref) {
 	(void)cl;
@@ -1391,12 +1448,6 @@ void initializeEmbeddedClasses() {
 	addClass(initVariableLengthSequence);
 	addClass(initArrayView);
 
-	/*embeddedClassesPtr.emplace_front(
-			createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initArrayIterator, nullptr, {}));
-	embeddedClassesPtr.emplace_front(
-			createEmbeddedClass(ws, errorReceiver, sTable, classFinder, initArrayKeyedIterator, nullptr, {}));
-			*/
-
 	clAsync = createEmbeddedClass(errorReceiver, sTable, classFinder, initAsync, createAsync, {
 			{StringId::_native_updated, StringId::Invalid, &Async::native_updated},
 	});
@@ -1432,6 +1483,9 @@ void initializeEmbeddedClasses() {
 			{StringId::remove, StringId::Invalid, &Dict::native_remove},
 			{StringId::keys, StringId::Invalid, &Dict::native_keys},
 			{StringId::values, StringId::Invalid, &Dict::native_values}
+	});
+
+	clReflectNode = createEmbeddedClass(errorReceiver, sTable, classFinder, initReflectNode, createReflectNode, {
 	});
 
 	// Add embedded conversions

@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019,2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -157,6 +157,7 @@ StringTable::StringTable() noexcept {
 			{"String", StringId::String},
 			{"Array", StringId::Array},
 			{"Dict", StringId::Dict},
+			{"_ReflectNode", StringId::_ReflectNode},
 
 			{"Exception", StringId::Exception},
 			{"RuntimeException", StringId::RuntimeException},
@@ -267,7 +268,9 @@ StringTable::StringTable() noexcept {
 			{"_native_insert", StringId::_native_insert},
 			{"_native_append", StringId::_native_append},
 			{"_native_at", StringId::_native_at},
-			{"_native_sub", StringId::_native_sub}
+			{"_native_sub", StringId::_native_sub},
+			{"_block", StringId::_block},
+			{"_sub", StringId::_sub}
 	};
 	idToStr.resize(static_cast<size_t>(StringId::PredefinedStringIds));
 	for (auto& e : strToId)

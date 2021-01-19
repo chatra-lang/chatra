@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ constexpr TypeId typeId_String = toTypeId(4);
 constexpr TypeId typeId_ContainerBody = toTypeId(5);
 constexpr TypeId typeId_Array = toTypeId(6);
 constexpr TypeId typeId_Dict = toTypeId(7);
+constexpr TypeId typeId_ReflectNode = toTypeId(14);
 
 class Class;
 class ClassTable;
@@ -909,6 +910,7 @@ public:
 	}
 
 	void add(Reference ref);
+	Reference add();
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(Array);
 
@@ -966,6 +968,29 @@ public:
 #ifndef CHATRA_NDEBUG
 	void dump(const std::shared_ptr<StringTable>& sTable) const override;
 #endif // !CHATRA_NDEBUG
+};
+
+
+struct ReflectNodeShared {
+	std::vector<std::shared_ptr<Line>> lines;
+	std::vector<std::unique_ptr<Token>> additionalTokens;
+
+public:
+	void addNode(Node& node);
+};
+
+class ReflectNode : public ObjectBase, private NativeSelf<ReflectNode> {
+private:
+	std::shared_ptr<ReflectNodeShared> shared;
+	Node n;
+
+public:
+	static const Class* getClassStatic();
+
+	explicit ReflectNode(Storage& storage, std::shared_ptr<ReflectNodeShared> shared,
+			const Node* node) noexcept;
+
+	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(ReflectNode);
 };
 
 
