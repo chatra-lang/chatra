@@ -157,6 +157,7 @@ StringTable::StringTable() noexcept {
 			{"String", StringId::String},
 			{"Array", StringId::Array},
 			{"Dict", StringId::Dict},
+			{"_ReflectNodeShared", StringId::_ReflectNodeShared},
 			{"_ReflectNode", StringId::_ReflectNode},
 
 			{"Exception", StringId::Exception},
@@ -269,6 +270,7 @@ StringTable::StringTable() noexcept {
 			{"_native_append", StringId::_native_append},
 			{"_native_at", StringId::_native_at},
 			{"_native_sub", StringId::_native_sub},
+			{"_shared", StringId::_shared},
 			{"_block", StringId::_block},
 			{"_sub", StringId::_sub}
 	};

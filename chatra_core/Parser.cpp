@@ -23,6 +23,34 @@
 
 namespace chatra {
 
+void Literal::save(Writer& w) const {
+	w.out(type);
+	switch (type) {
+	case LiteralType::Null:  break;
+	case LiteralType::Bool:  w.out(vBool);  break;
+	case LiteralType::Int:  w.out(vInt);  break;
+	case LiteralType::Float:  w.out(vFloat);  break;
+	case LiteralType::String:
+	case LiteralType::MultilingualString:
+		w.out(vString);
+		break;
+	}
+}
+
+void Literal::restore(Reader & r) {
+	r.in(type);
+	switch (type) {
+	case LiteralType::Null:  break;
+	case LiteralType::Bool:  r.in(vBool);  break;
+	case LiteralType::Int:  r.in(vInt);  break;
+	case LiteralType::Float:  r.in(vFloat);  break;
+	case LiteralType::String:
+	case LiteralType::MultilingualString:
+		r.in(vString);
+		break;
+	}
+}
+
 class ParserContext final {
 private:
 	IErrorReceiver& errorReceiver;

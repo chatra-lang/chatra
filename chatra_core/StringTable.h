@@ -164,6 +164,7 @@ enum class StringId : uint_least32_t {
 	String,
 	Array,
 	Dict,
+	_ReflectNodeShared,
 	_ReflectNode,
 
 	// Exceptions
@@ -268,6 +269,7 @@ enum class StringId : uint_least32_t {
 	_native_append,
 	_native_at,
 	_native_sub,
+	_shared,
 	_block,
 	_sub,
 

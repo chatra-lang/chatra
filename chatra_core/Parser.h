@@ -90,6 +90,10 @@ struct Literal final {
 		double vFloat;
 	};
 	std::string vString;
+
+public:
+	Literal() noexcept = default;
+	CHATRA_DECLARE_SERIALIZE_METHODS(Literal);
 };
 
 enum class Operator : uint_least8_t {

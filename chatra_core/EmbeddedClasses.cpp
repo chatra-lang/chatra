@@ -29,6 +29,7 @@ static std::unique_ptr<Class> clAsync;
 static std::unique_ptr<Class> clString;
 static std::unique_ptr<Class> clArray;
 static std::unique_ptr<Class> clDict;
+static std::unique_ptr<Class> clReflectNodeShared;
 static std::unique_ptr<Class> clReflectNode;
 static std::unordered_map<StringId, Node*> nodeMap;
 
@@ -1300,33 +1301,123 @@ void Dict::native_values(CHATRA_NATIVE_ARGS) {
 		retValue.container().ref(index++).set(self.container().ref(e.second));
 }
 
+const Class* ReflectNodeShared::getClassStatic() {
+	return clReflectNodeShared.get();
+}
+
+ReflectNodeShared::ReflectNodeShared(Storage& storage) noexcept
+		: ObjectBase(storage, typeId_ReflectNodeShared, getClassStatic()) {
+}
+
 void ReflectNodeShared::addNode(Node& node) {
+	assert(!node.line || lines.cend() != std::find(lines.cbegin(), lines.cend(), node.line));
 	for (auto& token : node.additionalTokens)
 		additionalTokens.push_back(std::move(token));
 	node.additionalTokens.clear();
+}
+
+std::tuple<size_t, size_t> ReflectNodeShared::getIndex(const Token* t) const {
+	for (size_t i = 0; i < additionalTokens.size(); i++) {
+		if (additionalTokens[i].get() == t)
+			return std::make_tuple(std::numeric_limits<size_t>::max(), i);
+	}
+
+	for (size_t i = 0; i < lines.size(); i++) {
+		for (size_t j = 0; j < lines[i]->tokens.size(); j++) {
+			if (&lines[i]->tokens[j] == t)
+				return std::make_tuple(i, j);
+		}
+	}
+	throw InternalError();
+}
+
+const Token* ReflectNodeShared::findToken(const std::tuple<size_t, size_t>& indexes) const {
+	auto index0 = std::get<0>(indexes);
+	auto index1 = std::get<1>(indexes);
+
+	if (index0 == std::numeric_limits<size_t>::max())
+		return additionalTokens[index1].get();
+
+	return &lines[index0]->tokens[index1];
+}
+
+static const char* initReflectNodeShared = R"***(
+class _ReflectNodeShared
+	def init()
+)***";
+
+[[noreturn]] static void createReflectNodeShared(const Class* cl, Reference) {
+	(void)cl;
+	chatra_assert(cl == clReflectNodeShared.get());
+	throw RuntimeException(StringId::UnsupportedOperationException);
+}
+
+bool ReflectNodeShared::save(Writer& w) const {
+	w.out(lines, [&](const std::shared_ptr<Line>& v) {
+		w.out(*v);
+		w.out(v->tokens, [&](const Token& t) {
+			assert(t.line.lock().get() == v.get());
+			w.out(t);
+		});
+	});
+
+	w.out(additionalTokens, [&](const std::unique_ptr<Token>& t) {
+		w.out(*t);
+
+		auto it = std::find_if(lines.cbegin(), lines.cend(), [&](const std::shared_ptr<Line>& v) {
+			return t->line.lock().get() == v.get();
+		});
+		assert(lines.cend() != it);
+		w.out(std::distance(lines.cbegin(), it));
+	});
+	return false;
+}
+
+ReflectNodeShared::ReflectNodeShared(Reader&) noexcept : ObjectBase(typeId_ReflectNodeShared, getClassStatic()) {
+}
+
+bool ReflectNodeShared::restore(Reader& r) {
+	r.inList([&]() {
+		lines.emplace_back(std::make_shared<Line>(r));
+		auto& v = lines.back();
+		v->restore(r);
+		r.inList([&]() {
+			v->tokens.emplace_back(r);
+			auto& t = v->tokens.back();
+			t.restore(r);
+			t.line = v;
+		});
+	});
+
+	r.inList([&]() {
+		additionalTokens.emplace_back(r.allocate<Token>());
+		additionalTokens.back()->line = lines[r.read<ptrdiff_t>()];
+	});
+	return false;
 }
 
 const Class* ReflectNode::getClassStatic() {
 	return clReflectNode.get();
 }
 
-ReflectNode::ReflectNode(Storage& storage, std::shared_ptr<ReflectNodeShared> shared,
-		const Node* node) noexcept
-		: ObjectBase(storage, typeId_ReflectNode, getClassStatic()),
-		shared(std::move(shared)) {
+ReflectNode::ReflectNode(Storage& storage, const Node* node) noexcept
+		: ObjectBase(storage, typeId_ReflectNode, getClassStatic()) {
+
+	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Parsed);
 
 	n.type = node->type;
-	n.line = node->line;
 	n.tokens = node->tokens;
 	n.flags = node->flags;
 	n.sid = node->sid;
 	if (node->literalValue)
 		n.literalValue.reset(new Literal(*node->literalValue));
 	n.op = node->op;
+	n.blockNodesState = NodeState::Parsed;
 }
 
 static const char* initReflectNode = R"***(
 class _ReflectNode
+	var _shared
 	var _block
 	var _sub
 	def init()
@@ -1339,16 +1430,47 @@ class _ReflectNode
 }
 
 bool ReflectNode::save(Writer& w) const {
-	// TODO
+	auto& shared = ref(0).derefWithoutLock<ReflectNodeShared>();
+
+	w.out(n.type);
+	w.out(n.tokens, [&](const Token* t) {
+		auto indexes = shared.getIndex(t);
+		w.out(std::get<0>(indexes));
+		w.out(std::get<1>(indexes));
+	});
+	w.out(n.flags);
+	w.out(n.sid);
+	w.out(static_cast<bool>(n.literalValue));
+	if (n.literalValue)
+		w.out(*n.literalValue);
+	w.out(n.op);
 	return false;
 }
 
 ReflectNode::ReflectNode(Reader&) noexcept : ObjectBase(typeId_ReflectNode, getClassStatic()) {
+	n.blockNodesState = NodeState::Parsed;
 }
 
 bool ReflectNode::restore(Reader& r) {
-	// TODO
+	r.in(n.type);
+	r.inList([&]() {
+		auto index0 = r.read<size_t>();
+		auto index1 = r.read<size_t>();
+		restoredTokens.emplace_back(std::make_tuple(index0, index1));
+	});
+	r.in(n.flags);
+	r.in(n.sid);
+	if (r.read<bool>())
+		n.literalValue.reset(r.allocate<Literal>());
+	r.in(n.op);
 	return false;
+}
+
+void ReflectNode::restoreReferences(Reader&) {
+	auto& shared = ref(0).derefWithoutLock<ReflectNodeShared>();
+	for (auto& e : restoredTokens)
+		n.tokens.emplace_back(shared.findToken(e));
+	restoredTokens.clear();
 }
 
 template <StringId name>
@@ -1485,8 +1607,10 @@ void initializeEmbeddedClasses() {
 			{StringId::values, StringId::Invalid, &Dict::native_values}
 	});
 
-	clReflectNode = createEmbeddedClass(errorReceiver, sTable, classFinder, initReflectNode, createReflectNode, {
-	});
+	clReflectNodeShared = createEmbeddedClass(errorReceiver, sTable, classFinder,
+			initReflectNodeShared, createReflectNodeShared, {});
+	clReflectNode = createEmbeddedClass(errorReceiver, sTable, classFinder,
+			initReflectNode, createReflectNode, {});
 
 	// Add embedded conversions
 	Bool::getWritableClassStatic()->addConvertingConstructor(Int::getClassStatic());

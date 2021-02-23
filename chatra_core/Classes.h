@@ -38,7 +38,8 @@ constexpr TypeId typeId_String = toTypeId(4);
 constexpr TypeId typeId_ContainerBody = toTypeId(5);
 constexpr TypeId typeId_Array = toTypeId(6);
 constexpr TypeId typeId_Dict = toTypeId(7);
-constexpr TypeId typeId_ReflectNode = toTypeId(14);
+constexpr TypeId typeId_ReflectNodeShared = toTypeId(14);
+constexpr TypeId typeId_ReflectNode = toTypeId(15);
 
 class Class;
 class ClassTable;
@@ -971,26 +972,33 @@ public:
 };
 
 
-struct ReflectNodeShared {
+struct ReflectNodeShared : public ObjectBase, private NativeSelf<ReflectNodeShared> {
 	std::vector<std::shared_ptr<Line>> lines;
 	std::vector<std::unique_ptr<Token>> additionalTokens;
 
 public:
+	static const Class* getClassStatic();
+
+	explicit ReflectNodeShared(Storage& storage) noexcept;
 	void addNode(Node& node);
+	std::tuple<size_t, size_t> getIndex(const Token* t) const;
+	const Token* findToken(const std::tuple<size_t, size_t>& indexes) const;
+
+	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(ReflectNodeShared);
 };
 
 class ReflectNode : public ObjectBase, private NativeSelf<ReflectNode> {
 private:
-	std::shared_ptr<ReflectNodeShared> shared;
 	Node n;
+	std::vector<std::tuple<size_t, size_t>> restoredTokens;
 
 public:
 	static const Class* getClassStatic();
 
-	explicit ReflectNode(Storage& storage, std::shared_ptr<ReflectNodeShared> shared,
-			const Node* node) noexcept;
+	explicit ReflectNode(Storage& storage, const Node* node) noexcept;
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(ReflectNode);
+	void restoreReferences(Reader& r);
 };
 
 

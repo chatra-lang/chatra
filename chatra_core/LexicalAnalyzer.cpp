@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019,2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,41 @@
 #include "CharacterClass.h"
 
 namespace chatra {
+
+// These methods serialize all fields except the fields which refers other classes (line, tokens)
+void Token::save(Writer& w) const {
+	w.out(index);
+	w.out(first);
+	w.out(last);
+	w.out(type);
+	w.out(sid);
+	w.out(literal);
+}
+
+void Token::restore(Reader& r) {
+	r.in(index);
+	r.in(first);
+	r.in(last);
+	r.in(type);
+	r.in(sid);
+	r.in(literal);
+}
+
+void Line::save(Writer& w) const {
+	w.out(containsError);
+	w.out(fileName);
+	w.out(lineNo);
+	w.out(line);
+	w.out(indents);
+}
+
+void Line::restore(Reader& r) {
+	r.in(containsError);
+	r.in(fileName);
+	r.in(lineNo);
+	r.in(line);
+	r.in(indents);
+}
 
 struct CodePoint final {
 	unsigned lineNo = 0;

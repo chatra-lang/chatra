@@ -579,6 +579,7 @@ void RuntimeImp::saveStorage(Writer& w) const {
 		CHATRA_WRITE_OBJECT(ContainerBody);
 		CHATRA_WRITE_OBJECT(Array);
 		CHATRA_WRITE_OBJECT(Dict);
+		CHATRA_WRITE_OBJECT(ReflectNodeShared);
 		CHATRA_WRITE_OBJECT(ReflectNode);
 
 		CHATRA_WRITE_OBJECT_WITH_THREAD(TemporaryObject);
@@ -807,6 +808,7 @@ void RuntimeImp::restoreStorage(Reader& r) const {
 		CHATRA_READ_OBJECT(ContainerBody);
 		CHATRA_READ_OBJECT(Array);
 		CHATRA_READ_OBJECT(Dict);
+		CHATRA_READ_OBJECT(ReflectNodeShared);
 		CHATRA_READ_OBJECT(ReflectNode);
 
 		CHATRA_READ_OBJECT_WITH_THREAD(TemporaryObject);
@@ -826,6 +828,7 @@ void RuntimeImp::restoreStorage(Reader& r) const {
 		r.restoreResync(static_cast<int>(typeId));
 		switch (typeId) {
 		CHATRA_READ_OBJECT_REFS(UserObjectBase);
+		CHATRA_READ_OBJECT_REFS(ReflectNode);
 		CHATRA_READ_OBJECT_REFS(TemporaryObject);
 		CHATRA_READ_OBJECT_REFS(TemporaryTuple);
 		CHATRA_READ_OBJECT_REFS(WaitContext);

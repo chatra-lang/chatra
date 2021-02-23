@@ -1,7 +1,7 @@
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019-2020 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@
 
 #include "Internal.h"
 #include "StringTable.h"
+#include "Serialize.h"
 
 namespace chatra {
 
@@ -51,6 +52,8 @@ public:
 	Token(std::weak_ptr<Line> line, unsigned index, size_t first, size_t last,
 			TokenType type, StringId sid) noexcept
 			: line(std::move(line)), index(index), first(first), last(last), type(type), sid(sid) {}
+
+	CHATRA_DECLARE_SERIALIZE_METHODS(Token);
 };
 
 struct Line final {
@@ -60,6 +63,10 @@ struct Line final {
 	std::string line;  // sometimes contains LF if the line has raw-string
 	unsigned indents;
 	std::vector<Token> tokens;
+
+public:
+	Line() noexcept = default;
+	CHATRA_DECLARE_SERIALIZE_METHODS(Line);
 };
 
 constexpr unsigned WholeFile = std::numeric_limits<unsigned>::max() - 1;

@@ -317,22 +317,28 @@ void native_objectId(CHATRA_NATIVE_ARGS) {
 	ret.setInt(static_cast<int64_t>(id));
 }
 
-static void buildReflectNode(std::shared_ptr<ReflectNodeShared>& shared, Reference ref, Node* node) {
-	auto& reflectNode = ref.allocate<ReflectNode>(shared, node);
-	shared->addNode(*node);
+static void buildReflectNode(Reference sharedRef, Reference ref, Node* node);
 
-	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_block, StringId::Invalid, {}, {})->position == 0);
-	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_sub, StringId::Invalid, {}, {})->position == 1);
-
-	auto& blocks = reflectNode.ref(0).allocateWithoutLock<Array>(node->blockNodes.size());
+static void buildReflectNodeCallRecursive(Reference sharedRef, ReflectNode& reflectNode, Node* node) {
+	auto& blocks = reflectNode.ref(1).allocateWithoutLock<Array>();
 	for (auto& n : node->blockNodes)
-		buildReflectNode(shared, blocks.add(), n.get());
+		buildReflectNode(sharedRef, blocks.add(), n.get());
 
-	auto& subs = reflectNode.ref(1).allocateWithoutLock<Array>(node->subNodes.size());
+	auto& subs = reflectNode.ref(2).allocateWithoutLock<Array>();
 	for (auto& n : node->subNodes) {
+		auto ref = subs.add();
 		if (n)
-			buildReflectNode(shared, subs.add(), n.get());
+			buildReflectNode(sharedRef, ref, n.get());
 	}
+}
+
+static void buildReflectNode(Reference sharedRef, Reference ref, Node* node) {
+	sharedRef.derefWithoutLock<ReflectNodeShared>().addNode(*node);
+
+	auto& reflectNode = ref.allocateWithoutLock<ReflectNode>(node);
+	reflectNode.ref(0).setWithoutBothLock(sharedRef);
+
+	buildReflectNodeCallRecursive(sharedRef, reflectNode, node);
 }
 
 void native_compile(CHATRA_NATIVE_ARGS) {
@@ -401,10 +407,17 @@ void native_compile(CHATRA_NATIVE_ARGS) {
 		runtime.distributeStringTable(sTableVersion);
 	}
 
-	auto shared = std::make_shared<ReflectNodeShared>();
-	shared->lines = std::move(lines);
+	auto& reflectNode = ret.allocate<ReflectNode>(node.get());
+	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_shared, StringId::Invalid, {}, {})->position == 0);
+	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_block, StringId::Invalid, {}, {})->position == 1);
+	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_sub, StringId::Invalid, {}, {})->position == 2);
 
-	buildReflectNode(shared, ret, node.get());
+	auto sharedRef = reflectNode.ref(0);
+	auto& shared = sharedRef.allocateWithoutLock<ReflectNodeShared>();
+	shared.lines = std::move(lines);
+	shared.addNode(*node);
+
+	buildReflectNodeCallRecursive(sharedRef, reflectNode, node.get());
 }
 
 #ifndef CHATRA_NDEBUG
