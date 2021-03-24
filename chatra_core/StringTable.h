@@ -263,6 +263,7 @@ enum class StringId : uint_least32_t {
 	keys,
 	values,
 	position,
+	get,
 	_native_updated,
 	_native_add,
 	_native_insert,

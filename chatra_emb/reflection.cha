@@ -2,7 +2,7 @@ CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
- * Copyright(C) 2019 Chatra Project Team
+ * Copyright(C) 2019-2021 Chatra Project Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,60 @@ CHATRA_IGNORE_THIS_LINE R"***(
  *
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
+
+import enum
+
+class _NodeType extends Enum
+    var SCRIPT_ROOT: 1
+    var IMPORT: 2
+    var DEF: 3
+    var DEF_OPERATOR: 4
+    var CLASS: 5
+    var EXPRESSION: 6
+    var SYNC: 7
+    var TOUCH: 8
+    var VAR: 9
+    var IF_GROUP: 10
+    var IF: 11
+    var ELSE_IF: 12
+    var ELSE: 13
+    var FOR: 14
+    var WHILE: 15
+    var SWITCH: 16
+    var CASE: 17
+    var DEFAULT: 18
+    var DO: 19
+    var CATCH: 20
+    var FINALLY: 21
+    var BREAK: 22
+    var CONTINUE: 23
+    var RETURN: 24
+    var THROW: 25
+    var LITERAL: 26
+    var NAME: 27
+    var OPERATOR: 28
+
+    def init()
+        super()
+
+var NodeType: _NodeType()
+
+
+class Node
+    var _n
+
+    def type()
+        return _n.get(0, -1)
+    def type().set(r)
+        throw UnsupportedOperationException()
+
+
+def compile(script: String)
+    ret: Node()
+    ret._n = _native_compile(script, 1)
+    return ret
+
+
 
 // TODO
 

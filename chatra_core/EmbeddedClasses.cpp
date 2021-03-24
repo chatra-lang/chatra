@@ -19,6 +19,7 @@
  */
 
 #include "Classes.h"
+#include "Runtime.h"
 
 namespace chatra {
 
@@ -1415,14 +1416,6 @@ ReflectNode::ReflectNode(Storage& storage, const Node* node) noexcept
 	n.blockNodesState = NodeState::Parsed;
 }
 
-static const char* initReflectNode = R"***(
-class _ReflectNode
-	var _shared
-	var _block
-	var _sub
-	def init()
-)***";
-
 [[noreturn]] static void createReflectNode(const Class* cl, Reference) {
 	(void)cl;
 	chatra_assert(cl == clReflectNode.get());
@@ -1471,6 +1464,83 @@ void ReflectNode::restoreReferences(Reader&) {
 	for (auto& e : restoredTokens)
 		n.tokens.emplace_back(shared.findToken(e));
 	restoredTokens.clear();
+}
+
+static const char* initReflectNode = R"***(
+class _ReflectNode
+	var _shared
+	var _block
+	var _sub
+	def init()
+	def get(a0: Int, a1: Int) as native
+)***";
+
+void ReflectNode::native_get(CHATRA_NATIVE_ARGS) {
+	CHATRA_NATIVE_SELF;
+	std::lock_guard<SpinLock> lock0(self.lockValue);
+
+	auto target = static_cast<int>(args.ref(0).getInt());
+	auto index = static_cast<size_t>(args.ref(1).getInt());
+	switch (target) {
+	case 0:  ret.setInt(static_cast<int64_t>(self.n.type));  break;
+	case 1:  ret.setInt(static_cast<int64_t>(self.n.tokens.size()));  break;
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6: {
+		if (index >= self.n.tokens.size())
+			throw RuntimeException(StringId::IllegalArgumentException);
+		auto* t = self.n.tokens[index];
+		assert(t != nullptr);
+		switch (target) {
+		case 2:  ret.setInt(static_cast<int64_t>(t->index));  break;
+		case 3:  ret.setInt(static_cast<int64_t>(t->type));  break;
+		case 4: {
+			auto line = t->line.lock();
+			if (!line)
+				ret.allocateWithoutLock<String>().setValue("");
+			else
+				ret.allocateWithoutLock<String>().setValue(
+						line->line.substr(t->first, t->last - t->first));
+			break;
+		}
+		case 5:
+			thread.captureStringTable();
+			ret.allocateWithoutLock<String>().setValue(t->sid == StringId::Invalid ? ""
+					: thread.sTable->ref(t->sid));
+			break;
+		case 6:  ret.allocateWithoutLock<String>().setValue(t->literal);  break;
+		}
+		break;
+	}
+	case 7:  ret.setInt(static_cast<int64_t>(self.n.flags));  break;
+	case 8:
+		thread.captureStringTable();
+		ret.allocateWithoutLock<String>().setValue(self.n.sid == StringId::Invalid ? ""
+				: thread.sTable->ref(self.n.sid));
+		break;
+	case 9:
+		ret.setInt(self.n.literalValue ? static_cast<int64_t>(self.n.literalValue->type) : -1);
+		break;
+	case 10:
+		if (!self.n.literalValue)
+			throw RuntimeException(StringId::IllegalArgumentException);
+		switch (self.n.literalValue->type) {
+		case LiteralType::Null:  ret.setNull();  break;
+		case LiteralType::Bool:  ret.setBool(self.n.literalValue->vBool);  break;
+		case LiteralType::Int:  ret.setInt(self.n.literalValue->vInt);  break;
+		case LiteralType::Float:  ret.setFloat(self.n.literalValue->vFloat);  break;
+		case LiteralType::String:
+		case LiteralType::MultilingualString:
+			ret.allocateWithoutLock<String>().setValue(self.n.literalValue->vString);
+			break;
+		}
+		break;
+	case 11:  ret.setInt(static_cast<int64_t>(self.n.op));  break;
+	default:
+		throw RuntimeException(StringId::IllegalArgumentException);
+	}
 }
 
 template <StringId name>
@@ -1609,8 +1679,9 @@ void initializeEmbeddedClasses() {
 
 	clReflectNodeShared = createEmbeddedClass(errorReceiver, sTable, classFinder,
 			initReflectNodeShared, createReflectNodeShared, {});
-	clReflectNode = createEmbeddedClass(errorReceiver, sTable, classFinder,
-			initReflectNode, createReflectNode, {});
+	clReflectNode = createEmbeddedClass(errorReceiver, sTable, classFinder, initReflectNode, createReflectNode, {
+			{StringId::get, StringId::Invalid, &ReflectNode::native_get},
+	});
 
 	// Add embedded conversions
 	Bool::getWritableClassStatic()->addConvertingConstructor(Int::getClassStatic());

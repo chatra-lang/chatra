@@ -264,6 +264,7 @@ StringTable::StringTable() noexcept {
 			{"keys", StringId::keys},
 			{"values", StringId::values},
 			{"position", StringId::position},
+			{"get", StringId::get},
 			{"_native_updated", StringId::_native_updated},
 			{"_native_add", StringId::_native_add},
 			{"_native_insert", StringId::_native_insert},

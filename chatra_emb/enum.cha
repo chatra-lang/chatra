@@ -1,3 +1,4 @@
+CHATRA_IGNORE_THIS_LINE R"***(
 /*
  * Programming language 'Chatra' reference implementation
  *
@@ -18,26 +19,11 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-import r: reflection
+class Enum
+    def name(value)
+    def values()
+    def parse()
 
-n = r.compile("def foo(a)\n\treturn a + 1")
+// TODO
 
-log("a = " + n.type)
-log("b = " + r.NodeType.CATCH)
-
-t = "IF_GROUP"
-log("b = " + r.NodeType.(t))
-
-/*
-def testCompile(script)
-	return _native_compile(script, 1)
-
-log("test")
-
-a = testCompile("def foo(a)\n\treturn a + 1")
-
-log("id = " + objectId(a))
-log("block = " + a._block.size())
-log("sub = " + a._sub.size())
-
-*/
+CHATRA_IGNORE_THIS_LINE )***"

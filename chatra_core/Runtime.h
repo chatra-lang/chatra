@@ -730,7 +730,6 @@ private:
 	static void set(Node& node, NodeType type);
 	static void set(Node& node, Operator op);
 
-	void captureStringTable();
 	void scanInnerFunctions(IErrorReceiver* errorReceiver, const StringTable* sTable);
 	bool parse();
 
@@ -880,6 +879,8 @@ private:
 	bool checkDebugBreak(Node* node0, Thread* thread, size_t& phase, PhaseCond phaseCond);
 
 public:
+	void captureStringTable();
+
 	Frame* findClassFrame();
 
 	void error(ErrorLevel level,

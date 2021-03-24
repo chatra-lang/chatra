@@ -19,6 +19,10 @@ add_library(chatra_emb
         randomNative.cpp
         math.cha
         mathNative.cpp
+        reflection.cha
+        reflectionNative.cpp
+        enum.cha
+        enumNative.cpp
         )
 
 target_link_libraries(chatra_emb INTERFACE chatra_core)

@@ -18,26 +18,20 @@
  * author: Satoshi Hosokawa (chatra.hosokawa@gmail.com)
  */
 
-import r: reflection
+#include "chatra.h"
 
-n = r.compile("def foo(a)\n\treturn a + 1")
+namespace chatra {
+namespace emb {
+namespace enum_ {
 
-log("a = " + n.type)
-log("b = " + r.NodeType.CATCH)
+static const char* script =
+#include "enum.cha"
+;
 
-t = "IF_GROUP"
-log("b = " + r.NodeType.(t))
+PackageInfo packageInfo() {
+	return {{{"enum", script}}, {}, nullptr};
+}
 
-/*
-def testCompile(script)
-	return _native_compile(script, 1)
-
-log("test")
-
-a = testCompile("def foo(a)\n\treturn a + 1")
-
-log("id = " + objectId(a))
-log("block = " + a._block.size())
-log("sub = " + a._sub.size())
-
-*/
+}  // namespace enum_
+}  // namespace emb
+}  // namespace chatra

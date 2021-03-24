@@ -989,6 +989,7 @@ public:
 
 class ReflectNode : public ObjectBase, private NativeSelf<ReflectNode> {
 private:
+	mutable SpinLock lockValue;
 	Node n;
 	std::vector<std::tuple<size_t, size_t>> restoredTokens;
 
@@ -999,6 +1000,8 @@ public:
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(ReflectNode);
 	void restoreReferences(Reader& r);
+
+	static void native_get(CHATRA_NATIVE_ARGS);
 };
 
 
