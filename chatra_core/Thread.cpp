@@ -1953,13 +1953,18 @@ bool Thread::functionObjectOperator() {
 			throw RuntimeException(StringId::IllegalArgumentException);
 		}
 
+		if (value->getType() != TemporaryObject::Type::FrameMethod
+				&& value->getType() != TemporaryObject::Type::ObjectMethod) {
+			errorAtNode(*this, ErrorLevel::Error, node, "cannot take reference to constructors", {});
+			throw RuntimeException(StringId::IllegalArgumentException);
+		}
+
 		auto* retValue = f.allocateTemporary();
 		if (value->getType() == TemporaryObject::Type::FrameMethod) {
 			retValue->setRvalue().allocate<FunctionObject>(*this, value->getPackage(), value->getFrameIndex(),
 					value->getMethodTable(), method->name);
 		}
 		else {
-			chatra_assert(value->getType() == TemporaryObject::Type::ObjectMethod);
 			retValue->setRvalue().allocate<FunctionObject>(*this, method->cl->getPackage(), value->getSourceRef(),
 					value->getMethodTable(), method->name);
 		}
