@@ -585,6 +585,7 @@ void RuntimeImp::saveStorage(Writer& w) const {
 		CHATRA_WRITE_OBJECT_WITH_THREAD(TemporaryObject);
 		CHATRA_WRITE_OBJECT_WITH_THREAD(TemporaryTuple);
 		CHATRA_WRITE_OBJECT(TupleAssignmentMap);
+		CHATRA_WRITE_OBJECT(ClassObject);
 		CHATRA_WRITE_OBJECT(FunctionObject);
 		CHATRA_WRITE_OBJECT_WITH_THREAD(WaitContext);
 		CHATRA_WRITE_OBJECT(PackageObject);
@@ -814,6 +815,7 @@ void RuntimeImp::restoreStorage(Reader& r) const {
 		CHATRA_READ_OBJECT_WITH_THREAD(TemporaryObject);
 		CHATRA_READ_OBJECT_WITH_THREAD(TemporaryTuple);
 		CHATRA_READ_OBJECT(TupleAssignmentMap);
+		CHATRA_READ_OBJECT(ClassObject);
 		CHATRA_READ_OBJECT(FunctionObject);
 		CHATRA_READ_OBJECT_WITH_THREAD(WaitContext);
 

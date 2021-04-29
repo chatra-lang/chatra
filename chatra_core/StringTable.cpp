@@ -195,6 +195,7 @@ StringTable::StringTable() noexcept {
 			{"#tuple", StringId::Tuple},
 			{"#temporaryTuple", StringId::TemporaryTuple},
 			{"#tupleAssignmentMap", StringId::TupleAssignmentMap},
+			{"#classObject", StringId::ClassObject},
 			{"#functionObject", StringId::FunctionObject},
 			{"#forIterator", StringId::ForIterator},
 

@@ -43,6 +43,7 @@ namespace chatra {
 constexpr TypeId typeId_TemporaryObject = toTypeId(8);
 constexpr TypeId typeId_TemporaryTuple = toTypeId(9);
 constexpr TypeId typeId_TupleAssignmentMap = toTypeId(10);
+constexpr TypeId typeId_ClassObject = toTypeId(16);
 constexpr TypeId typeId_FunctionObject = toTypeId(11);
 constexpr TypeId typeId_WaitContext = toTypeId(12);
 constexpr TypeId typeId_PackageObject = toTypeId(13);
@@ -366,6 +367,17 @@ public:
 			: ObjectBase(storage, typeId_TupleAssignmentMap, getClassStatic()), map(std::move(map)) {}
 
 	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(TupleAssignmentMap);
+};
+
+
+class ClassObject final : public ObjectBase, public PreDefined<ClassObject, StringId::ClassObject> {
+public:
+	const Class* cl;
+
+public:
+	ClassObject(Storage& storage, const Class* cl) noexcept;
+
+	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(ClassObject);
 };
 
 
@@ -798,14 +810,13 @@ private:
 	bool getBoolOrThrow(Node* node, size_t subNodeIndex);  // this contains convertTopToScalar()
 	std::string getStringOrThrow(Node* node, size_t subNodeIndex);  // this contains convertTopToScalar()
 	StringId getStringIdOrThrow(Node* node, size_t subNodeIndex);
-	const Class* isClassOrEvaluate(Node* node, size_t subNodeIndex);
 	const Class* getClassOrThrow(Node* node, size_t subNodeIndex);
 
 	void checkTupleAsArgOrThrow(Node* node, const Tuple& tuple);
 	void checkTupleAsContainerValueOrThrow(Node* node, const Tuple& tuple);
 
 	enum class EvaluateValueMode {
-		Value, Class, ElementSelectionLeft
+		Value, ElementSelectionLeft
 	};
 	enum class EvaluateValueResult {
 		Next, Suspend, StackChanged, FunctionObject

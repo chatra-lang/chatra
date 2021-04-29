@@ -1194,33 +1194,18 @@ StringId Thread::getStringIdOrThrow(Node* node, size_t subNodeIndex) {
 	return sid;
 }
 
-const Class* Thread::isClassOrEvaluate(Node* node, size_t subNodeIndex) {
-	auto& f = frames.back();
-	auto& subNode = node->subNodes[subNodeIndex];
-
-	if (subNode->op == Operator::ElementSelection) {
-		auto& subNode0 = subNode->subNodes[0];
-		auto& subNode1 = subNode->subNodes[1];
-		if (subNode0->type == NodeType::Name && subNode1->type == NodeType::Name) {
-			auto* cl = f.package.findPackageClass(subNode0->sid, subNode1->sid);
-			if (cl != nullptr)
-				return cl;
-		}
-	}
-
-	if (!isNameOrEvaluate(node, subNodeIndex))
-		return nullptr;
-
-	auto* cl = f.package.findClass(subNode->sid);
-	if (cl == nullptr) {
-		errorAtNode(*this, ErrorLevel::Error, subNode.get(), "expected class name", {});
-		throw RuntimeException(StringId::ClassNotFoundException);
-	}
-	return cl;
-}
-
 const Class* Thread::getClassOrThrow(Node* node, size_t subNodeIndex) {
 	auto& f = frames.back();
+
+	convertTopToScalar(node, subNodeIndex);
+	auto* value = frames.back().values.back();
+	if (value->hasRef()) {
+		auto ref = value->getRef();
+		if (!ref.isNull() && ref.valueType() == ReferenceValueType::Object
+				&& ref.deref<ObjectBase>().getClass() == ClassObject::getClassStatic())
+			return ref.deref<ClassObject>().cl;
+	}
+
 	auto& subNode = node->subNodes[subNodeIndex];
 	auto str = getStringOrThrow(node, subNodeIndex);
 
@@ -1322,43 +1307,41 @@ Thread::EvaluateValueResult Thread::evaluateValue(EvaluateValueMode mode) {
 		return result;
 	}
 
-	if (!value->isComplete()) {
-		switch (mode) {
-		case EvaluateValueMode::Class:
-			if (value->getType() == TemporaryObject::Type::Class) {
-				nodePhase++;
-				return EvaluateValueResult::Next;
-			}
-			break;
-
-		case EvaluateValueMode::ElementSelectionLeft:
-			switch (value->getType()) {
-			case TemporaryObject::Type::Package:
-			case TemporaryObject::Type::Class:
-			case TemporaryObject::Type::Super:
-			case TemporaryObject::Type::ExplicitSuper:
-				nodePhase++;
-				return EvaluateValueResult::Next;
-			default:
-				break;
-			}
-			break;
-
-		default:
-			break;
-		}
-
-		errorAtNode(*this, ErrorLevel::Error, value->getNode(), "incomplete expression", {});
-		throw RuntimeException(StringId::IncompleteExpressionException);
-	}
-
-	if (value->getType() == TemporaryObject::Type::Rvalue) {
+	switch (value->getType()) {
+	case TemporaryObject::Type::Rvalue:
 		nodePhase++;
 		if (getReferClass(value->getRef()) == TemporaryTuple::getClassStatic()) {
 			f.stack.emplace_back(&evaluateTupleNode, 0);
 			return EvaluateValueResult::StackChanged;
 		}
 		return EvaluateValueResult::Next;
+
+	case TemporaryObject::Type::Class: {
+		nodePhase++;
+		if (mode == EvaluateValueMode::ElementSelectionLeft)
+			return EvaluateValueResult::Next;
+		auto* cl = value->getClass();
+		f.pop();
+		f.pushTemporary()->setRvalue().allocate<ClassObject>(cl);
+		return EvaluateValueResult::Next;
+	}
+
+	case TemporaryObject::Type::Package:
+	case TemporaryObject::Type::Super:
+	case TemporaryObject::Type::ExplicitSuper:
+		if (mode == EvaluateValueMode::ElementSelectionLeft) {
+			nodePhase++;
+			return EvaluateValueResult::Next;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	if (!value->isComplete()) {
+		errorAtNode(*this, ErrorLevel::Error, value->getNode(), "incomplete expression", {});
+		throw RuntimeException(StringId::IncompleteExpressionException);
 	}
 
 	if (value->hasRef()) {
@@ -2087,32 +2070,28 @@ bool Thread::instanceOfOperator() {
 	switch (nodePhase) {
 	case 0:  nodePhase++;  f.stack.emplace_back(node->subNodes[0].get(), 0);  return true;
 	case 1:  CHATRA_EVALUATE_VALUE;
-	case 2:
-		if (nullptr != (cl = isClassOrEvaluate(node, 1)))
-			break;
-		return true;
-	case 3:  CHATRA_EVALUATE_VALUE_MODE(Class);
-	default:
+	case 2:  nodePhase++;  f.stack.emplace_back(node->subNodes[1].get(), 0);  return true;
+	case 3:  CHATRA_EVALUATE_VALUE;
+	default: {
 		cl = getClassOrThrow(node, 1);
 		f.pop();
-		break;
-	}
 
-	chatra_assert(cl != nullptr);
-	auto ref = f.values.back()->getRef();
-	bool result;
-	switch (ref.valueType()) {
-	case ReferenceValueType::Bool:  result = (cl == Bool::getClassStatic());  break;
-	case ReferenceValueType::Int:  result = (cl == Int::getClassStatic());  break;
-	case ReferenceValueType::Float:  result = (cl == Float::getClassStatic());  break;
-	default:
-		result = !ref.isNull() && cl->isAssignableFrom(ref.deref<ObjectBase>().getClass());
-		break;
+		auto ref = f.values.back()->getRef();
+		bool result;
+		switch (ref.valueType()) {
+		case ReferenceValueType::Bool:  result = (cl == Bool::getClassStatic());  break;
+		case ReferenceValueType::Int:  result = (cl == Int::getClassStatic());  break;
+		case ReferenceValueType::Float:  result = (cl == Float::getClassStatic());  break;
+		default:
+			result = !ref.isNull() && cl->isAssignableFrom(ref.deref<ObjectBase>().getClass());
+			break;
+		}
+		f.pop();
+		f.pushTemporary()->setRvalue().setBool(result);
+		f.stack.pop_back();
+		return true;
 	}
-	f.pop();
-	f.pushTemporary()->setRvalue().setBool(result);
-	f.stack.pop_back();
-	return true;
+	}
 }
 
 bool Thread::conditionalOperator() {

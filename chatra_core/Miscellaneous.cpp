@@ -48,6 +48,24 @@ bool TupleAssignmentMap::restore(Reader& r) {
 	return true;
 }
 
+ClassObject::ClassObject(Storage& storage, const Class* cl) noexcept
+		: ObjectBase(storage, typeId_ClassObject, getClassStatic()), cl(cl) {
+}
+
+bool ClassObject::save(Writer& w) const {
+	w.out(cl);
+	return false;
+}
+
+ClassObject::ClassObject(Reader&) noexcept
+		: ObjectBase(typeId_ClassObject, getClassStatic()), cl(nullptr) {
+}
+
+bool ClassObject::restore(Reader& r) {
+	r.in(cl);
+	return false;
+}
+
 static size_t functionObjectRefCount(Thread& thread, size_t frameIndex) {
 	size_t count = 0;
 	while (frameIndex != SIZE_MAX) {

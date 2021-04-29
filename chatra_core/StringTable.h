@@ -204,6 +204,7 @@ enum class StringId : uint_least32_t {
 	Tuple,
 	TemporaryTuple,
 	TupleAssignmentMap,
+	ClassObject,
 	FunctionObject,
 	ForIterator,
 
