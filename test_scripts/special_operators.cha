@@ -408,6 +408,8 @@ def testInstanceOf()
 			_check('class name provided by string literal (invalid name)', true)
 
 	b = 'Int'
+	_check('class name provided by expression', 1 is b)
+	_check('class name provided by expression', !(1.0 is b))
 	_check('class name provided by expression', 1 is (b))
 	_check('class name provided by expression', !(1.0 is (b)))
 
@@ -415,11 +417,6 @@ def testInstanceOf()
 		return value: 'Int'
 	_check('class name provided as single-value Tuple', 1 is (returnStringOfIntAsSingleValueTuple()))
 
-	do
-		1 is b
-		_check('class name provided by expression (bad syntax)', false)
-		catch ClassNotFoundException
-			_check('class name provided by expression (bad syntax)', true)
 	do
 		1 is null
 		_check('class name provided by expression (bad syntax - null)', false)
