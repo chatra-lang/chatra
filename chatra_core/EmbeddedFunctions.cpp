@@ -50,6 +50,8 @@ def type(a0) as native
 def objectId(a0) as native
 
 def _native_compile(a0: String, a1: Int) as native
+def _native_getClassNode(a0) as native
+def _native_getMethodNode(a0, a1: Array, a2: Dict) as native
 
 def operator(a0 == a1)
 	return type(a0).equals(type(a1)) ? a0.equals(a1) : false
@@ -136,6 +138,8 @@ void initializeEmbeddedFunctions() {
 	embeddedMethods.add(NativeMethod(StringId::type, StringId::Invalid, native_type));
 	embeddedMethods.add(NativeMethod(StringId::objectId, StringId::Invalid, native_objectId));
 	embeddedMethods.add(NativeMethod(StringId::_native_compile, StringId::Invalid, native_compile));
+	embeddedMethods.add(NativeMethod(StringId::_native_getClassNode, StringId::Invalid, native_getClassNode));
+	embeddedMethods.add(NativeMethod(StringId::_native_getMethodNode, StringId::Invalid, native_getMethodNode));
 	embeddedMethods.add(NativeMethod(StringId::_check, StringId::Invalid, native_check));
 	embeddedMethods.add(NativeMethod(StringId::_checkCmd, StringId::Invalid, native_checkCmd));
 	embeddedMethods.add(NativeMethod(StringId::_incrementTestTimer, StringId::Invalid, native_incrementTestTimer));
@@ -288,19 +292,10 @@ void native_type(CHATRA_NATIVE_ARGS) {
 	CHATRA_NATIVE_ARGS_CAPTURE;
 
 	auto* cl = getReferClass(args.ref(0));
-	if (cl == nullptr) {
+	if (cl == nullptr)
 		ret.setNull();
-		return;
-	}
-
-	auto& sTable = thread.runtime.distributedSTable;
-	auto value = sTable->ref(cl->getName());
-
-	auto* package = cl->getPackage();
-	if (package != nullptr)
-		value = package->name + "." + value;
-
-	ret.allocate<String>().setValue(value);
+	else
+		ret.allocate<ClassObject>(cl);
 }
 
 void native_objectId(CHATRA_NATIVE_ARGS) {
@@ -341,6 +336,42 @@ static void buildReflectNode(Reference sharedRef, Reference ref, Node* node) {
 	buildReflectNodeCallRecursive(sharedRef, reflectNode, node);
 }
 
+static void buildReflectNode(Reference& ret, Node* node, std::vector<std::shared_ptr<Line>> lines = {}) {
+	auto& reflectNode = ret.allocate<ReflectNode>(node);
+	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_shared, StringId::Invalid, {}, {})->position == 0);
+	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_block, StringId::Invalid, {}, {})->position == 1);
+	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_sub, StringId::Invalid, {}, {})->position == 2);
+
+	auto sharedRef = reflectNode.ref(0);
+	auto& shared = sharedRef.allocateWithoutLock<ReflectNodeShared>();
+	shared.lines = std::move(lines);
+	shared.addNode(*node);
+
+	buildReflectNodeCallRecursive(sharedRef, reflectNode, node);
+}
+
+static size_t findTargetFrameIndex(Thread& thread, size_t popCount) {
+	size_t targetSize = thread.frames.size();
+	for (size_t i = 0; i < popCount; i++) {
+		if (targetSize <= residentialFrameCount)
+			throw RuntimeException(StringId::IllegalArgumentException);
+		targetSize -= thread.frames[targetSize - 1].popCount;
+	}
+	return targetSize;
+}
+
+static std::string getCallerName(Thread& thread, Reference refCallerIndex) {
+	auto targetSize = findTargetFrameIndex(thread,
+			static_cast<size_t>(refCallerIndex.getInt()));
+	auto* n = thread.frames[targetSize - 1].getExceptionNode();
+	std::shared_ptr<Line> line;
+	if (n != nullptr && !n->tokens.empty())
+		line = n->tokens.front()->line.lock();
+
+	return (line ? RuntimeImp::formatOrigin(line->fileName, line->lineNo) : "unknown file")
+			+ ":compile";
+}
+
 void native_compile(CHATRA_NATIVE_ARGS) {
 	CHATRA_NATIVE_ARGS_CAPTURE;
 
@@ -349,22 +380,7 @@ void native_compile(CHATRA_NATIVE_ARGS) {
 		throw RuntimeException(StringId::IllegalArgumentException);
 
 	auto script = arg0.deref<String>().getValue();
-
-	auto popCount = static_cast<size_t>(args.ref(1).getInt());
-	size_t targetSize = thread.frames.size();
-	for (size_t i = 0; i < popCount; i++) {
-		if (targetSize <= residentialFrameCount)
-			throw RuntimeException(StringId::IllegalArgumentException);
-		targetSize -= thread.frames[targetSize - 1].popCount;
-	}
-	auto* callerNode = thread.frames[targetSize - 1].getExceptionNode();
-	std::shared_ptr<Line> callerLine;
-	if (callerNode != nullptr && !callerNode->tokens.empty())
-		callerLine = callerNode->tokens.front()->line.lock();
-
-	std::string callerName = (callerLine ?
-			RuntimeImp::formatOrigin(callerLine->fileName, callerLine->lineNo) : "unknown file")
-			+ ":compile";
+	auto callerName = getCallerName(thread, args.ref(1));
 
 	std::vector<std::shared_ptr<Line>> lines;
 	std::shared_ptr<Node> node;
@@ -407,17 +423,103 @@ void native_compile(CHATRA_NATIVE_ARGS) {
 		runtime.distributeStringTable(sTableVersion);
 	}
 
-	auto& reflectNode = ret.allocate<ReflectNode>(node.get());
-	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_shared, StringId::Invalid, {}, {})->position == 0);
-	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_block, StringId::Invalid, {}, {})->position == 1);
-	chatra_assert(ReflectNode::getClassStatic()->refMethods().find(nullptr, StringId::_sub, StringId::Invalid, {}, {})->position == 2);
+	buildReflectNode(ret, node.get(), std::move(lines));
+}
 
-	auto sharedRef = reflectNode.ref(0);
-	auto& shared = sharedRef.allocateWithoutLock<ReflectNodeShared>();
-	shared.lines = std::move(lines);
-	shared.addNode(*node);
+static void parseNodeRecursive(IErrorReceiver& errorReceiver,
+		std::shared_ptr<StringTable>& sTable, Node* node) {
 
-	buildReflectNodeCallRecursive(sharedRef, reflectNode, node.get());
+	if (node->blockNodesState != NodeState::Parsed) {
+		assert(node->blockNodesState == NodeState::Structured);
+		parseInnerNode(errorReceiver, sTable, node, true);
+		node->blockNodesState = NodeState::Parsed;
+	}
+	else {
+		for (auto& n : node->blockNodes)
+			parseNodeRecursive(errorReceiver, sTable, n.get());
+	}
+}
+
+static std::shared_ptr<Node> copyAndParseNode(Thread& thread, Node* node) {
+
+	auto& runtime = thread.runtime;
+	auto& sTable = runtime.primarySTable;
+
+	std::lock_guard<std::mutex> lock(runtime.mtParser);
+	unsigned sTableVersion = sTable->getVersion();
+
+	std::shared_ptr<Node> n;
+	try {
+		IErrorReceiverBridge errorReceiverBridge(thread);
+
+		n = Node::copy(node);
+		parseNodeRecursive(errorReceiverBridge, sTable, n.get());
+
+		if (errorReceiverBridge.hasError())
+			throw RuntimeException(StringId::IllegalArgumentException);
+
+	}
+	catch (const RuntimeException&) {
+		runtime.distributeStringTable(sTableVersion);
+		throw;
+	}
+
+	runtime.distributeStringTable(sTableVersion);
+	return n;
+}
+
+void native_getClassNode(CHATRA_NATIVE_ARGS) {
+	CHATRA_NATIVE_ARGS_CAPTURE;
+
+	auto arg0 = args.ref(0);
+	if (getReferClass(arg0) != ClassObject::getClassStatic())
+		throw RuntimeException(StringId::IllegalArgumentException);
+
+	auto* n = arg0.deref<ClassObject>().cl->getNode();
+	buildReflectNode(ret, copyAndParseNode(thread, n).get());
+}
+
+void native_getMethodNode(CHATRA_NATIVE_ARGS) {
+	CHATRA_NATIVE_ARGS_CAPTURE;
+
+	auto arg0 = args.ref(0);
+	if (getReferClass(arg0) != FunctionObject::getClassStatic())
+		throw RuntimeException(StringId::IllegalArgumentException);
+
+	auto& argList = args.ref(1).deref<Array>();
+	auto& argDict = args.ref(2).deref<Dict>();
+
+	std::vector<ArgumentSpec> specs;
+	specs.reserve(argList.size() + argDict.size());
+
+	{
+		std::lock_guard<SpinLock> lock0(argList.lockValue);
+		for (size_t i = 0; i < argList.length; i++) {
+			auto r = argList.container().ref(i);
+			if (getReferClass(r) != ClassObject::getClassStatic())
+				throw RuntimeException(StringId::IllegalArgumentException);
+			specs.emplace_back(StringId::Invalid, r.derefWithoutLock<ClassObject>().cl);
+		}
+	}
+
+	{
+		std::lock_guard<SpinLock> lock0(argDict.lockValue);
+		for (auto& e : argDict.keyToIndex) {
+			auto r = argDict.container().ref(e.second);
+			if (getReferClass(r) != ClassObject::getClassStatic())
+				throw RuntimeException(StringId::IllegalArgumentException);
+			auto sid = thread.sTable->find(e.first);
+			specs.emplace_back(sid == StringId::Invalid ? StringId::AnyString : sid, r.derefWithoutLock<ClassObject>().cl);
+		}
+	}
+
+	auto& function = arg0.deref<FunctionObject>();
+	auto* method = function.methodTable->find(nullptr, function.name, StringId::Invalid, specs, {});
+	if (method == nullptr)
+		throw RuntimeException(StringId::MemberNotFoundException);
+
+	auto* n = method->node;
+	buildReflectNode(ret, copyAndParseNode(thread, n).get());
 }
 
 #ifndef CHATRA_NDEBUG

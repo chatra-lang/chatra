@@ -159,6 +159,7 @@ StringTable::StringTable() noexcept {
 			{"Dict", StringId::Dict},
 			{"_ReflectNodeShared", StringId::_ReflectNodeShared},
 			{"_ReflectNode", StringId::_ReflectNode},
+			{"_ClassObject", StringId::_ClassObject},
 
 			{"Exception", StringId::Exception},
 			{"RuntimeException", StringId::RuntimeException},
@@ -195,7 +196,6 @@ StringTable::StringTable() noexcept {
 			{"#tuple", StringId::Tuple},
 			{"#temporaryTuple", StringId::TemporaryTuple},
 			{"#tupleAssignmentMap", StringId::TupleAssignmentMap},
-			{"#classObject", StringId::ClassObject},
 			{"#functionObject", StringId::FunctionObject},
 			{"#forIterator", StringId::ForIterator},
 
@@ -245,6 +245,8 @@ StringTable::StringTable() noexcept {
 			{"type", StringId::type},
 			{"objectId", StringId::objectId},
 			{"_native_compile", StringId::_native_compile},
+			{"_native_getClassNode", StringId::_native_getClassNode},
+			{"_native_getMethodNode", StringId::_native_getMethodNode},
 			{"_check", StringId::_check},
 			{"_checkCmd", StringId::_checkCmd},
 			{"_incrementTestTimer", StringId::_incrementTestTimer},

@@ -32,6 +32,7 @@ static std::unique_ptr<Class> clArray;
 static std::unique_ptr<Class> clDict;
 static std::unique_ptr<Class> clReflectNodeShared;
 static std::unique_ptr<Class> clReflectNode;
+static std::unique_ptr<Class> clClassObject;
 static std::unordered_map<StringId, Node*> nodeMap;
 
 // note: Any tokens used in embedded scripts must be pre-defined in StringTable.
@@ -1405,15 +1406,7 @@ ReflectNode::ReflectNode(Storage& storage, const Node* node) noexcept
 		: ObjectBase(storage, typeId_ReflectNode, getClassStatic()) {
 
 	chatra_assert(node->blockNodes.empty() || node->blockNodesState == NodeState::Parsed);
-
-	n.type = node->type;
-	n.tokens = node->tokens;
-	n.flags = node->flags;
-	n.sid = node->sid;
-	if (node->literalValue)
-		n.literalValue.reset(new Literal(*node->literalValue));
-	n.op = node->op;
-	n.blockNodesState = NodeState::Parsed;
+	n.copyFromParsedNode(node);
 }
 
 [[noreturn]] static void createReflectNode(const Class* cl, Reference) {
@@ -1542,6 +1535,54 @@ void ReflectNode::native_get(CHATRA_NATIVE_ARGS) {
 		throw RuntimeException(StringId::IllegalArgumentException);
 	}
 }
+
+const Class* ClassObject::getClassStatic() {
+	return clClassObject.get();
+}
+
+ClassObject::ClassObject(Storage& storage, const Class* cl) noexcept
+		: ObjectBase(storage, typeId_ClassObject, getClassStatic()), cl(cl) {
+}
+
+[[noreturn]] static void createClassObject(const Class* cl, Reference) {
+	(void)cl;
+	chatra_assert(cl == clClassObject.get());
+	throw RuntimeException(StringId::UnsupportedOperationException);
+}
+
+bool ClassObject::save(Writer& w) const {
+	w.out(cl);
+	return false;
+}
+
+ClassObject::ClassObject(Reader&) noexcept
+		: ObjectBase(typeId_ClassObject, getClassStatic()), cl(nullptr) {
+}
+
+bool ClassObject::restore(Reader& r) {
+	r.in(cl);
+	return false;
+}
+
+static const char* initClassObject = R"***(
+class _ClassObject
+	def init()
+	def equals(a0) as native
+)***";
+
+void ClassObject::native_equals(CHATRA_NATIVE_ARGS) {
+	CHATRA_NATIVE_SELF;
+
+	auto value = args.ref(0);
+	if (value.isNull() || value.valueType() != ReferenceValueType::Object ||
+			value.deref<ObjectBase>().getClass() != getClassStatic()) {
+		ret.setBool(false);
+		return;
+	}
+
+	ret.setBool(self.cl == value.deref<ClassObject>().cl);
+}
+
 
 template <StringId name>
 static void createException(const Class* cl, Reference ref) {
@@ -1681,6 +1722,10 @@ void initializeEmbeddedClasses() {
 			initReflectNodeShared, createReflectNodeShared, {});
 	clReflectNode = createEmbeddedClass(errorReceiver, sTable, classFinder, initReflectNode, createReflectNode, {
 			{StringId::get, StringId::Invalid, &ReflectNode::native_get},
+	});
+
+	clClassObject = createEmbeddedClass(errorReceiver, sTable, classFinder, initClassObject, createClassObject, {
+			{StringId::equals, StringId::Invalid, &ClassObject::native_equals},
 	});
 
 	// Add embedded conversions

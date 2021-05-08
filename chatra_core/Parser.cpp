@@ -51,6 +51,59 @@ void Literal::restore(Reader & r) {
 	}
 }
 
+void Node::copyFromParsedNode(const Node* node) {
+	type = node->type;
+	tokens = node->tokens;
+	flags = node->flags;
+	sid = node->sid;
+	if (node->literalValue)
+		literalValue.reset(new Literal(*node->literalValue));
+	op = node->op;
+	blockNodesState = NodeState::Parsed;
+}
+
+std::shared_ptr<Node> Node::copy(const Node* node,
+		std::unordered_map<const Node*, std::shared_ptr<Node>>& nodeMap) {
+
+	auto n = std::make_shared<Node>();
+	n->type = node->type;
+	n->line = node->line;
+	n->tokens = node->tokens;
+	n->flags = node->flags;
+	n->sid = node->sid;
+	if (node->literalValue)
+		n->literalValue.reset(new Literal(*node->literalValue));
+	n->op = node->op;
+	n->blockNodesState = node->blockNodesState.load();
+
+	nodeMap.emplace(node, n);
+
+	n->blockNodes.reserve(node->blockNodes.size());
+	for (auto& e : node->blockNodes)
+		n->blockNodes.emplace_back(copy(e.get(), nodeMap));
+
+	n->subNodes.resize(node->subNodes.size());
+	for (size_t i = 0; i < node->subNodes.size(); i++) {
+		if (node->subNodes[i])
+			n->subNodes[i] = copy(node->subNodes[i].get(), nodeMap);
+	}
+
+	n->annotations.reserve(node->annotations.size());
+	for (auto& e : node->annotations)
+		n->annotations.emplace_back(copy(e.get(), nodeMap));
+
+	n->symbols.reserve(node->symbols.size());
+	for (auto& e : node->symbols)
+		n->symbols.emplace_back(nodeMap.at(e.get()));
+
+	return n;
+}
+
+std::shared_ptr<Node> Node::copy(const Node* node) {
+	std::unordered_map<const Node*, std::shared_ptr<Node>> nodeMap;
+	return copy(node, nodeMap);
+}
+
 class ParserContext final {
 private:
 	IErrorReceiver& errorReceiver;

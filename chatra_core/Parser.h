@@ -288,6 +288,18 @@ struct Node final {
 
 	// Tokens generated for constructing syntax sugar
 	std::vector<std::unique_ptr<Token>> additionalTokens;
+
+private:
+	static std::shared_ptr<Node> copy(const Node* node,
+			std::unordered_map<const Node*, std::shared_ptr<Node>>& nodeMap);
+
+public:
+	void copyFromParsedNode(const Node* node);
+
+	// Get a shallow copy of specified Node and its sub-Nodes;
+	// "shallow" means that the generated node doesn't hold original copy of Lines or Tokens
+	// which was referred/held by the specified Node.
+	static std::shared_ptr<Node> copy(const Node* node);
 };
 
 namespace NodeFlags {

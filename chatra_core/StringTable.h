@@ -166,6 +166,7 @@ enum class StringId : uint_least32_t {
 	Dict,
 	_ReflectNodeShared,
 	_ReflectNode,
+	_ClassObject,
 
 	// Exceptions
 	Exception,
@@ -197,14 +198,13 @@ enum class StringId : uint_least32_t {
 	SourceObject,  // (Runtime) used by TemporaryObject
 	Captured,  // (Runtime) link to CapturedScope
 	AnyArgs,  // Wildcard for ArgumentMatcher::matches()
-	AnyString,
+	AnyString,   // Proxy StringId for the keys which doesn't present on StringTable
 	EmptyTuple,
 	EmbeddedFunctions,
 
 	Tuple,
 	TemporaryTuple,
 	TupleAssignmentMap,
-	ClassObject,
 	FunctionObject,
 	ForIterator,
 
@@ -244,6 +244,8 @@ enum class StringId : uint_least32_t {
 	type,
 	objectId,
 	_native_compile,
+	_native_getClassNode,
+	_native_getMethodNode,
 	_check,
 	_checkCmd,
 	_incrementTestTimer,

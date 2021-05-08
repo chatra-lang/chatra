@@ -40,6 +40,7 @@ constexpr TypeId typeId_Array = toTypeId(6);
 constexpr TypeId typeId_Dict = toTypeId(7);
 constexpr TypeId typeId_ReflectNodeShared = toTypeId(14);
 constexpr TypeId typeId_ReflectNode = toTypeId(15);
+constexpr TypeId typeId_ClassObject = toTypeId(16);
 
 class Class;
 class ClassTable;
@@ -871,6 +872,7 @@ class ContainerBase : public ObjectBase {
 	friend class TemporaryTuple;
 	friend class NativeReferenceImp;
 	friend void native_wait(CHATRA_NATIVE_ARGS);
+	friend void native_getMethodNode(CHATRA_NATIVE_ARGS);
 
 protected:
 	mutable SpinLock lockValue;
@@ -897,6 +899,7 @@ class Array : public ContainerBase, private NativeSelf<Array> {
 	friend class TemporaryTuple;
 	friend class NativeReferenceImp;
 	friend void native_wait(CHATRA_NATIVE_ARGS);
+	friend void native_getMethodNode(CHATRA_NATIVE_ARGS);
 
 private:
 	size_t fetchIndex(const Reference& ref, bool allowBoundary = false) const;
@@ -943,6 +946,7 @@ class Dict : public ContainerBase, private NativeSelf<Dict> {
 	friend class TemporaryTuple;
 	friend class NativeReferenceImp;
 	friend void native_wait(CHATRA_NATIVE_ARGS);
+	friend void native_getMethodNode(CHATRA_NATIVE_ARGS);
 
 private:
 	std::unordered_map<std::string, size_t> keyToIndex;
@@ -1002,6 +1006,20 @@ public:
 	void restoreReferences(Reader& r);
 
 	static void native_get(CHATRA_NATIVE_ARGS);
+};
+
+class ClassObject final : public ObjectBase, public NativeSelf<ClassObject> {
+public:
+	const Class* cl;
+
+public:
+	static const Class* getClassStatic();
+
+	ClassObject(Storage& storage, const Class* cl) noexcept;
+
+	CHATRA_DECLARE_SERIALIZE_OBJECT_METHODS(ClassObject);
+
+	static void native_equals(CHATRA_NATIVE_ARGS);
 };
 
 
